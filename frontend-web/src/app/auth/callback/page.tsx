@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useAuth } from '@/components/AuthContext'
 
-export default function AuthCallbackPage() {
+function AuthCallbackHandler() {
   const searchParams = useSearchParams()
   const token = searchParams.get('token')
   const { verifyToken } = useAuth()
@@ -23,5 +23,17 @@ export default function AuthCallbackPage() {
       <h1 className="text-2xl font-bold text-white mb-2">Verificando sua identidade...</h1>
       <p className="text-slate-400">Você será redirecionado em instantes.</p>
     </div>
+  )
+}
+
+export default function AuthCallbackPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-dashboard flex items-center justify-center">
+        <div className="w-16 h-16 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+      </div>
+    }>
+      <AuthCallbackHandler />
+    </Suspense>
   )
 }
