@@ -1,0 +1,97 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  EMPLOYEE
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum PeriodStatus {
+  ACTIVE
+  CLOSED
+  OVERDUE
+}
+
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  cnpj      String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users             User[]
+  vacationPeriods   VacationPeriod[]
+  vacationRequests  VacationRequest[]
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      UserRole @default(EMPLOYEE)
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  admissionDate DateTime
+  
+  vacationPeriods   VacationPeriod[]
+  vacationRequests  VacationRequest[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model VacationPeriod {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  
+  startDate   DateTime // Início do período aquisitivo
+  endDate     DateTime // Fim do período aquisitivo
+  concessiveDate DateTime // Data limite para gozo (Fim do período aquisitivo + 1 ano)
+  
+  daysAccrued Int      @default(30)
+  daysTaken   Int      @default(0)
+  daysSold    Int      @default(0) // Abono pecuniário
+  
+  status      PeriodStatus @default(ACTIVE)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model VacationRequest {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  
+  startDate   DateTime
+  endDate     DateTime
+  days        Int
+  
+  status      RequestStatus @default(PENDING)
+  description String?
+  
+  approverId  String?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
