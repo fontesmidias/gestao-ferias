@@ -5,7 +5,7 @@ import { Calendar, AlertCircle, Plane, CheckCircle2, Navigation, LogOut } from '
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { useAuth } from '@/components/AuthContext'
 
-export function EmployeeDashboard() {
+export default function EmployeeDashboard() {
   const [requestMode, setRequestMode] = useState(false)
   const [selectedDays, setSelectedDays] = useState(15)
   const { user, logout, loading } = useAuth()
