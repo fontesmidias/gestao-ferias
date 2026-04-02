@@ -1,0 +1,133 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Tenant {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  cnpj      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  users      User[]
+  employees  Employee[]
+  auditLogs  AuditLog[]
+  vacationRequests VacationRequest[]
+  signatures Signature[]
+  webhooks   Webhook[]
+
+  @@map("tenants")
+}
+
+model User {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String   @unique
+  name      String?
+  role      String   @default("USER") // ADMIN, USER, AUDITOR
+  tenantId  String   @map("tenant_id") @db.Uuid
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  auditLogs AuditLog[]
+
+  @@map("users")
+}
+
+model Employee {
+  id           String   @id @default(uuid()) @db.Uuid
+  name          String
+  cpf           String   @unique
+  position      String?  @default("Colaborador")
+  salary        Decimal? @default(0) @db.Decimal(10, 2)
+  hireDate      DateTime @map("hire_date")
+  balanceOffset Int     @default(0) @map("balance_offset")
+  tenantId     String   @map("tenant_id") @db.Uuid
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  requests  VacationRequest[]
+
+  @@map("employees")
+}
+
+model AuditLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  action       String   // e.g., "MANUAL_BALANCE_ADJUSTMENT"
+  resourceId   String   @map("resource_id") @db.Uuid
+  resourceType String   @map("resource_type") // e.g., "EMPLOYEE"
+  previousData Json?    @map("previous_data")
+  newData      Json?    @map("new_data")
+  reason       String?
+  ip           String?
+  userAgent    String?  @map("user_agent")
+  createdAt    DateTime @default(now())
+
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  user         User     @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}
+
+model VacationRequest {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  employeeId   String   @map("employee_id") @db.Uuid
+  startDate    DateTime @map("start_date")
+  endDate      DateTime @map("end_date")
+  days         Int
+  status       String   @default("PENDING") // PENDING, APPROVED, REJECTED, SIGNED, COMPLETED
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  employee     Employee @relation(fields: [employeeId], references: [id])
+  signature    Signature?
+
+  @@map("vacation_requests")
+}
+
+model Signature {
+  id                String   @id @default(uuid()) @db.Uuid
+  tenantId          String   @map("tenant_id") @db.Uuid
+  vacationRequestId String   @unique @map("vacation_request_id") @db.Uuid
+  hash              String   // SHA-256 of the document
+  pdfUrl            String?  @map("pdf_url")
+  evidenceDossier   Json?    @map("evidence_dossier")
+  otpCode           String?  @map("otp_code")
+  otpExpiresAt      DateTime? @map("otp_expires_at")
+  signedAt          DateTime? @map("signed_at")
+  createdAt         DateTime @default(now())
+
+  tenant            Tenant          @relation(fields: [tenantId], references: [id])
+  vacationRequest   VacationRequest @relation(fields: [vacationRequestId], references: [id])
+
+  @@map("signatures")
+}
+
+model Webhook {
+  id        String   @id @default(uuid())
+  url       String
+  secret    String
+  events    String[] // e.g. ["VACATION_SIGNED", "EMPLOYEE_CREATED"]
+  isActive  Boolean  @default(true) @map("is_active")
+  
+  tenantId  String   @map("tenant_id") @db.Uuid
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("webhooks")
+}

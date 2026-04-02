@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: gestaoferias_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: adminpassword
+      POSTGRES_DB: gestaoferias
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: gestaoferias_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  backend:
+    build:
+      context: ./backend-api
+      dockerfile: Dockerfile
+    container_name: gestaoferias_backend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=postgresql://admin:adminpassword@postgres:5432/gestaoferias?schema=public
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=super_secret_for_jwt_auth_12345
+    depends_on:
+      - postgres
+      - redis
+
+  frontend:
+    build:
+      context: ./frontend-web
+      dockerfile: Dockerfile
+    container_name: gestaoferias_frontend
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://localhost:3000/api/v1
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  redis_data:

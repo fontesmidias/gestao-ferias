@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+
+# Environment secrets (keep .env.example)
+.env
+.env.local
+.env.production
+
+# AI Agent configs (not source code)
+.agent/
+.agents/
+.augment/
+.claude/
+.cline/
+.codebuddy/
+.crush/
+.cursor/
+.gemini/
+.iflow/
+.kiro/
+.opencode/
+.pi/
+.qwen/
+.roo/
+.rovodev/
+.trae/
+.windsurf/
+_evo/
+_evo-output/
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+*.log
+
+# Test coverage
+coverage/

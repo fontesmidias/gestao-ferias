@@ -1,0 +1,52 @@
+{
+  "name": "backend-api",
+  "version": "1.0.0",
+  "description": "This project was bootstrapped with Fastify-CLI.",
+  "main": "app.ts",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "npm run build:ts && tsc -p test/tsconfig.json && c8 node --test -r ts-node/register \"test/**/*.ts\"",
+    "start": "npm run build:ts && fastify start -l info dist/app.js",
+    "build:ts": "tsc",
+    "watch:ts": "tsc -w",
+    "dev": "npm run build:ts && concurrently -k -p \"[{name}]\" -n \"TypeScript,App\" -c \"yellow.bold,cyan.bold\" \"npm:watch:ts\" \"npm:dev:start\"",
+    "dev:start": "fastify start --ignore-watch=.ts$ -w -l info -P dist/app.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@fastify/autoload": "^6.0.0",
+    "@fastify/jwt": "^9.0.0",
+    "@fastify/multipart": "^9.0.0",
+    "@fastify/sensible": "^6.0.0",
+    "@fastify/websocket": "^11.2.0",
+    "@prisma/adapter-pg": "^7.6.0",
+    "@prisma/client": "^7.6.0",
+    "@types/pg": "^8.20.0",
+    "bullmq": "^5.0.0",
+    "date-fns": "^4.1.0",
+    "fastify": "^5.0.0",
+    "fastify-cli": "^8.0.0",
+    "fastify-plugin": "^5.0.0",
+    "papaparse": "^5.4.1",
+    "pdfkit": "^0.15.2",
+    "pg": "^8.20.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "@types/papaparse": "^5.3.15",
+    "@types/pdfkit": "^0.13.9",
+    "concurrently": "^9.0.0",
+    "fastify-tsconfig": "^3.0.0",
+    "prisma": "^7.6.0",
+    "ts-node": "^10.4.0",
+    "typescript": "~5.9.2"
+  },
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
+  }
+}

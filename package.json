@@ -1,0 +1,17 @@
+{
+  "name": "gestao-ferias-monorepo",
+  "version": "1.0.0",
+  "description": "Multi-tenant Vacation Management System (BMM Framework)",
+  "private": true,
+  "scripts": {
+    "dev:backend": "cd backend-api && npm run dev",
+    "dev:frontend": "cd frontend-ui && npm run dev",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "install:all": "npm install && cd backend-api && npm install && cd ../frontend-ui && npm install",
+    "prisma:generate": "cd backend-api && npx prisma generate",
+    "prisma:migrate": "cd backend-api && npx prisma migrate dev"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
