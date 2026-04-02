@@ -1,0 +1,49 @@
+- [x] Phase 1: Sprint Roadmap Design (Completo)
+- [x] Phase 2: Status Tracking Initialization (Completo)
+- [x] Phase 3: Final Validation & Readiness (Completo)
+- [x] Execution Phase: [DEV] Sprint 1 Implementation - Epic 1 (Completo)
+- [x] Execution Phase: [DEV] Sprint 2 Implementation - Epics 2-4 (Completo)
+- [x] Execution Phase: [DEV] Sprint 3 Implementation - Epic 5 (Completo)
+- [/] Execution Phase: [DEV] Sprint 4 Implementation - Epic 6
+    - [/] Story 6.1: Outgoing Webhook Engine
+        - [ ] Adicionar Modelo Webhook ao Prisma
+        - [ ] Criar WebhookService com HMAC Signature
+        - [ ] Implementar Job de Disparo Assíncrono (BullMQ)
+        - [ ] Integrar Disparos (Assinatura Concluída, Saldo Ajustado)
+- [x] Execution Phase: [DEV] Sprint 5 Implementation - Epic 7 (Qualidade Total)
+    - [x] Phase 1: Backend Core Logic & API Testing
+        - [x] Configurar Testes Node nativo e Prisma Mock
+        - [x] `VacationEngine` Unit Tests
+        - [x] `ROIEngine` Unit Tests
+        - [x] API Integration Tests (Tenants/Auth)
+    - [x] Phase 2: Frontend UI Testing (Vitest + RTL)
+        - [x] Instalar Vitest, RTL, jsdom
+        - [x] Criar Component Tests para `VacationDrawer`
+    - [x] Phase 3: Improvements & Bug Fixes
+        - [x] Global Error Handler do Backend
+        - [x] React Error Boundaries no Frontend
+- [x] Execution Phase: [DEV] Sprint 6 Implementation - Epic 8 (Approval Flow & Docker)
+    - [x] Phase 1: Dockerization
+        - [x] Criar `backend-api/Dockerfile`
+        - [x] Criar `frontend-web/Dockerfile`
+        - [x] Criar `docker-compose.yml` (Postgres, Redis, Fastify, Next.js)
+    - [x] Phase 2: Refatoração UX e Layout
+        - [x] Criar `Sidebar.tsx` e lógica de navegação
+        - [x] Atualizar `layout.tsx` para persistir Sidebar
+    - [x] Phase 3: Approval Flow (Backend & Frontend)
+        - [x] Modificar Endpoint de Solicitação de Férias (`PENDING`)
+        - [x] Adicionar Tela de Controle do RH (`/approvals`)
+        - [x] Ligar Integração de Aprovação (Assinatura + Webhook)
+- [x] Execution Phase: [DEV] Sprint 7 Implementation - Epic 9 (GestãoFérias V2)
+    - [x] Phase 1: Estabilização de Passivo e CI/CD
+        - [x] [FIX] Corrigir falhas silenciosas do Typescript no Container Docker
+        - [x] Preparar arquitetura Next.js para PWA (Manifest & offline workers)
+    - [x] Phase 2: App PWA do Colaborador (Self-Service)
+        - [x] Criar Dashboard de Saldo de Colaborador individual
+        - [x] Integração com nova rota PENDING
+    - [x] Phase 3: AI Predict Engine (Oráculo de Passivo Trabalhista)
+        - [x] Algoritmo de Previsão Financeira / LLM Integration
+        - [x] Dashboard View: "Risco de Multa vs Economia Sugerida"
+        - [ ] Criar Página de Configurações no Dashboard
+        - [ ] Implementar CRUD de Webhooks (URL, Secret, Events)
+        - [ ] Criar Ferramenta de Teste de Webhook (Payload Mock)
