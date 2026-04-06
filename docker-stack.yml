@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  database:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: ${DB_USER:-admin}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-adminpassword}
+      POSTGRES_DB: ${DB_NAME:-gestaoferias}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - backend_network
+    deploy:
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+
+  cache:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    networks:
+      - backend_network
+    deploy:
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+
+  api:
+    image: gestaoferias-backend:latest
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=postgresql://${DB_USER:-admin}:${DB_PASSWORD:-adminpassword}@database:5432/${DB_NAME:-gestaoferias}?schema=public
+      - REDIS_URL=redis://cache:6379
+      - JWT_SECRET=${JWT_SECRET:-change_this_to_a_long_random_string}
+    networks:
+      - backend_network
+      - frontend_network
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      # Se usar Traefik, descomente as labels abaixo:
+      # labels:
+      #   - "traefik.enable=true"
+      #   - "traefik.http.routers.gestaoferias-api.rule=Host(`api.seudominio.com`)"
+      #   - "traefik.http.services.gestaoferias-api.loadbalancer.server.port=3000"
+
+  web:
+    image: gestaoferias-frontend:latest
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=${PUBLIC_API_URL:-http://localhost:3000/api/v1}
+    networks:
+      - frontend_network
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      # Se usar Traefik, descomente as labels abaixo:
+      # labels:
+      #   - "traefik.enable=true"
+      #   - "traefik.http.routers.gestaoferias-web.rule=Host(`gestao.seudominio.com`)"
+      #   - "traefik.http.services.gestaoferias-web.loadbalancer.server.port=3000"
+
+networks:
+  backend_network:
+    driver: overlay
+    attachable: true
+  frontend_network:
+    driver: overlay
+    attachable: true
+
+volumes:
+  postgres_data:
+  redis_data:
