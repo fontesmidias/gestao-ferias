@@ -15,7 +15,24 @@
 
 Este projeto é uma plataforma robusta de **Gestão de Férias**, desenvolvida sobre o framework **BMM**. Ele oferece uma arquitetura multi-tenant escalável, permitindo que diferentes empresas ou departamentos gerenciem seus cronogramas de descanso de forma isolada e segura.
 
-Ideal para implantação em **VPS** com **Docker Swarm** e **Portainer**, a solução foca em produtividade, conformidade legal e experiência do colaborador.
+## 🏗️ Estratégia "Dual-Stack"
+
+Para garantir máxima eficiência, o projeto utiliza duas configurações de contêineres separadas:
+
+### 1. 🏠 Desenvolvimento Local (`docker-compose.yml`)
+Focado em agilidade e depuração.
+- **Build:** Compila o código na hora a partir dos fontes.
+- **Acesso:** Portas mapeadas diretamente (`localhost:3000`, `localhost:3002`).
+- **Uso:** `docker-compose up --build`
+
+### 2. 🚀 Produção / VPS (`docker-stack.yml`)
+Focado em segurança, performance e alta disponibilidade.
+- **Orquestração:** Docker Swarm (Stacks no Portainer).
+- **Proxy:** Integrado ao **Traefik** com SSL automático (Let's Encrypt).
+- **Segurança:** Validação rígida de variáveis de ambiente.
+- **Uso:** Deploy via Painel do Portainer ou `docker stack deploy`.
+
+---
 
 ## ✨ Principais Funcionalidades
 
@@ -39,38 +56,22 @@ graph TD
     API <--> Prism[Prisma ORM]
 ```
 
-## 🛠️ Tech Stack
-
-- **Frontend:** Next.js 15, React, Tailwind CSS.
-- **Backend:** Node.js, Fastify/Express (BMM Engine).
-- **Banco de Dados:** PostgreSQL 15, Prisma ORM.
-- **Cache:** Redis 7.
-- **Infraestrutura:** Docker, Docker Swarm, Portainer.
-
 ---
 
-## 🚀 Guia de Deploy (VPS / Portainer)
+## 🚀 Guia de Configuração
 
-### 1. Requisitos Prévios
-- VPS com Linux (Ubuntu recomendado).
-- Docker e Docker Swarm ativos (`docker swarm init`).
-- Portainer instalado e configurado.
+### 1. Variáveis de Ambiente
+Antes de subir qualquer ambiente, crie seu arquivo `.env`:
+```bash
+cp .env.example .env
+```
+Edite as variáveis conforme necessário (veja as instruções dentro do arquivo).
 
-### 2. Configuração da Stack
-1. No Portainer, vá em **Stacks** > **Add stack**.
-2. Nomeie como `gestao-ferias`.
-3. Copie o conteúdo do arquivo [`docker-stack.yml`](./docker-stack.yml) para o editor.
-4. Adicione as variáveis de ambiente necessárias (veja tabela abaixo).
-5. Clique em **Deploy the stack**.
-
-### 3. Variáveis de Ambiente Críticas
-
-| Variável | Descrição | Exemplo |
-| :--- | :--- | :--- |
-| `DB_USER` | Usuário do Postgres | `admin` |
-| `DB_PASSWORD` | Senha do Postgres | `senha_segura` |
-| `JWT_SECRET` | Chave secreta para tokens | `seu_segredo_ultra_secreto` |
-| `PUBLIC_API_URL` | URL pública da API | `https://api.seudominio.com` |
+### 2. Deploy em VPS (Portainer)
+1. Certifique-se de que a rede `traefik_public` existe no seu Swarm.
+2. No Portainer, crie uma nova Stack.
+3. Use o conteúdo do arquivo [`docker-stack.yml`](./docker-stack.yml).
+4. Configure os domínios (labels Traefik) e as variáveis de ambiente no painel.
 
 ---
 
@@ -80,8 +81,9 @@ graph TD
 ├── backend-api/      # Código fonte do Servidor (Node.js)
 ├── frontend-web/     # Interface WEB (Next.js)
 ├── docs/             # Documentação e Assets
-├── docker-stack.yml  # Configuração para Produção (Swarm)
-└── docker-compose.yml # Configuração para Desenvolvimento Local
+├── docker-stack.yml  # Configuração para Produção (VPS / Swarm)
+├── docker-compose.yml # Configuração para Desenvolvimento Local
+└── .env.example      # Guia de configuração de variáveis
 ```
 
 ## 🛡️ Licença

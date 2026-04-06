@@ -1,16 +1,24 @@
 version: '3.8'
 
+# ==============================================================================
+# AMBIENTE: PRODUÇÃO / VPS (O TANQUE DE GUERRA)
+# Finalidade: Implantação em Nuvem via Docker Swarm & Portainer.
+# Como usar: docker stack deploy -c docker-stack.yml gestao-ferias
+# ==============================================================================
+
 services:
   database:
     image: postgres:15-alpine
     environment:
-      POSTGRES_USER: ${DB_USER:-admin}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-adminpassword}
+      # O ":?" no Docker (e shells modernos) força o erro caso a variável falte no .env.
+      # Essencial para garantir que o banco NÃO suba sem senha em produção.
+      POSTGRES_USER: ${DB_USER:?Erro: DB_USER nao definido}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Erro: DB_PASSWORD nao definido}
       POSTGRES_DB: ${DB_NAME:-gestaoferias}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data_prod:/var/lib/postgresql/data
     networks:
-      - backend_network
+      - backend_network # Isola o banco: só visível para a API
     deploy:
       restart_policy:
         condition: on-failure
@@ -22,7 +30,7 @@ services:
   cache:
     image: redis:7-alpine
     volumes:
-      - redis_data:/data
+      - redis_data_prod:/data
     networks:
       - backend_network
     deploy:
@@ -38,47 +46,49 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
-      - DATABASE_URL=postgresql://${DB_USER:-admin}:${DB_PASSWORD:-adminpassword}@database:5432/${DB_NAME:-gestaoferias}?schema=public
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@database:5432/${DB_NAME:-gestaoferias}?schema=public
       - REDIS_URL=redis://cache:6379
-      - JWT_SECRET=${JWT_SECRET:-change_this_to_a_long_random_string}
+      - JWT_SECRET=${JWT_SECRET:?Erro: JWT_SECRET obrigatorio em producao}
     networks:
       - backend_network
-      - frontend_network
+      - traefik_public # Rede externa do Traefik para acesso web
     deploy:
       replicas: 1
       restart_policy:
         condition: on-failure
-      # Se usar Traefik, descomente as labels abaixo:
-      # labels:
-      #   - "traefik.enable=true"
-      #   - "traefik.http.routers.gestaoferias-api.rule=Host(`api.seudominio.com`)"
-      #   - "traefik.http.services.gestaoferias-api.loadbalancer.server.port=3000"
+      labels:
+        # Configurações Traefik em Swarm PRECISAM estar sob o bloco "deploy"
+        - "traefik.enable=true"
+        - "traefik.http.routers.gestaoferias-api.rule=Host(`api.seudominio.com`)"
+        - "traefik.http.services.gestaoferias-api.loadbalancer.server.port=3000"
+        - "traefik.http.routers.gestaoferias-api.entrypoints=websecure"
+        - "traefik.http.routers.gestaoferias-api.tls.certresolver=letsencrypt"
 
   web:
     image: gestaoferias-frontend:latest
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=${PUBLIC_API_URL:-http://localhost:3000/api/v1}
+      - NEXT_PUBLIC_API_URL=${PUBLIC_API_URL:?Erro: Defina a URL publica da API (ex: https://api.seudominio.com)}
     networks:
-      - frontend_network
+      - traefik_public
     deploy:
       replicas: 1
       restart_policy:
         condition: on-failure
-      # Se usar Traefik, descomente as labels abaixo:
-      # labels:
-      #   - "traefik.enable=true"
-      #   - "traefik.http.routers.gestaoferias-web.rule=Host(`gestao.seudominio.com`)"
-      #   - "traefik.http.services.gestaoferias-web.loadbalancer.server.port=3000"
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.gestaoferias-web.rule=Host(`gestao.seudominio.com`)"
+        - "traefik.http.services.gestaoferias-web.loadbalancer.server.port=3000"
+        - "traefik.http.routers.gestaoferias-web.entrypoints=websecure"
+        - "traefik.http.routers.gestaoferias-web.tls.certresolver=letsencrypt"
 
 networks:
   backend_network:
     driver: overlay
     attachable: true
-  frontend_network:
-    driver: overlay
-    attachable: true
+  traefik_public:
+    external: true # Essa rede deve ser criada manualmente: docker network create -d overlay traefik_public
 
 volumes:
-  postgres_data:
-  redis_data:
+  postgres_data_prod:
+  redis_data_prod:
