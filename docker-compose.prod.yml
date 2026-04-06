@@ -1,0 +1,65 @@
+version: '3.8'
+
+# ==============================================================================
+# AMBIENTE: VPS SINGLE NODE (A ESTAÇÃO SOLO)
+# Finalidade: Implantação em Servidores sem Docker Swarm (Nginx Externo).
+# Como usar: docker-compose -f docker-compose.prod.yml up -d
+# ==============================================================================
+
+services:
+  database:
+    image: postgres:15-alpine
+    container_name: gestaoferias_db_prod
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER:?Erro: DB_USER nao definido}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Erro: DB_PASSWORD nao definido}
+      POSTGRES_DB: ${DB_NAME:-gestaoferias}
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+    networks:
+      - prod_network
+
+  cache:
+    image: redis:7-alpine
+    container_name: gestaoferias_redis_prod
+    restart: always
+    volumes:
+      - redis_data_prod:/data
+    networks:
+      - prod_network
+
+  api:
+    image: gestaoferias-backend:latest
+    container_name: gestaoferias_api_prod
+    restart: always
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@database:5432/${DB_NAME:-gestaoferias}?schema=public
+      - REDIS_URL=redis://cache:6379
+      - JWT_SECRET=${JWT_SECRET:?Erro: JWT_SECRET obrigatorio em producao}
+    ports:
+      - "8080:3000" # Exposto para o Nginx externo rotear (ex: api.seudominio.com)
+    networks:
+      - prod_network
+
+  web:
+    image: gestaoferias-frontend:latest
+    container_name: gestaoferias_web_prod
+    restart: always
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=${PUBLIC_API_URL:?Erro: Defina a URL publica da API (ex: https://api.seudominio.com)}
+    ports:
+      - "3001:3000" # Exposto para o Nginx externo rotear (ex: gestao.seudominio.com)
+    networks:
+      - prod_network
+
+networks:
+  prod_network:
+    driver: bridge
+
+volumes:
+  postgres_data_prod:
+  redis_data_prod:
