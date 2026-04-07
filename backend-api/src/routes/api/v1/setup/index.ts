@@ -17,7 +17,7 @@ const setupRoutes: FastifyPluginAsync = async (fastify, opts): Promise<void> => 
 
     // 2. Transforma o payload em tipagem básica e aplica as regras
     const payload = request.body as any
-    const { tenantName, cnpj, adminName, email, password } = payload
+    const { tenantName, cnpj, adminName, email, password, smtpHost, smtpPort, smtpUser, smtpPass, smtpFrom } = payload
 
     if (!tenantName || !cnpj || !adminName || !email || !password) {
       return reply.code(400).send({ error: "Bad Request", message: "All fields are required: tenantName, cnpj, adminName, email, password" })
@@ -33,7 +33,12 @@ const setupRoutes: FastifyPluginAsync = async (fastify, opts): Promise<void> => 
         const tenant = await tx.tenant.create({
           data: {
             name: tenantName,
-            cnpj: cnpj
+            cnpj: cnpj,
+            smtpHost: smtpHost || null,
+            smtpPort: smtpPort ? parseInt(smtpPort, 10) : null,
+            smtpUser: smtpUser || null,
+            smtpPass: smtpPass || null,
+            smtpFrom: smtpFrom || null
           }
         })
 
