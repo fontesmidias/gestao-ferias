@@ -14,7 +14,7 @@ RUN npm install
 COPY . .
 
 # Roda o gerador do Prisma e constrói o TypeScript
-RUN npx prisma generate
+RUN DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" npx prisma generate
 RUN npm run build 
 
 # ESTÁGIO 2: Produção (A Vitrine)
