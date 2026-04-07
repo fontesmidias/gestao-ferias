@@ -42,5 +42,9 @@ EXPOSE 2000
 
 ENV NODE_ENV=production
 
-# O comando que mantém o container vivo rodando o servidor!
-CMD ["npm", "start"]
+# Copia o script de entrypoint que roda as migrations antes de iniciar
+COPY entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh
+
+# O entrypoint roda "prisma migrate deploy" e depois "npm start"
+CMD ["./entrypoint.sh"]
