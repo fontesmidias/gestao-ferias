@@ -10,9 +10,10 @@ services:
   database:
     image: postgres:15-alpine
     environment:
-      POSTGRES_USER: ${DB_USER:?Erro: DB_USER nao definido}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:?Erro: DB_PASSWORD nao definido}
-      POSTGRES_DB: ${DB_NAME:-gestaoferias}
+      # Aspas duplas adicionadas para evitar que o YAML confunda os dois pontos ':' da mensagem com uma chave aninhada.
+      POSTGRES_USER: "${DB_USER:?Erro: DB_USER nao definido}"
+      POSTGRES_PASSWORD: "${DB_PASSWORD:?Erro: DB_PASSWORD nao definido}"
+      POSTGRES_DB: "${DB_NAME:-gestaoferias}"
     volumes:
       - postgres_data_prod:/var/lib/postgresql/data
     networks:
@@ -45,10 +46,9 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=2000
-      # CORRIGIDO: As portas no Swarm de imagens externas escutam na sua configuração nativa
       - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@database:5432/${DB_NAME:-gestaoferias}?schema=public
       - REDIS_URL=redis://cache:6379
-      - JWT_SECRET=${JWT_SECRET:?Erro: JWT_SECRET obrigatorio em producao}
+      - JWT_SECRET="${JWT_SECRET:?Erro: JWT_SECRET obrigatorio em producao}"
     networks:
       - ferias_backend_network
       - ferias_traefik_public
@@ -62,7 +62,8 @@ services:
           memory: 2G
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.gestaoferias-api.rule=Host(`feriasback.unibot.com.br`)"
+        # Subdomínio Oculto e Variabilizado para Repositórios Públicos
+        - "traefik.http.routers.gestaoferias-api.rule=Host(`${API_DOMAIN:-api.seudominio.com}`)"
         - "traefik.http.services.gestaoferias-api.loadbalancer.server.port=2000"
         - "traefik.http.routers.gestaoferias-api.entrypoints=websecure"
         - "traefik.http.routers.gestaoferias-api.tls.certresolver=letsencrypt"
@@ -71,7 +72,7 @@ services:
     image: ghcr.io/fontesmidias/gestao-ferias-frontend:latest
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=${PUBLIC_API_URL:?Erro: Defina a URL publica da API}
+      - NEXT_PUBLIC_API_URL="${PUBLIC_API_URL:?Erro: Defina a URL publica da API}"
     networks:
       - ferias_traefik_public
     deploy:
@@ -84,7 +85,8 @@ services:
           memory: 1G
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.gestaoferias-web.rule=Host(`ferias.unibot.com.br`)"
+        # Subdomínio Oculto e Variabilizado para Repositórios Públicos
+        - "traefik.http.routers.gestaoferias-web.rule=Host(`${WEB_DOMAIN:-gestao.seudominio.com}`)"
         - "traefik.http.services.gestaoferias-web.loadbalancer.server.port=3000"
         - "traefik.http.routers.gestaoferias-web.entrypoints=websecure"
         - "traefik.http.routers.gestaoferias-web.tls.certresolver=letsencrypt"
