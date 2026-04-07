@@ -16,7 +16,7 @@ interface User {
 interface AuthContextType {
   user: User | null
   loading: boolean
-  login: (email: string) => Promise<void>
+  login: (email: string, password?: string) => Promise<void>
   verifyToken: (token: string) => Promise<void>
   logout: () => void
 }
@@ -52,19 +52,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     checkUser()
   }, [])
 
-  const login = async (email: string) => {
+  const login = async (email: string, password?: string) => {
     try {
-      await HttpClient.post('/auth/magic-link', { email })
-      toast.success('Link de acesso enviado para seu e-mail!')
-    } catch (err) {
-      toast.error('Erro ao solicitar acesso. Verifique o e-mail ou tente novamente.')
-      throw err
-    }
-  }
-
-  const verifyToken = async (token: string) => {
-    try {
-      const data = await HttpClient.request(`/auth/verify?token=${token}`, { method: 'GET' })
+      const data = await HttpClient.post('/auth/login', { email, password })
       localStorage.setItem('token', data.token)
       setUser(data.user)
       toast.success('Login realizado com sucesso!')
@@ -75,10 +65,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         router.push('/employee/dashboard')
       }
-    } catch (err) {
-      toast.error('O link de acesso expirou ou é inválido.')
-      router.push('/auth/login')
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao realizar login. Verifique as credenciais.')
+      throw err
     }
+  }
+
+  const verifyToken = async (token: string) => {
+    // Deprecated na arquitetura de Senha:
+    // Retido apenas por compatibilidade estrutural caso precise usar cookies de recuperar senha.
   }
 
   const logout = () => {
