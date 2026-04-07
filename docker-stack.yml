@@ -44,11 +44,11 @@ services:
   api:
     image: ghcr.io/fontesmidias/gestao-ferias-backend:latest
     environment:
-      - NODE_ENV=production
-      - PORT=2000
-      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@database:5432/${DB_NAME:-gestaoferias}?schema=public
-      - REDIS_URL=redis://cache:6379
-      - JWT_SECRET="${JWT_SECRET:?Erro: JWT_SECRET obrigatorio em producao}"
+      NODE_ENV: production
+      PORT: 2000
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@database:5432/${DB_NAME:-gestaoferias}?schema=public
+      REDIS_URL: redis://cache:6379
+      JWT_SECRET: ${JWT_SECRET:?Erro: JWT_SECRET obrigatorio em producao}
     networks:
       - ferias_backend_network
       - ferias_traefik_public
@@ -71,8 +71,8 @@ services:
   web:
     image: ghcr.io/fontesmidias/gestao-ferias-frontend:latest
     environment:
-      - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL="${PUBLIC_API_URL:?Erro: Defina a URL publica da API}"
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:?Erro: Defina a URL publica da API}
     networks:
       - ferias_traefik_public
     deploy:
