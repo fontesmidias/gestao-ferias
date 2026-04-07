@@ -35,7 +35,7 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
 
     // Gerar Token de Sessão (expiração longa: 24h)
     const sessionToken = fastify.jwt.sign(
-      { userId: user.id, tenantId: user.tenantId, email: user.email, role: user.role },
+      { userId: user.id, tenantId: user.tenantId, email: user.email, role: user.role, name: user.name },
       { expiresIn: '24h' }
     )
 
@@ -46,6 +46,7 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       user: {
         id: user.id,
         email: user.email,
+        name: user.name,
         role: user.role,
         tenantId: user.tenantId
       }

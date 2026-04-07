@@ -59,10 +59,10 @@ export function Sidebar() {
       <div className="p-4 border-t border-white/5 space-y-2">
         <div className="flex items-center gap-3 p-3 bg-slate-800 rounded-xl">
           <div className="w-10 h-10 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-sm font-bold border border-indigo-500/20">
-            {user.name.charAt(0)}
+            {(user?.name || 'G').charAt(0)}
           </div>
           <div className="flex-1 overflow-hidden">
-            <p className="text-sm font-bold text-white truncate">{user.name}</p>
+            <p className="text-sm font-bold text-white truncate">{user?.name || 'Gestor'}</p>
             <p className="text-xs text-slate-500 truncate">{user.role}</p>
           </div>
         </div>
