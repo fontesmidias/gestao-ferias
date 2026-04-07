@@ -1,28 +1,46 @@
+# ESTÁGIO 1: Build (A Cozinha)
 FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Instalar dependências para o Prisma (OpenSSL é requerido no Alpine)
+# OpenSSL é requerido pelo Prisma no Alpine
 RUN apk add --no-cache openssl
 
+# Copia dependências e instala todas (incluindo as de desenvolvimento)
 COPY package*.json ./
-RUN npm ci
+RUN npm install
 
+# Copia o restante do código
 COPY . .
-RUN npx prisma generate
-RUN npm run build:ts
 
+# Roda o gerador do Prisma e constrói o TypeScript
+RUN npx prisma generate
+RUN npm run build 
+
+# ESTÁGIO 2: Produção (A Vitrine)
 FROM node:20-alpine
 
 WORKDIR /app
 
+# Mantém a dependência do Prisma
 RUN apk add --no-cache openssl
 
-COPY --from=builder /app/node_modules ./node_modules
+# Copia e instala apenas arquivos necessários para produção
+COPY package*.json ./
+RUN npm install --omit=dev
+
+# Copia a pasta de código compilado e a pasta Prisma do Estágio 1
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/prisma ./prisma
 
-EXPOSE 3000
+# Copia o Prisma Client gerado previamente no Estágio 1
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
+# Expõe a porta que sua API usa
+EXPOSE 2000
+
+ENV NODE_ENV=production
+
+# O comando que mantém o container vivo rodando o servidor!
 CMD ["npm", "start"]
