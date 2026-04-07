@@ -32,12 +32,6 @@ services:
       - redis_data_prod:/data
     networks:
       - ferias_backend_network
-  cache:
-    image: redis:7-alpine
-    volumes:
-      - redis_data_prod:/data
-    networks:
-      - ferias_backend_network
     deploy:
       replicas: 1 # Ajustado para apenas 1 réplica
       restart_policy:
