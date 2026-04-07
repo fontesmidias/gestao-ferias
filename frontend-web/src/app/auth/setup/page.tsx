@@ -12,7 +12,12 @@ export default function SetupPage() {
     cnpj: '',
     adminName: '',
     email: '',
-    password: ''
+    password: '',
+    smtpHost: '',
+    smtpPort: '',
+    smtpUser: '',
+    smtpPass: '',
+    smtpFrom: ''
   })
   
   const router = useRouter()
@@ -65,7 +70,7 @@ export default function SetupPage() {
               
               <div>
                 <label htmlFor="tenantName" className="block text-sm font-medium text-slate-300 mb-2">
-                  Nome da Empresa
+                  Nome da Empresa <span className="text-red-500">*</span>
                 </label>
                 <input
                   id="tenantName"
@@ -80,7 +85,7 @@ export default function SetupPage() {
 
               <div>
                 <label htmlFor="cnpj" className="block text-sm font-medium text-slate-300 mb-2">
-                  CNPJ
+                  CNPJ <span className="text-red-500">*</span>
                 </label>
                 <input
                   id="cnpj"
@@ -102,7 +107,7 @@ export default function SetupPage() {
               
               <div>
                 <label htmlFor="adminName" className="block text-sm font-medium text-slate-300 mb-2">
-                  Seu Nome Completo
+                  Seu Nome Completo <span className="text-red-500">*</span>
                 </label>
                 <input
                   id="adminName"
@@ -117,7 +122,7 @@ export default function SetupPage() {
 
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-slate-300 mb-2">
-                  E-mail de Acesso
+                  E-mail de Acesso <span className="text-red-500">*</span>
                 </label>
                 <input
                   id="email"
@@ -132,7 +137,7 @@ export default function SetupPage() {
 
               <div>
                 <label htmlFor="password" className="block text-sm font-medium text-slate-300 mb-2">
-                  Defina sua Senha
+                  Defina sua Senha <span className="text-red-500">*</span>
                 </label>
                 <input
                   id="password"
@@ -142,6 +147,74 @@ export default function SetupPage() {
                   onChange={handleChange}
                   placeholder="••••••••"
                   className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-primary/50 transition-all outline-none"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Seção SMTP (Opcional) */}
+          <div className="space-y-6 pt-6 border-t border-slate-800">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+              <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest">
+                [Opcional] Configurações de E-mail (SMTP)
+              </h3>
+              <span className="text-xs text-slate-500">Para envio de alertas</span>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label htmlFor="smtpHost" className="block text-xs font-medium text-slate-400 mb-1">Servidor SMTP</label>
+                <input
+                  id="smtpHost"
+                  type="text"
+                  value={formData.smtpHost}
+                  onChange={handleChange}
+                  placeholder="smtp.zoho.com"
+                  className="w-full bg-slate-900/30 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:border-primary/50 outline-none"
+                />
+              </div>
+              <div>
+                <label htmlFor="smtpPort" className="block text-xs font-medium text-slate-400 mb-1">Porta SMTP</label>
+                <input
+                  id="smtpPort"
+                  type="number"
+                  value={formData.smtpPort}
+                  onChange={handleChange}
+                  placeholder="465"
+                  className="w-full bg-slate-900/30 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:border-primary/50 outline-none"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label htmlFor="smtpFrom" className="block text-xs font-medium text-slate-400 mb-1">E-mail Remetente (From)</label>
+                <input
+                  id="smtpFrom"
+                  type="email"
+                  value={formData.smtpFrom}
+                  onChange={handleChange}
+                  placeholder="nao-responda@empresa.com"
+                  className="w-full bg-slate-900/30 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:border-primary/50 outline-none"
+                />
+              </div>
+              <div>
+                <label htmlFor="smtpUser" className="block text-xs font-medium text-slate-400 mb-1">Usuário SMTP</label>
+                <input
+                  id="smtpUser"
+                  type="text"
+                  value={formData.smtpUser}
+                  onChange={handleChange}
+                  placeholder="seu-email@empresa.com"
+                  className="w-full bg-slate-900/30 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:border-primary/50 outline-none"
+                />
+              </div>
+              <div>
+                <label htmlFor="smtpPass" className="block text-xs font-medium text-slate-400 mb-1">Senha SMTP</label>
+                <input
+                  id="smtpPass"
+                  type="password"
+                  value={formData.smtpPass}
+                  onChange={handleChange}
+                  placeholder="••••••••"
+                  className="w-full bg-slate-900/30 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:border-primary/50 outline-none"
                 />
               </div>
             </div>
