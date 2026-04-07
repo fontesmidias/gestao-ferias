@@ -5,9 +5,20 @@ import { WhatsAppService } from '../modules/notifications/whatsapp-service'
 import { WebhookService } from '../modules/integrations/webhook-service'
 
 export default fp(async (fastify) => {
-  const redisConfig = {
+  // Resolve a URI do Redis caso usem REDIS_URL em vez de REDIS_HOST
+  let redisConfig: any = {
     host: process.env.REDIS_HOST || 'localhost',
     port: parseInt(process.env.REDIS_PORT || '6379')
+  }
+
+  if (process.env.REDIS_URL) {
+    try {
+      const url = new URL(process.env.REDIS_URL)
+      redisConfig = {
+        host: url.hostname,
+        port: parseInt(url.port || '6379')
+      }
+    } catch (e) {}
   }
 
   // Worker para Processamento de Importações (Story 2.1)
