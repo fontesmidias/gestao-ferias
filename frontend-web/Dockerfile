@@ -10,6 +10,12 @@ FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+
+# NEXT_PUBLIC_* vars precisam ser injetadas em BUILD TIME (não em runtime).
+# Recebe o valor via --build-arg durante o 'docker build' (configurado no GitHub Actions).
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+
 RUN npm run build
 
 FROM base AS runner
