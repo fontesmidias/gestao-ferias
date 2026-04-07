@@ -85,3 +85,61 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #334155;
 }
+
+/* Driver.js Dark Theme Overrides */
+.driver-theme-dark {
+  --driver-bg: #0f172a;
+  --driver-text: #f1f5f9;
+  --driver-title-color: #f8fafc;
+  --driver-popover-border: 1px solid rgba(255, 255, 255, 0.1);
+  --driver-btn-bg: #1e293b;
+  --driver-btn-text: #e2e8f0;
+  --driver-btn-shadow: none;
+  --driver-btn-hover-bg: #334155;
+  border-radius: 12px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
+}
+
+.driver-theme-dark .driver-popover-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  margin-bottom: 0.5rem;
+  color: #6366f1;
+}
+
+.driver-theme-dark .driver-popover-description {
+  font-size: 0.875rem;
+  color: #94a3b8;
+  line-height: 1.5;
+}
+
+.driver-theme-dark .driver-popover-close-btn {
+  color: #64748b;
+}
+
+.driver-theme-dark .driver-popover-close-btn:hover {
+  color: #fb7185;
+}
+
+.driver-theme-dark .driver-popover-navigation-btns {
+  gap: 8px;
+}
+
+.driver-theme-dark .driver-popover-next-btn,
+.driver-theme-dark .driver-popover-prev-btn {
+  border-radius: 8px;
+  font-weight: 600;
+  padding: 6px 12px;
+}
+
+.driver-theme-dark .driver-popover-next-btn {
+  background-color: #6366f1;
+  color: white;
+  border: none;
+}
+
+.driver-theme-dark .driver-popover-next-btn:hover {
+  background-color: #4f46e5;
+}
