@@ -53,15 +53,24 @@ model User {
 }
 
 model Employee {
-  id           String   @id @default(uuid()) @db.Uuid
+  id            String   @id @default(uuid()) @db.Uuid
   name          String
   cpf           String   @unique
+  registration  String?  @map("registration")
+  birthDate     DateTime? @map("birth_date")
   position      String?  @default("Colaborador")
+  
+  status        String   @default("ATIVO") // ATIVO, FERIAS, AFASTADO, INATIVO
+  branch        String?  // Empresa/Filial
+  department    String?  // Contrato / CC
+  workplace     String?  // Posto de Serviço / Lotação
+  shift         String?  // Jornada / Escala
+  
   salary        Decimal? @default(0) @db.Decimal(10, 2)
   hireDate      DateTime @map("hire_date")
   balanceOffset Int     @default(0) @map("balance_offset")
-  tenantId     String   @map("tenant_id") @db.Uuid
-  createdAt    DateTime @default(now())
+  tenantId      String   @map("tenant_id") @db.Uuid
+  createdAt     DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   tenant    Tenant   @relation(fields: [tenantId], references: [id])

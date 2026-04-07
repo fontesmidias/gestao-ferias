@@ -40,6 +40,42 @@ const employees: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     }
   })
 
+  // Criar funcionário manualmente
+  fastify.post('/', {
+    onRequest: [fastify.requireAuth]
+  }, async (request, reply) => {
+    const tenantId = (request.user as any).tenantId
+    const data = request.body as any
+    
+    // Minimal validation
+    if (!data.name || !data.cpf || !data.hireDate) {
+       return reply.code(400).send({ error: 'Campos obrigatórios: name, cpf, hireDate' })
+    }
+
+    try {
+      const emp = await fastify.prisma.employee.create({
+        data: {
+          tenantId,
+          name: data.name,
+          cpf: data.cpf,
+          registration: data.registration || undefined,
+          birthDate: data.birthDate ? new Date(data.birthDate) : undefined,
+          position: data.position || 'Colaborador',
+          status: data.status || 'ATIVO',
+          branch: data.branch || undefined,
+          department: data.department || undefined,
+          workplace: data.workplace || undefined,
+          shift: data.shift || undefined,
+          salary: data.salary || 0,
+          hireDate: new Date(data.hireDate)
+        }
+      })
+      return reply.code(201).send(emp)
+    } catch (err: any) {
+      return reply.code(400).send({ error: 'Erro ao criar colaborador', message: err.message })
+    }
+  })
+
   // Listar funcionários do Tenant atual (já com isolamento implícito no futuro)
   fastify.get('/', {
     onRequest: [fastify.requireAuth]
