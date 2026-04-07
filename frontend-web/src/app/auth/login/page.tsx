@@ -5,8 +5,8 @@ import { useAuth } from '@/components/AuthContext'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [sent, setSent] = useState(false)
 
   const { login } = useAuth()
 
@@ -15,8 +15,7 @@ export default function LoginPage() {
     setLoading(true)
     
     try {
-      await login(email)
-      setSent(true)
+      await login(email, password)
     } finally {
       setLoading(false)
     }
@@ -38,57 +37,50 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {!sent ? (
-          <form onSubmit={handleLogin} className="space-y-6">
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-slate-300 mb-2">
-                E-mail corporativo
-              </label>
-              <input
-                id="email"
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="exemplo@empresa.com"
-                className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-gradient-to-r from-primary to-secondary text-white font-bold py-3 rounded-xl hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-primary/20"
-            >
-              {loading ? (
-                <div className="flex items-center justify-center">
-                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
-                  Enviando link...
-                </div>
-              ) : (
-                'Acessar plataforma'
-              )}
-            </button>
-          </form>
-        ) : (
-          <div className="text-center py-6 animate-in fade-in zoom-in duration-500">
-            <div className="w-16 h-16 bg-emerald-500/20 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
-            <h2 className="text-2xl font-bold mb-2">Link enviado!</h2>
-            <p className="text-slate-400">
-              Enviamos um link de acesso para <strong>{email}</strong>. Por favor, verifique sua caixa de entrada.
-            </p>
-            <button 
-              onClick={() => setSent(false)} 
-              className="mt-8 text-primary hover:underline text-sm font-medium"
-            >
-              Tentar com outro e-mail
-            </button>
+        <form onSubmit={handleLogin} className="space-y-6">
+          <div>
+            <label htmlFor="email" className="block text-sm font-medium text-slate-300 mb-2">
+              E-mail corporativo
+            </label>
+            <input
+              id="email"
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="exemplo@empresa.com"
+              className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all mb-4"
+            />
+            
+            <label htmlFor="password" className="block text-sm font-medium text-slate-300 mb-2 mt-4">
+              Senha
+            </label>
+            <input
+              id="password"
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+            />
           </div>
-        )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-gradient-to-r from-primary to-secondary text-white font-bold py-3 rounded-xl hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-primary/20"
+          >
+            {loading ? (
+              <div className="flex items-center justify-center">
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
+                Autenticando...
+              </div>
+            ) : (
+              'Acessar plataforma'
+            )}
+          </button>
+        </form>
 
         <div className="mt-10 pt-6 border-t border-slate-800 text-center">
           <p className="text-xs text-slate-500">
