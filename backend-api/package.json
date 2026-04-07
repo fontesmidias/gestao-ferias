@@ -30,12 +30,14 @@
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.0.0",
     "date-fns": "^4.1.0",
+    "dotenv": "^16.4.5",
     "fastify": "^5.0.0",
     "fastify-cli": "^8.0.0",
     "fastify-plugin": "^5.0.0",
     "papaparse": "^5.4.1",
     "pdfkit": "^0.15.2",
     "pg": "^8.20.0",
+    "prisma": "^7.6.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
@@ -45,7 +47,6 @@
     "@types/pdfkit": "^0.13.9",
     "concurrently": "^9.0.0",
     "fastify-tsconfig": "^3.0.0",
-    "prisma": "^7.6.0",
     "ts-node": "^10.4.0",
     "typescript": "~5.9.2"
   },

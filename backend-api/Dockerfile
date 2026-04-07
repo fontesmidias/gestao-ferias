@@ -30,6 +30,7 @@ RUN npm install --omit=dev
 # Copia a pasta de código compilado e a pasta Prisma do Estágio 1
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/prisma.config.ts ./
 
 # Copia o Prisma Client gerado previamente no Estágio 1
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
