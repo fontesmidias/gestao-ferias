@@ -1,14 +1,31 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useAuth } from '@/components/AuthContext'
+import { useRouter } from 'next/navigation'
+import { HttpClient } from '@/lib/api-client'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  const router = useRouter()
 
   const { login } = useAuth()
+
+  useEffect(() => {
+    const checkStatus = async () => {
+      try {
+        const { initialized } = await HttpClient.get('/setup/status')
+        if (!initialized) {
+          router.push('/auth/setup')
+        }
+      } catch (err) {
+        console.error('Failed to check system status:', err)
+      }
+    }
+    checkStatus()
+  }, [router])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
