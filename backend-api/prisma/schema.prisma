@@ -18,6 +18,11 @@ model Tenant {
   smtpUser  String?  @map("smtp_user")
   smtpPass  String?  @map("smtp_pass")
   smtpFrom  String?  @map("smtp_from")
+
+  openaiKey    String?  @map("openai_key")
+  anthropicKey String?  @map("anthropic_key")
+  geminiKey    String?  @map("gemini_key")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   
@@ -91,10 +96,13 @@ model VacationRequest {
   employeeId   String   @map("employee_id") @db.Uuid
   startDate    DateTime @map("start_date")
   endDate      DateTime @map("end_date")
-  days         Int
-  status       String   @default("PENDING") // PENDING, APPROVED, REJECTED, SIGNED, COMPLETED
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  days              Int
+  status            String   @default("PENDING") // PENDING, APPROVED, REJECTED, RETURNED, SIGNED, COMPLETED
+  dispatchNote      String?  @map("dispatch_note")
+  originalStartDate DateTime? @map("original_start_date")
+  originalEndDate   DateTime? @map("original_end_date")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   tenant       Tenant   @relation(fields: [tenantId], references: [id])
   employee     Employee @relation(fields: [employeeId], references: [id])

@@ -61,6 +61,60 @@ const tenants: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     })
     return tenants
   })
+
+  // Patch Settings (LLM, SMTP)
+  fastify.patch('/settings', {
+    onRequest: [async (request, reply) => {
+      try {
+        await request.jwtVerify()
+      } catch (err) {
+        reply.send(err)
+      }
+    }]
+  }, async (request, reply) => {
+    const user = request.user as any
+    const payload = request.body as any
+    
+    // Admin Only
+    if (user.role !== 'ADMIN') {
+      return reply.code(403).send({ error: "Forbidden", message: "Apenas administradores podem alterar configurações." })
+    }
+
+    const { openaiKey, anthropicKey, geminiKey, smtpHost, smtpPort, smtpUser, smtpPass, smtpFrom } = payload
+    
+    const tenant = await fastify.prisma.tenant.update({
+      where: { id: user.tenantId },
+      data: {
+        openaiKey: openaiKey !== undefined ? openaiKey : undefined,
+        anthropicKey: anthropicKey !== undefined ? anthropicKey : undefined,
+        geminiKey: geminiKey !== undefined ? geminiKey : undefined,
+        smtpHost: smtpHost !== undefined ? smtpHost : undefined,
+        smtpPort: smtpPort !== undefined ? Number(smtpPort) : undefined,
+        smtpUser: smtpUser !== undefined ? smtpUser : undefined,
+        smtpPass: smtpPass !== undefined ? smtpPass : undefined,
+        smtpFrom: smtpFrom !== undefined ? smtpFrom : undefined,
+      }
+    })
+
+    return reply.send({ message: "Configurações atualizadas com sucesso." })
+  })
+
+  // Get Current Tenant Settings
+  fastify.get('/settings', {
+    onRequest: [async (request, reply) => {
+      try {
+        await request.jwtVerify()
+      } catch (err) {
+        reply.send(err)
+      }
+    }]
+  }, async (request, reply) => {
+    const user = request.user as any
+    const tenant = await fastify.prisma.tenant.findUnique({
+      where: { id: user.tenantId }
+    })
+    return tenant
+  })
 }
 
 export default tenants
