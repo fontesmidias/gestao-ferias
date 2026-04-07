@@ -28,16 +28,17 @@ model Tenant {
 }
 
 model User {
-  id        String   @id @default(uuid()) @db.Uuid
-  email     String   @unique
-  name      String?
-  role      String   @default("USER") // ADMIN, USER, AUDITOR
-  tenantId  String   @map("tenant_id") @db.Uuid
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  name         String?
+  passwordHash String?  @map("password_hash")
+  role         String   @default("USER") // ADMIN, USER, AUDITOR
+  tenantId     String   @map("tenant_id") @db.Uuid
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
-  auditLogs AuditLog[]
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  auditLogs    AuditLog[]
 
   @@map("users")
 }

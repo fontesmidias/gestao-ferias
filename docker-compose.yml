@@ -45,7 +45,8 @@ services:
       NODE_ENV: "development"
       PORT: "3000"
       DATABASE_URL: "postgresql://${DB_USER:-admin}:${DB_PASSWORD:-adminpassword}@postgres:5432/${DB_NAME:-gestaoferias}?schema=public"
-      REDIS_URL: "redis://redis:6379"
+      REDIS_HOST: "redis"
+      REDIS_PORT: "6379"
       JWT_SECRET: "${JWT_SECRET:-dev_secret_key_123}"
     depends_on:
       - postgres
