@@ -82,7 +82,7 @@ const tenants: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
 
     const { openaiKey, anthropicKey, geminiKey, smtpHost, smtpPort, smtpUser, smtpPass, smtpFrom } = payload
     
-    const tenant = await fastify.prisma.tenant.update({
+    await fastify.prisma.tenant.update({
       where: { id: user.tenantId },
       data: {
         openaiKey: openaiKey !== undefined ? openaiKey : undefined,
