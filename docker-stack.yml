@@ -32,8 +32,14 @@ services:
       - redis_data_prod:/data
     networks:
       - ferias_backend_network
+  cache:
+    image: redis:7-alpine
+    volumes:
+      - redis_data_prod:/data
+    networks:
+      - ferias_backend_network
     deploy:
-      replicas: 2
+      replicas: 1 # Ajustado para apenas 1 réplica
       restart_policy:
         condition: on-failure
       resources:
@@ -54,7 +60,7 @@ services:
       - ferias_backend_network
       - ferias_traefik_public
     deploy:
-      replicas: 2
+      replicas: 1 # Ajustado para apenas 1 réplica conforme solicitado
       restart_policy:
         condition: on-failure
       resources:
@@ -63,11 +69,16 @@ services:
           memory: 2G
       labels:
         - "traefik.enable=true"
-        # Subdomínio Oculto e Variabilizado para Repositórios Públicos
+        # Explicitamente definindo a rede externa (Variabilizado para proteção)
+        - "traefik.docker.network=${TRAEFIK_NETWORK:-ferias_traefik_public}"
+        # Acesso do Router API
         - "traefik.http.routers.gestaoferias-api.rule=Host(`${API_DOMAIN:-api.seudominio.com}`)"
-        - "traefik.http.services.gestaoferias-api.loadbalancer.server.port=2000"
         - "traefik.http.routers.gestaoferias-api.entrypoints=websecure"
-        - "traefik.http.routers.gestaoferias-api.tls.certresolver=letsencrypt"
+        # Configuração flexível para Let's Encrypt para aceitar diferentes nomes no servidor host
+        - "traefik.http.routers.gestaoferias-api.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-letsencrypt}"
+        # Declaração explicita do apontamento do Servidor
+        - "traefik.http.routers.gestaoferias-api.service=gestaoferias-api"
+        - "traefik.http.services.gestaoferias-api.loadbalancer.server.port=2000"
 
   web:
     image: ghcr.io/fontesmidias/gestao-ferias-frontend:latest
@@ -77,7 +88,7 @@ services:
     networks:
       - ferias_traefik_public
     deploy:
-      replicas: 2
+      replicas: 1 # Ajustado para apenas 1 réplica
       restart_policy:
         condition: on-failure
       resources:
@@ -86,17 +97,23 @@ services:
           memory: 1G
       labels:
         - "traefik.enable=true"
-        # Subdomínio Oculto e Variabilizado para Repositórios Públicos
+        # Explicitamente definindo a rede externa
+        - "traefik.docker.network=${TRAEFIK_NETWORK:-ferias_traefik_public}"
+        # Acesso do Router WEB
         - "traefik.http.routers.gestaoferias-web.rule=Host(`${WEB_DOMAIN:-gestao.seudominio.com}`)"
-        - "traefik.http.services.gestaoferias-web.loadbalancer.server.port=3000"
         - "traefik.http.routers.gestaoferias-web.entrypoints=websecure"
-        - "traefik.http.routers.gestaoferias-web.tls.certresolver=letsencrypt"
+        # Configuração flexível do resolver de TLS
+        - "traefik.http.routers.gestaoferias-web.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-letsencrypt}"
+        # Declaração explicita do serviço para Traefik evitar timeout local
+        - "traefik.http.routers.gestaoferias-web.service=gestaoferias-web"
+        - "traefik.http.services.gestaoferias-web.loadbalancer.server.port=3000"
 
 networks:
   ferias_backend_network:
     driver: overlay
     attachable: true
   ferias_traefik_public:
+    name: ${TRAEFIK_NETWORK:-ferias_traefik_public}
     external: true
 
 volumes:
