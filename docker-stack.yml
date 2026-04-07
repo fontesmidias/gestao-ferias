@@ -10,84 +10,91 @@ services:
   database:
     image: postgres:15-alpine
     environment:
-      # O ":?" no Docker (e shells modernos) força o erro caso a variável falte no .env.
-      # Essencial para garantir que o banco NÃO suba sem senha em produção.
       POSTGRES_USER: ${DB_USER:?Erro: DB_USER nao definido}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?Erro: DB_PASSWORD nao definido}
       POSTGRES_DB: ${DB_NAME:-gestaoferias}
     volumes:
       - postgres_data_prod:/var/lib/postgresql/data
     networks:
-      - backend_network # Isola o banco: só visível para a API
+      - ferias_backend_network
     deploy:
       restart_policy:
         condition: on-failure
       resources:
         limits:
-          cpus: '0.50'
-          memory: 512M
+          cpus: '1'
+          memory: 1G
 
   cache:
     image: redis:7-alpine
     volumes:
       - redis_data_prod:/data
     networks:
-      - backend_network
+      - ferias_backend_network
     deploy:
+      replicas: 2
       restart_policy:
         condition: on-failure
       resources:
         limits:
-          cpus: '0.25'
-          memory: 256M
+          cpus: '1'
+          memory: 1G
 
   api:
-    image: gestaoferias-backend:latest
+    image: ghcr.io/fontesmidias/gestao-ferias-backend:latest
     environment:
       - NODE_ENV=production
-      - PORT=3000
+      - PORT=2000
+      # CORRIGIDO: As portas no Swarm de imagens externas escutam na sua configuração nativa
       - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@database:5432/${DB_NAME:-gestaoferias}?schema=public
       - REDIS_URL=redis://cache:6379
       - JWT_SECRET=${JWT_SECRET:?Erro: JWT_SECRET obrigatorio em producao}
     networks:
-      - backend_network
-      - traefik_public # Rede externa do Traefik para acesso web
+      - ferias_backend_network
+      - ferias_traefik_public
     deploy:
-      replicas: 1
+      replicas: 2
       restart_policy:
         condition: on-failure
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
       labels:
-        # Configurações Traefik em Swarm PRECISAM estar sob o bloco "deploy"
         - "traefik.enable=true"
-        - "traefik.http.routers.gestaoferias-api.rule=Host(`api.seudominio.com`)"
-        - "traefik.http.services.gestaoferias-api.loadbalancer.server.port=3000"
+        - "traefik.http.routers.gestaoferias-api.rule=Host(`feriasback.unibot.com.br`)"
+        - "traefik.http.services.gestaoferias-api.loadbalancer.server.port=2000"
         - "traefik.http.routers.gestaoferias-api.entrypoints=websecure"
         - "traefik.http.routers.gestaoferias-api.tls.certresolver=letsencrypt"
 
   web:
-    image: gestaoferias-frontend:latest
+    image: ghcr.io/fontesmidias/gestao-ferias-frontend:latest
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=${PUBLIC_API_URL:?Erro: Defina a URL publica da API (ex: https://api.seudominio.com)}
+      - NEXT_PUBLIC_API_URL=${PUBLIC_API_URL:?Erro: Defina a URL publica da API}
     networks:
-      - traefik_public
+      - ferias_traefik_public
     deploy:
-      replicas: 1
+      replicas: 2
       restart_policy:
         condition: on-failure
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.gestaoferias-web.rule=Host(`gestao.seudominio.com`)"
+        - "traefik.http.routers.gestaoferias-web.rule=Host(`ferias.unibot.com.br`)"
         - "traefik.http.services.gestaoferias-web.loadbalancer.server.port=3000"
         - "traefik.http.routers.gestaoferias-web.entrypoints=websecure"
         - "traefik.http.routers.gestaoferias-web.tls.certresolver=letsencrypt"
 
 networks:
-  backend_network:
+  ferias_backend_network:
     driver: overlay
     attachable: true
-  traefik_public:
-    external: true # Essa rede deve ser criada manualmente: docker network create -d overlay traefik_public
+  ferias_traefik_public:
+    external: true
 
 volumes:
   postgres_data_prod:
