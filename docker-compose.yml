@@ -42,11 +42,11 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=development # Ambiente de desenvolvimento para logs detalhados
-      - PORT=3000
-      - DATABASE_URL=postgresql://${DB_USER:-admin}:${DB_PASSWORD:-adminpassword}@postgres:5432/${DB_NAME:-gestaoferias}?schema=public
-      - REDIS_URL=redis://redis:6379
-      - JWT_SECRET=${JWT_SECRET:-dev_secret_key_123}
+      NODE_ENV: "development"
+      PORT: "3000"
+      DATABASE_URL: "postgresql://${DB_USER:-admin}:${DB_PASSWORD:-adminpassword}@postgres:5432/${DB_NAME:-gestaoferias}?schema=public"
+      REDIS_URL: "redis://redis:6379"
+      JWT_SECRET: "${JWT_SECRET:-dev_secret_key_123}"
     depends_on:
       - postgres
       - redis
@@ -62,9 +62,8 @@ services:
     ports:
       - "3002:3000"
     environment:
-      - NODE_ENV=development
-      # No local, o frontend acessa a API via localhost (do navegador)
-      - NEXT_PUBLIC_API_URL=http://localhost:3000/api/v1
+      NODE_ENV: "development"
+      NEXT_PUBLIC_API_URL: "http://localhost:3000/api/v1"
     depends_on:
       - backend
     networks:
