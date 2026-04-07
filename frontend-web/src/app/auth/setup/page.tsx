@@ -7,6 +7,8 @@ import { toast } from 'sonner'
 
 export default function SetupPage() {
   const [loading, setLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [showSmtpPass, setShowSmtpPass] = useState(false)
   const [formData, setFormData] = useState({
     tenantName: '',
     cnpj: '',
@@ -139,15 +141,25 @@ export default function SetupPage() {
                 <label htmlFor="password" className="block text-sm font-medium text-slate-300 mb-2">
                   Defina sua Senha <span className="text-red-500">*</span>
                 </label>
-                <input
-                  id="password"
-                  type="password"
-                  required
-                  value={formData.password}
-                  onChange={handleChange}
-                  placeholder="••••••••"
-                  className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-primary/50 transition-all outline-none"
-                />
+                <div className="relative">
+                  <input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    required
+                    value={formData.password}
+                    onChange={handleChange}
+                    placeholder="••••••••"
+                    className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 pr-12 text-white focus:ring-2 focus:ring-primary/50 transition-all outline-none"
+                  />
+                  <button 
+                    type="button" 
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-2xl hover:scale-110 transition-transform focus:outline-none"
+                    title={showPassword ? "Ocultar senha" : "Ver senha"}
+                  >
+                    {showPassword ? "🐵" : "🙈"}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -208,14 +220,24 @@ export default function SetupPage() {
               </div>
               <div>
                 <label htmlFor="smtpPass" className="block text-xs font-medium text-slate-400 mb-1">Senha SMTP</label>
-                <input
-                  id="smtpPass"
-                  type="password"
-                  value={formData.smtpPass}
-                  onChange={handleChange}
-                  placeholder="••••••••"
-                  className="w-full bg-slate-900/30 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:border-primary/50 outline-none"
-                />
+                <div className="relative">
+                  <input
+                    id="smtpPass"
+                    type={showSmtpPass ? "text" : "password"}
+                    value={formData.smtpPass}
+                    onChange={handleChange}
+                    placeholder="••••••••"
+                    className="w-full bg-slate-900/30 border border-slate-800 rounded-lg px-3 py-2 pr-10 text-sm text-white focus:border-primary/50 outline-none"
+                  />
+                  <button 
+                    type="button" 
+                    onClick={() => setShowSmtpPass(!showSmtpPass)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-xl hover:scale-110 transition-transform focus:outline-none"
+                    title={showSmtpPass ? "Ocultar senha" : "Ver senha"}
+                  >
+                    {showSmtpPass ? "🐵" : "🙈"}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
