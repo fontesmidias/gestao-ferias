@@ -37,7 +37,8 @@ services:
       NODE_ENV: "production"
       PORT: "3000"
       DATABASE_URL: "postgresql://${DB_USER}:${DB_PASSWORD}@database:5432/${DB_NAME:-gestaoferias}?schema=public"
-      REDIS_URL: "redis://cache:6379"
+      REDIS_HOST: "cache"
+      REDIS_PORT: "6379"
       JWT_SECRET: "${JWT_SECRET:?Erro: JWT_SECRET obrigatorio em producao}"
     ports:
       - "8080:3000" # Exposto para o Nginx externo rotear (ex: api.seudominio.com)
