@@ -11,6 +11,10 @@ export default function SettingsPage() {
   const { user } = useAuth()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [showOpenai, setShowOpenai] = useState(false)
+  const [showAnthropic, setShowAnthropic] = useState(false)
+  const [showGemini, setShowGemini] = useState(false)
+  const [showSmtpPass, setShowSmtpPass] = useState(false)
   const [formData, setFormData] = useState({
     openaiKey: '',
     anthropicKey: '',
@@ -106,40 +110,70 @@ export default function SettingsPage() {
                   <label htmlFor="openaiKey" className="block text-sm font-medium text-slate-300 mb-2">
                     OpenAI API Key (GPT-4o)
                   </label>
-                  <input
-                    id="openaiKey"
-                    type="password"
-                    value={formData.openaiKey}
-                    onChange={handleChange}
-                    placeholder="sk-proj-..."
-                    className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-primary/50 transition-all outline-none"
-                  />
+                  <div className="relative">
+                    <input
+                      id="openaiKey"
+                      type={showOpenai ? "text" : "password"}
+                      value={formData.openaiKey}
+                      onChange={handleChange}
+                      placeholder="sk-proj-..."
+                      className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 pr-12 text-white focus:ring-2 focus:ring-primary/50 transition-all outline-none"
+                    />
+                    <button 
+                      type="button" 
+                      onClick={() => setShowOpenai(!showOpenai)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-2xl hover:scale-110 transition-transform focus:outline-none"
+                      title={showOpenai ? "Ocultar chave" : "Ver chave"}
+                    >
+                      {showOpenai ? "🐵" : "🙈"}
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label htmlFor="anthropicKey" className="block text-sm font-medium text-slate-300 mb-2">
                     Anthropic API Key (Claude 3.5)
                   </label>
-                  <input
-                    id="anthropicKey"
-                    type="password"
-                    value={formData.anthropicKey}
-                    onChange={handleChange}
-                    placeholder="sk-ant-api03-..."
-                    className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-primary/50 transition-all outline-none"
-                  />
+                  <div className="relative">
+                    <input
+                      id="anthropicKey"
+                      type={showAnthropic ? "text" : "password"}
+                      value={formData.anthropicKey}
+                      onChange={handleChange}
+                      placeholder="sk-ant-api03-..."
+                      className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 pr-12 text-white focus:ring-2 focus:ring-primary/50 transition-all outline-none"
+                    />
+                    <button 
+                      type="button" 
+                      onClick={() => setShowAnthropic(!showAnthropic)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-2xl hover:scale-110 transition-transform focus:outline-none"
+                      title={showAnthropic ? "Ocultar chave" : "Ver chave"}
+                    >
+                      {showAnthropic ? "🐵" : "🙈"}
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label htmlFor="geminiKey" className="block text-sm font-medium text-slate-300 mb-2">
                     Google Gemini API Key (Gemini 1.5 Pro)
                   </label>
-                  <input
-                    id="geminiKey"
-                    type="password"
-                    value={formData.geminiKey}
-                    onChange={handleChange}
-                    placeholder="AIzaSy..."
-                    className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-primary/50 transition-all outline-none"
-                  />
+                  <div className="relative">
+                    <input
+                      id="geminiKey"
+                      type={showGemini ? "text" : "password"}
+                      value={formData.geminiKey}
+                      onChange={handleChange}
+                      placeholder="AIzaSy..."
+                      className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 pr-12 text-white focus:ring-2 focus:ring-primary/50 transition-all outline-none"
+                    />
+                    <button 
+                      type="button" 
+                      onClick={() => setShowGemini(!showGemini)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-2xl hover:scale-110 transition-transform focus:outline-none"
+                      title={showGemini ? "Ocultar chave" : "Ver chave"}
+                    >
+                      {showGemini ? "🐵" : "🙈"}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -203,14 +237,24 @@ export default function SettingsPage() {
                 </div>
                 <div>
                   <label htmlFor="smtpPass" className="block text-sm font-medium text-slate-300 mb-2">Senha SMTP</label>
-                  <input
-                    id="smtpPass"
-                    type="password"
-                    value={formData.smtpPass}
-                    onChange={handleChange}
-                    placeholder="••••••••"
-                    className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:ring-1 focus:ring-primary/50 outline-none"
-                  />
+                  <div className="relative">
+                    <input
+                      id="smtpPass"
+                      type={showSmtpPass ? "text" : "password"}
+                      value={formData.smtpPass}
+                      onChange={handleChange}
+                      placeholder="••••••••"
+                      className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 pr-12 text-white focus:ring-1 focus:ring-primary/50 outline-none"
+                    />
+                    <button 
+                      type="button" 
+                      onClick={() => setShowSmtpPass(!showSmtpPass)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-xl hover:scale-110 transition-transform focus:outline-none"
+                      title={showSmtpPass ? "Ocultar senha" : "Ver senha"}
+                    >
+                      {showSmtpPass ? "🐵" : "🙈"}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
