@@ -66,3 +66,8 @@ jobs:
           file: ./frontend-web/Dockerfile
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}:latest
+          # Injeta a URL pública da API em BUILD TIME (necessário para variáveis NEXT_PUBLIC_*)
+          # Configure o secret NEXT_PUBLIC_API_URL nas configurações do repositório GitHub
+          # Settings > Secrets and variables > Actions > New repository secret
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}
