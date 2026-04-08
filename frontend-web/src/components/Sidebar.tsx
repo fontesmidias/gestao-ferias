@@ -3,13 +3,14 @@
 import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, CheckSquare, Users, Settings, BrainCircuit, LogOut, ChevronLeft, ChevronRight } from 'lucide-react'
+import { LayoutDashboard, CheckSquare, Users, Settings, BrainCircuit, LogOut, Menu, UserCircle } from 'lucide-react'
 import { useAuth } from '@/components/AuthContext'
 
 export function Sidebar() {
   const pathname = usePathname()
   const { user, logout, loading } = useAuth()
   const [isCollapsed, setIsCollapsed] = useState(false)
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
 
   // Load state from local storage on mount
   useEffect(() => {
@@ -21,6 +22,7 @@ export function Sidebar() {
     const newVal = !isCollapsed
     setIsCollapsed(newVal)
     localStorage.setItem('gestao_sidebar_collapsed', String(newVal))
+    if (newVal) setIsUserMenuOpen(false) // Close menu if collapsing sidebar
   }
 
   // Se estiver na PWA ou não estiver logado, não mostra sidebar
@@ -32,8 +34,7 @@ export function Sidebar() {
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/predict', label: 'Oráculo AI', icon: BrainCircuit },
     { href: '/approvals', label: 'Aprovações', icon: CheckSquare },
-    { href: '/employees', label: 'Colaboradores', icon: Users },
-    { href: '/settings', label: 'Configurações', icon: Settings },
+    { href: '/employees', label: 'Colaboradores', icon: Users }
   ]
 
   return (
@@ -80,39 +81,55 @@ export function Sidebar() {
         <button 
           onClick={toggleCollapse}
           className="p-2 text-slate-500 hover:text-white hover:bg-white/5 rounded-lg transition-colors w-full flex justify-center"
-          title={isCollapsed ? "Expandir" : "Recolher"}
+          title={isCollapsed ? "Expandir Menu" : "Recolher Menu"}
         >
-          {isCollapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
+          <Menu className="w-5 h-5" />
         </button>
       </div>
 
-      <div className="p-4 border-t border-white/5 space-y-2">
-        {!isCollapsed ? (
-          <div className="flex items-center gap-3 p-3 bg-slate-800 rounded-xl overflow-hidden">
-            <div className="w-10 h-10 shrink-0 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-sm font-bold border border-indigo-500/20">
-              {(user?.name || 'G').charAt(0)}
-            </div>
-            <div className="flex-1 overflow-hidden">
-              <p className="text-sm font-bold text-white truncate">{user?.name || 'Gestor'}</p>
-              <p className="text-xs text-slate-500 truncate">{user.role}</p>
-            </div>
+      <div className="p-4 border-t border-white/5 relative">
+        {/* User Card as a Button */}
+        <button 
+          onClick={() => !isCollapsed && setIsUserMenuOpen(!isUserMenuOpen)}
+          className={`w-full flex items-center gap-3 p-3 bg-slate-800 rounded-xl overflow-hidden hover:bg-slate-700 transition-colors ${isCollapsed ? 'justify-center p-2' : ''}`}
+          title={isCollapsed ? user?.name || 'Gestão' : "Opções da Conta"}
+        >
+          <div className={`${isCollapsed ? 'w-8 h-8' : 'w-10 h-10'} shrink-0 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-sm font-bold border border-indigo-500/20`}>
+            {(user?.name || 'G').charAt(0)}
           </div>
-        ) : (
-          <div className="flex justify-center p-2 bg-slate-800 rounded-xl" title={user?.name || 'Gestão'}>
-            <div className="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-sm font-bold border border-indigo-500/20">
-              {(user?.name || 'G').charAt(0)}
+          {!isCollapsed && (
+            <div className="flex-1 overflow-hidden text-left">
+              <p className="text-sm font-bold text-white truncate">{user?.name || 'Gestor'}</p>
+              <p className="text-xs text-slate-400 truncate">{user.role}</p>
             </div>
+          )}
+        </button>
+
+        {/* User Popover Menu */}
+        {!isCollapsed && isUserMenuOpen && (
+          <div className="absolute bottom-full left-4 right-4 mb-2 bg-slate-800 border border-slate-700 rounded-xl shadow-xl overflow-hidden z-50 animate-in fade-in slide-in-from-bottom-2">
+            <Link 
+              href="/settings"
+              onClick={() => setIsUserMenuOpen(false)}
+              className="flex items-center gap-3 px-4 py-3 text-slate-300 hover:text-white hover:bg-white/5 transition-colors"
+            >
+              <Settings className="w-4 h-4" />
+              <span className="text-sm font-bold">Configurações</span>
+            </Link>
+            {/* Could add Profile Edit here later */}
+            {/* <Link href="/profile" className="..."> <UserCircle.../> Meu Perfil </Link> */}
+            
+            <div className="h-px bg-slate-700/50 w-full" />
+            
+            <button 
+              onClick={() => { setIsUserMenuOpen(false); logout(); }}
+              className="w-full flex items-center gap-3 px-4 py-3 text-rose-400 hover:bg-rose-400/10 transition-colors"
+            >
+              <LogOut className="w-4 h-4" />
+              <span className="text-sm font-bold">Encerrar Sessão</span>
+            </button>
           </div>
         )}
-        
-        <button 
-          onClick={logout}
-          className={`flex items-center gap-3 py-3 text-slate-400 hover:text-rose-400 hover:bg-rose-400/10 rounded-xl transition-all ${isCollapsed ? 'justify-center px-0 w-full' : 'px-4 w-full'}`}
-          title={isCollapsed ? "Sair" : undefined}
-        >
-          <LogOut className="w-5 h-5 shrink-0" />
-          {!isCollapsed && <span className="text-sm font-bold whitespace-nowrap">Encerrar Sessão</span>}
-        </button>
       </div>
     </aside>
   )
