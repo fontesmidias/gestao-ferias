@@ -45,6 +45,24 @@ export function useTour() {
             side: 'bottom',
             align: 'start'
           }
+        },
+        {
+          element: '.recharts-responsive-container',
+          popover: {
+            title: 'Análise Preditiva Diária',
+            description: 'Aqui, alimentado pelos dados do sistema, nós plotamos cenários de ocupação futura para você saber exatamente quando sua matriz ficará mais escassa.',
+            side: 'top',
+            align: 'center'
+          }
+        },
+        {
+          element: 'button[title="Opções da Conta"]',
+          popover: {
+            title: 'Seu Perfil e Acesso',
+            description: 'Clique aqui a qualquer momento para abrir as configurações globais ou sair da aplicação de forma segura.',
+            side: 'right',
+            align: 'start'
+          }
         }
       ]
     } else if (path === '/approvals') {
@@ -63,14 +81,72 @@ export function useTour() {
             side: 'top',
             align: 'center'
           }
+        },
+        {
+          element: '.fixed.bottom-8', // Targeting the floating action bar
+          popover: {
+            title: 'Ações em Lote',
+            description: 'Sempre que selecionar registros na tabela, o painel despachante flutuante aparecerá aqui para você decidir tudo com 1 clique.',
+            side: 'top',
+            align: 'center'
+          }
+        }
+      ]
+    } else if (path === '/employees') {
+      steps = [
+        {
+          element: 'main',
+          popover: {
+            title: 'Centro de Operações de Tripulação',
+            description: 'Você chegou no Super-Grid. Uma matriz robusta feita para digerir milhares de dados dos seus colaboradores sem esforço.',
+            side: 'top',
+            align: 'start'
+          }
+        },
+        {
+          element: 'select.bg-slate-950', // targets the branch/workplace filters 
+          popover: {
+            title: 'Dinâmica Dimensional',
+            description: 'Use esses dropdowns para cortar, agrupar e buscar funcionários por Lotação, Empresa Mestre e Status. Tudo reflete neste grid em milissegundos.',
+            side: 'bottom',
+            align: 'center'
+          }
+        },
+        {
+          element: 'button[title="Exportar Filtrados para CSV"]',
+          popover: {
+            title: 'Exportação Tática em Milissegundo',
+            description: 'O verdadeiro ouro! Clique aqui e tudo o que está visível no grid será costurado numa bela planilha CSV na hora, direto na sua tela, sem aguardar carregamentos de servidor.',
+            side: 'bottom',
+            align: 'start'
+          }
         }
       ]
     } else if (path === '/settings') {
       steps = [
          {
+          element: 'main',
           popover: {
             title: 'Configurações Globais',
             description: 'Ajuste os parâmetros dos super poderes do seu GestãoFérias.'
+          }
+        },
+        {
+          element: '#openaiKey',
+          popover: {
+            title: 'Ignição da Inteligência Artificial',
+            description: 'Se quiser brincar com GPT ou Claude nas predições de faturamento ou análise de perfis, cole as suas chaves mestre da OpenAI/Anthropic aqui.',
+            side: 'bottom',
+            align: 'start'
+          }
+        },
+        {
+          element: '#smtpHost',
+          popover: {
+            title: 'Automações de Notificação',
+            description: 'Assim que a sua transportadora/logística pedir aprovação, você assina, e essas portas SMTP garantem que eles receberão um e-mail com a boa notícia na mesma hora!',
+            side: 'top',
+            align: 'start'
           }
         }
       ]
@@ -81,6 +157,15 @@ export function useTour() {
             title: 'Oráculo AI',
             description: 'Bem-vindo ao centro do pensamento estratégico preditivo! Converse com seus Dossiês usando IA.'
           }
+         },
+         {
+           element: 'textarea',
+           popover: {
+             title: 'A Faça a pergunta Absurda',
+             description: 'Pergunte coisas como: "Baseado no meu quadro, quem tem mais chance de burnout este ano?"',
+             side: 'top',
+             align: 'center'
+           }
          }
        ]
     }
