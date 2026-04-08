@@ -97,8 +97,8 @@ export function useTour() {
         {
           element: 'main',
           popover: {
-            title: 'Centro de Operações de Tripulação',
-            description: 'Você chegou no Super-Grid. Uma matriz robusta feita para digerir milhares de dados dos seus colaboradores sem esforço.',
+            title: 'Painel Central do Colaborador',
+            description: 'Visão consolidada para gerenciar os dados dos seus colaboradores com eficiência e precisão estrutural.',
             side: 'top',
             align: 'start'
           }
@@ -106,8 +106,8 @@ export function useTour() {
         {
           element: 'select.bg-slate-950', // targets the branch/workplace filters 
           popover: {
-            title: 'Dinâmica Dimensional',
-            description: 'Use esses dropdowns para cortar, agrupar e buscar funcionários por Lotação, Empresa Mestre e Status. Tudo reflete neste grid em milissegundos.',
+            title: 'Análise Dimensional',
+            description: 'Utilize estas caixas de seleção para filtrar e buscar colaboradores por Empresa (razão social matriz) e Lotação (posto específico em que o profissional trabalha).',
             side: 'bottom',
             align: 'center'
           }
@@ -115,8 +115,8 @@ export function useTour() {
         {
           element: 'button[title="Exportar Filtrados para CSV"]',
           popover: {
-            title: 'Exportação Tática em Milissegundo',
-            description: 'O verdadeiro ouro! Clique aqui e tudo o que está visível no grid será costurado numa bela planilha CSV na hora, direto na sua tela, sem aguardar carregamentos de servidor.',
+            title: 'Exportação Estratégica',
+            description: 'Exporte os dados da visualização atual diretamente para uma planilha eletrônica, mantendo eventuais filtros selecionados.',
             side: 'bottom',
             align: 'start'
           }
