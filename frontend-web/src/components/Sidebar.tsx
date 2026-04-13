@@ -8,13 +8,16 @@ import { useAuth } from '@/components/AuthContext'
 
 export function Sidebar() {
   const pathname = usePathname()
-  const { user, logout } = useAuth()
+  const { user, logout, loading } = useAuth()
   const [pinned, setPinned] = useState(false)
   const [hovered, setHovered] = useState(false)
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
 
-  // Se estiver na PWA ou não estiver logado, não mostra sidebar
-  if (pathname.startsWith('/employee') || pathname.startsWith('/auth') || !user) {
+  // Se estiver na PWA ou não estiver logado (e já carregou), não mostra sidebar
+  if (pathname.startsWith('/employee') || pathname.startsWith('/auth')) {
+    return null
+  }
+  if (!loading && !user) {
     return null
   }
 
