@@ -4,6 +4,7 @@ import { addMinutes, isAfter } from 'date-fns'
 const signatureAuth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   // Solicitar código OTP via WhatsApp (Story 4.2)
   fastify.post('/request-otp', {
+    onRequest: [fastify.requireAuth],
     schema: {
       body: {
         type: 'object',
@@ -16,10 +17,11 @@ const signatureAuth: FastifyPluginAsync = async (fastify, opts): Promise<void> =
     }
   }, async (request, reply) => {
     const { signatureId, phone } = request.body as any
-    
-    // 1. Verificar registro de assinatura
-    const signature = await fastify.prisma.signature.findUnique({
-      where: { id: signatureId }
+    const { tenantId } = request.user as any
+
+    // 1. Verificar registro de assinatura (com isolamento de tenant)
+    const signature = await fastify.prisma.signature.findFirst({
+      where: { id: signatureId, tenantId }
     })
 
     if (!signature || signature.signedAt) {
@@ -48,8 +50,15 @@ const signatureAuth: FastifyPluginAsync = async (fastify, opts): Promise<void> =
     return { message: 'Código enfileirado para envio.' }
   })
 
-  // Verificar OTP e Assinar Documento (Story 4.2)
+  // Verificar OTP e Assinar Documento (rate limited: 3/min por IP)
   fastify.post('/verify-otp', {
+    onRequest: [fastify.requireAuth],
+    config: {
+      rateLimit: {
+        max: 3,
+        timeWindow: '1 minute'
+      }
+    },
     schema: {
       body: {
         type: 'object',
@@ -62,9 +71,10 @@ const signatureAuth: FastifyPluginAsync = async (fastify, opts): Promise<void> =
     }
   }, async (request, reply) => {
     const { signatureId, code } = request.body as any
+    const { tenantId } = request.user as any
 
-    const signature = await fastify.prisma.signature.findUnique({
-      where: { id: signatureId }
+    const signature = await fastify.prisma.signature.findFirst({
+      where: { id: signatureId, tenantId }
     })
 
     if (!signature || !signature.otpCode || !signature.otpExpiresAt) {

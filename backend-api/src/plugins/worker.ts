@@ -58,13 +58,12 @@ export default fp(async (fastify) => {
         const sanitizedCPF = SanitizationService.sanitizeCPF(row.cpf)
         const sanitizedHireDate = SanitizationService.sanitizeDate(row.hireDate)
 
-        // 2. Persistência no Banco (Upsert para evitar duplicatas por CPF)
+        // 2. Persistência no Banco (Upsert por CPF+Tenant para isolamento multi-tenant)
         await fastify.prisma.employee.upsert({
-          where: { cpf: sanitizedCPF },
+          where: { cpf_tenantId: { cpf: sanitizedCPF, tenantId } },
           update: {
             name: sanitizedName,
             hireDate: sanitizedHireDate,
-            tenantId: tenantId
           },
           create: {
             name: sanitizedName,

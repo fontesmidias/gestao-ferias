@@ -26,19 +26,20 @@ model Tenant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   
-  users      User[]
-  employees  Employee[]
-  auditLogs  AuditLog[]
+  users         User[]
+  employees     Employee[]
+  auditLogs     AuditLog[]
   vacationRequests VacationRequest[]
-  signatures Signature[]
-  webhooks   Webhook[]
+  signatures    Signature[]
+  refreshTokens RefreshToken[]
+  webhooks      Webhook[]
 
   @@map("tenants")
 }
 
 model User {
   id           String   @id @default(uuid()) @db.Uuid
-  email        String   @unique
+  email        String
   name         String?
   passwordHash String?  @map("password_hash")
   role         String   @default("USER") // ADMIN, USER, AUDITOR
@@ -46,16 +47,18 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  tenant       Tenant   @relation(fields: [tenantId], references: [id])
-  auditLogs    AuditLog[]
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  auditLogs     AuditLog[]
+  refreshTokens RefreshToken[]
 
+  @@unique([email, tenantId])
   @@map("users")
 }
 
 model Employee {
   id            String   @id @default(uuid()) @db.Uuid
   name          String
-  cpf           String   @unique
+  cpf           String
   registration  String?  @map("registration")
   birthDate     DateTime? @map("birth_date")
   position      String?  @default("Colaborador")
@@ -76,6 +79,7 @@ model Employee {
   tenant    Tenant   @relation(fields: [tenantId], references: [id])
   requests  VacationRequest[]
 
+  @@unique([cpf, tenantId])
   @@map("employees")
 }
 
@@ -136,6 +140,20 @@ model Signature {
   vacationRequest   VacationRequest @relation(fields: [vacationRequestId], references: [id])
 
   @@map("signatures")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  token     String   @unique
+  userId    String   @map("user_id") @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User     @relation(fields: [userId], references: [id])
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@map("refresh_tokens")
 }
 
 model Webhook {

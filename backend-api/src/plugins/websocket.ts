@@ -12,18 +12,37 @@ export default fp(async (fastify) => {
 
   const clients = new Map<string, Set<any>>()
 
-  // Rota de WebSocket para notificações em tempo real (Story 5.3)
+  // Rota de WebSocket com autenticação JWT via query param
   fastify.get('/ws', { websocket: true }, (connection, req) => {
-    const tenantId = req.query ? (req.query as any).tenantId : 'default'
-    
+    const token = req.query ? (req.query as any).token : null
+
+    if (!token) {
+      connection.close(4401, 'Token obrigatório')
+      return
+    }
+
+    let payload: { tenantId: string }
+    try {
+      payload = fastify.jwt.verify<{ tenantId: string }>(token)
+    } catch {
+      connection.close(4401, 'Token inválido ou expirado')
+      return
+    }
+
+    const tenantId = payload.tenantId
+    if (!tenantId) {
+      connection.close(4401, 'Tenant não identificado no token')
+      return
+    }
+
     if (!clients.has(tenantId)) {
       clients.set(tenantId, new Set())
     }
-    
+
     const tenantClients = clients.get(tenantId)!
     tenantClients.add(connection)
-    
-    fastify.log.info(`[WS] Novo cliente conectado para o Tenant ${tenantId}`)
+
+    fastify.log.info(`[WS] Cliente autenticado conectado para Tenant ${tenantId}`)
 
     connection.on('close', () => {
       tenantClients.delete(connection)
@@ -31,7 +50,7 @@ export default fp(async (fastify) => {
     })
   })
 
-  // Método auxiliar para broadcast por Tenant (Story 5.3)
+  // Método auxiliar para broadcast por Tenant
   fastify.decorate('broadcast', (tenantId: string, message: any) => {
     const tenantClients = clients.get(tenantId)
     if (tenantClients) {

@@ -3,14 +3,17 @@
 import { useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 
-export function useSocket(tenantId: string = 'default') {
+export function useSocket() {
   const ws = useRef<WebSocket | null>(null)
 
   useEffect(() => {
+    const token = localStorage.getItem('token')
+    if (!token) return
+
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const host = 'localhost:3000' // Alinhado com o Backend Fastify
-    
-    ws.current = new WebSocket(`${protocol}//${host}/ws?tenantId=${tenantId}`)
+
+    ws.current = new WebSocket(`${protocol}//${host}/ws?token=${token}`)
 
     ws.current.onopen = () => {
       console.log('[WS] Conectado ao servidor de notificações')
@@ -18,7 +21,7 @@ export function useSocket(tenantId: string = 'default') {
 
     ws.current.onmessage = (event) => {
       const { type, data } = JSON.parse(event.data)
-      
+
       switch (type) {
         case 'IMPORT_STARTED':
           toast.info(`Iniciando importação de ${data.total} colaboradores...`)
@@ -44,7 +47,7 @@ export function useSocket(tenantId: string = 'default') {
     return () => {
       ws.current?.close()
     }
-  }, [tenantId])
+  }, [])
 
   return ws.current
 }

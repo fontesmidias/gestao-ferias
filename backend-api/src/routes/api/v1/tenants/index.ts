@@ -1,7 +1,15 @@
 import { FastifyPluginAsync } from 'fastify'
 
+// Helper: mascarar valores sensíveis (ex: "sk-abc123xyz" → "sk-...xyz")
+function maskSecret(value: string | null | undefined): string | null {
+  if (!value) return null
+  if (value.length <= 6) return '***'
+  return value.slice(0, 3) + '...' + value.slice(-3)
+}
+
 const tenants: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   fastify.post('/', {
+    onRequest: [fastify.requireAuth, fastify.requireAdmin],
     schema: {
       description: 'Cria um novo Tenant (Empresa)',
       tags: ['Tenants'],
@@ -54,31 +62,32 @@ const tenants: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     }
   })
 
-  // Listar todos os tenants (Action apenas para SuperAdmin)
-  fastify.get('/', async (request, reply) => {
-    const tenants = await fastify.prisma.tenant.findMany({
-      orderBy: { createdAt: 'desc' }
+  // Retornar dados do tenant do usuário logado (sem expor outros tenants)
+  fastify.get('/', {
+    onRequest: [fastify.requireAuth]
+  }, async (request, reply) => {
+    const { tenantId } = request.user as any
+    const tenant = await fastify.prisma.tenant.findUnique({
+      where: { id: tenantId }
     })
-    return tenants
+    if (!tenant) {
+      return reply.code(404).send({ error: 'Not Found', message: 'Tenant não encontrado.' })
+    }
+    return {
+      id: tenant.id,
+      name: tenant.name,
+      cnpj: tenant.cnpj,
+      createdAt: tenant.createdAt,
+      updatedAt: tenant.updatedAt
+    }
   })
 
   // Patch Settings (LLM, SMTP)
   fastify.patch('/settings', {
-    onRequest: [async (request, reply) => {
-      try {
-        await request.jwtVerify()
-      } catch (err) {
-        reply.send(err)
-      }
-    }]
+    onRequest: [fastify.requireAuth, fastify.requireAdmin]
   }, async (request, reply) => {
     const user = request.user as any
     const payload = request.body as any
-    
-    // Admin Only
-    if (user.role !== 'ADMIN') {
-      return reply.code(403).send({ error: "Forbidden", message: "Apenas administradores podem alterar configurações." })
-    }
 
     const { openaiKey, anthropicKey, geminiKey, smtpHost, smtpPort, smtpUser, smtpPass, smtpFrom } = payload
     
@@ -99,21 +108,30 @@ const tenants: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     return reply.send({ message: "Configurações atualizadas com sucesso." })
   })
 
-  // Get Current Tenant Settings
+  // Get Current Tenant Settings (secrets mascarados)
   fastify.get('/settings', {
-    onRequest: [async (request, reply) => {
-      try {
-        await request.jwtVerify()
-      } catch (err) {
-        reply.send(err)
-      }
-    }]
+    onRequest: [fastify.requireAuth]
   }, async (request, reply) => {
     const user = request.user as any
     const tenant = await fastify.prisma.tenant.findUnique({
       where: { id: user.tenantId }
     })
-    return tenant
+    if (!tenant) {
+      return reply.code(404).send({ error: 'Not Found' })
+    }
+    return {
+      id: tenant.id,
+      name: tenant.name,
+      cnpj: tenant.cnpj,
+      smtpHost: tenant.smtpHost,
+      smtpPort: tenant.smtpPort,
+      smtpUser: tenant.smtpUser,
+      smtpPass: maskSecret(tenant.smtpPass),
+      smtpFrom: tenant.smtpFrom,
+      openaiKey: maskSecret(tenant.openaiKey),
+      anthropicKey: maskSecret(tenant.anthropicKey),
+      geminiKey: maskSecret(tenant.geminiKey),
+    }
   })
 }
 
