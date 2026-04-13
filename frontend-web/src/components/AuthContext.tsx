@@ -18,7 +18,7 @@ interface AuthContextType {
   loading: boolean
   login: (email: string, password?: string) => Promise<void>
   verifyToken: (token: string) => Promise<void>
-  logout: () => void
+  logout: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -42,6 +42,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (err) {
       console.error('Failed to fetch user:', err)
       localStorage.removeItem('token')
+      localStorage.removeItem('refreshToken')
       setUser(null)
     } finally {
       setLoading(false)
@@ -56,6 +57,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const data = await HttpClient.post('/auth/login', { email, password })
       localStorage.setItem('token', data.token)
+      if (data.refreshToken) {
+        localStorage.setItem('refreshToken', data.refreshToken)
+      }
       setUser(data.user)
       toast.success('Login realizado com sucesso!')
       
@@ -76,8 +80,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Retido apenas por compatibilidade estrutural caso precise usar cookies de recuperar senha.
   }
 
-  const logout = () => {
+  const logout = async () => {
+    const refreshToken = localStorage.getItem('refreshToken')
+    // Invalidar refresh token no servidor
+    try {
+      if (refreshToken) {
+        await HttpClient.post('/auth/logout', { refreshToken })
+      }
+    } catch {
+      // Mesmo se falhar, limpa local
+    }
     localStorage.removeItem('token')
+    localStorage.removeItem('refreshToken')
     setUser(null)
     toast.message('Você saiu da plataforma.')
     router.push('/auth/login')

@@ -100,11 +100,11 @@ const employees: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     const { id } = request.params as { id: string }
     const { tenantId } = request.user as any
 
-    const employee = await fastify.prisma.employee.findUnique({
-      where: { id }
+    const employee = await fastify.prisma.employee.findFirst({
+      where: { id, tenantId }
     })
 
-    if (!employee || employee.tenantId !== tenantId) {
+    if (!employee) {
       return reply.code(404).send({ error: 'Not Found', message: 'Funcionário não encontrado.' })
     }
 
@@ -146,12 +146,12 @@ const employees: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     const { adjustment, reason } = request.body as { adjustment: number; reason: string }
     const { tenantId, userId } = request.user as any
 
-    // 1. Verificar funcionário e tenant
-    const employee = await fastify.prisma.employee.findUnique({
-      where: { id }
+    // 1. Verificar funcionário e tenant (isolamento garantido na query)
+    const employee = await fastify.prisma.employee.findFirst({
+      where: { id, tenantId }
     })
 
-    if (!employee || employee.tenantId !== tenantId) {
+    if (!employee) {
       return reply.code(404).send({ error: 'Not Found', message: 'Funcionário não encontrado neste Tenant.' })
     }
 

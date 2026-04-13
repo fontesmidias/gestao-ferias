@@ -5,7 +5,7 @@ import { differenceInDays, parseISO } from 'date-fns'
 const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   // Criar solicitação de férias (Story 3.2)
   fastify.post('/', {
-    onRequest: [fastify.authenticate],
+    onRequest: [fastify.requireAuth],
     schema: {
       body: {
         type: 'object',
@@ -25,12 +25,12 @@ const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     const end = parseISO(endDate)
     const days = differenceInDays(end, start) + 1
 
-    // 1. Buscar funcionário e calcular saldo atual
-    const employee = await fastify.prisma.employee.findUnique({
-      where: { id: employeeId }
+    // 1. Buscar funcionário e calcular saldo atual (com isolamento de tenant)
+    const employee = await fastify.prisma.employee.findFirst({
+      where: { id: employeeId, tenantId }
     })
 
-    if (!employee || employee.tenantId !== tenantId) {
+    if (!employee) {
       return reply.code(404).send({ error: 'Not Found', message: 'Funcionário não encontrado.' })
     }
 
@@ -65,7 +65,7 @@ const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
 
   // Listar solicitações do Tenant
   fastify.get('/', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.requireAuth]
   }, async (request) => {
     const { tenantId } = request.user as any
     return await fastify.prisma.vacationRequest.findMany({
@@ -77,14 +77,10 @@ const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
 
   // Bulk Status Update (Ação em Massa)
   fastify.patch('/bulk', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.requireAuth, fastify.requireAdmin]
   }, async (request, reply) => {
-    const { tenantId, role } = request.user as any
+    const { tenantId } = request.user as any
     const { requestIds, status, dispatchNote } = request.body as any
-
-    if (role !== 'ADMIN') {
-       return reply.code(403).send({ error: 'Forbidden', message: 'Apenas admins.' })
-    }
 
     if (!Array.isArray(requestIds) || !status) {
        return reply.code(400).send({ error: 'Bad Request', message: 'ids e status são obrigatórios.' })
@@ -102,21 +98,17 @@ const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
 
   // Edit / Approve Single Request
   fastify.patch('/:id', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.requireAuth, fastify.requireAdmin]
   }, async (request, reply) => {
-    const { tenantId, role } = request.user as any
+    const { tenantId } = request.user as any
     const { id } = request.params as any
     const { status, dispatchNote, startDate, endDate } = request.body as any
 
-    if (role !== 'ADMIN') {
-       return reply.code(403).send({ error: 'Forbidden', message: 'Apenas admins.' })
-    }
-
-    const existing = await fastify.prisma.vacationRequest.findUnique({ where: { id, tenantId } })
+    const existing = await fastify.prisma.vacationRequest.findFirst({ where: { id, tenantId } })
     if (!existing) return reply.code(404).send({ error: 'Not Found' })
 
     const updateData: any = { status, dispatchNote: dispatchNote !== undefined ? dispatchNote : undefined }
-    
+
     // Admin is forcibly editing dates
     if (startDate && endDate) {
       updateData.originalStartDate = existing.originalStartDate || existing.startDate
@@ -126,8 +118,9 @@ const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       updateData.days = differenceInDays(updateData.endDate, updateData.startDate) + 1
     }
 
+    // Update usando o ID verificado — tenant isolation garantida pelo findFirst acima
     const updated = await fastify.prisma.vacationRequest.update({
-      where: { id },
+      where: { id: existing.id },
       data: updateData
     })
 
