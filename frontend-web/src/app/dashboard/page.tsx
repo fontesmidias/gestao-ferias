@@ -10,6 +10,7 @@ import {
   LayoutDashboard, Users, Clock, AlertCircle, TrendingUp, CheckSquare, BrainCircuit 
 } from 'lucide-react'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
+import { InfoTooltip } from '@/components/InfoTooltip'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
@@ -55,7 +56,7 @@ export default function DashboardPage() {
           </div>
           <div className="flex bg-slate-900/50 border border-white/5 p-2 rounded-xl">
              <button className="px-4 py-1 flex items-center gap-2 bg-primary text-white font-bold rounded-lg text-sm shadow-lg shadow-primary/20">
-               <TrendingUp className="w-4 h-4"/> 1T 2026
+               <TrendingUp className="w-4 h-4"/> 1T 2026 <InfoTooltip text="Período selecionado para análise. 1T = primeiro trimestre de 2026." />
              </button>
           </div>
         </div>
@@ -78,11 +79,11 @@ export default function DashboardPage() {
                   <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
                     <Users className="w-24 h-24 text-primary" />
                   </div>
-                  <h3 className="text-slate-400 font-bold uppercase text-xs tracking-wider mb-2 z-10 relative">Força de Trabalho</h3>
+                  <h3 className="text-slate-400 font-bold uppercase text-xs tracking-wider mb-2 z-10 relative">Força de Trabalho <InfoTooltip text="Total de colaboradores cadastrados na empresa, incluindo todos os status (ativos, férias, afastados)." /></h3>
                   <p className="text-4xl font-black text-white z-10 relative">{data?.kpis.totalEmployees || 0}</p>
                   <div className="mt-4 flex gap-3 text-xs font-medium z-10 relative">
-                    <span className="text-emerald-400 flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-500"/> {data?.kpis.composition?.['ATIVO'] || 0} Ativos</span>
-                    <span className="text-amber-400 flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-amber-500"/> {data?.kpis.composition?.['AFASTADO'] || 0} Afastados</span>
+                    <span className="text-emerald-400 flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-500"/> {data?.kpis.composition?.['ATIVO'] || 0} Ativos <InfoTooltip text="Colaboradores em atividade regular nos seus postos de trabalho." /></span>
+                    <span className="text-amber-400 flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-amber-500"/> {data?.kpis.composition?.['AFASTADO'] || 0} Afastados <InfoTooltip text="Colaboradores temporariamente ausentes por licença médica, maternidade ou outro motivo legal." /></span>
                   </div>
                 </div>
 
@@ -90,7 +91,7 @@ export default function DashboardPage() {
                   <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
                     <LayoutDashboard className="w-24 h-24 text-sky-500" />
                   </div>
-                  <h3 className="text-slate-400 font-bold uppercase text-xs tracking-wider mb-2 z-10 relative">Em Férias Atualmente</h3>
+                  <h3 className="text-slate-400 font-bold uppercase text-xs tracking-wider mb-2 z-10 relative">Em Férias Atualmente <InfoTooltip text="Quantidade de colaboradores que estão de férias neste exato momento. Esses profissionais não estão nos seus postos." /></h3>
                   <p className="text-4xl font-black text-white z-10 relative">{data?.kpis.composition?.['FERIAS'] || 0}</p>
                   <p className="mt-4 text-xs text-slate-500 z-10 relative">Colaboradores ausentes da Lotação em D0</p>
                 </div>
@@ -100,7 +101,7 @@ export default function DashboardPage() {
                     <Clock className="w-24 h-24 text-rose-500" />
                   </div>
                   <h3 className="text-rose-400 font-bold uppercase text-xs tracking-wider mb-2 z-10 relative flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4"/> Fila do RH
+                    <AlertCircle className="w-4 h-4"/> Fila do RH <InfoTooltip text="Solicitações de férias que aguardam decisão do RH. Número alto indica gargalo operacional." />
                   </h3>
                   <p className="text-4xl font-black text-white z-10 relative">{data?.kpis.pendingApprovals || 0}</p>
                   <p className="mt-4 text-xs text-rose-500/70 z-10 relative">Aprovações aguardando seu despacho urgente.</p>
@@ -111,7 +112,7 @@ export default function DashboardPage() {
                     <BrainCircuit className="w-24 h-24 text-indigo-400" />
                   </div>
                   <h3 className="text-indigo-400 font-bold uppercase text-xs tracking-wider mb-2 z-10 relative flex items-center gap-2">
-                     Oráculo AI
+                     Oráculo AI <InfoTooltip text="Módulo de inteligência artificial que analisa padrões de férias e sugere ações preventivas." />
                   </h3>
                   <p className="text-xl font-bold text-white z-10 relative mt-2 leading-tight">Insight Disponível</p>
                   <p className="mt-3 text-xs text-indigo-300 z-10 relative">Analise padrões de concessão de férias via IA Gerativa.</p>
@@ -123,7 +124,7 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-between mb-8">
                   <div>
                     <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                      <TrendingUp className="w-5 h-5 text-primary"/> Tendência Preditiva de Saídas
+                      <TrendingUp className="w-5 h-5 text-primary"/> Tendência Preditiva de Saídas <InfoTooltip text="Gráfico que mostra quantos colaboradores terão férias aprovadas nos próximos meses. Ajuda a planejar cobertura." />
                     </h3>
                     <p className="text-sm text-slate-400">Total de férias agendadas (aprovadas) por mês.</p>
                   </div>
@@ -183,7 +184,7 @@ export default function DashboardPage() {
               <div className="md:col-span-4 glass-card rounded-2xl border border-white/5 flex flex-col h-full bg-slate-900/30">
                  <div className="p-6 border-b border-white/5">
                     <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                      <CheckSquare className="w-5 h-5 text-emerald-500"/> Logs Recentes
+                      <CheckSquare className="w-5 h-5 text-emerald-500"/> Logs Recentes <InfoTooltip text="Registro das últimas ações administrativas realizadas pelo RH: aprovações, ajustes e despachos." />
                     </h3>
                  </div>
                  <div className="flex-1 p-6 overflow-y-auto">

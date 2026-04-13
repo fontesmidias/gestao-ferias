@@ -3,6 +3,7 @@
 import React, { useState } from 'react'
 import { Calendar, AlertCircle, Plane, CheckCircle2, Navigation, LogOut } from 'lucide-react'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
+import { InfoTooltip } from '@/components/InfoTooltip'
 import { useAuth } from '@/components/AuthContext'
 
 export default function EmployeeDashboard() {
@@ -62,7 +63,7 @@ export default function EmployeeDashboard() {
             <div className="absolute -bottom-12 -left-12 w-40 h-40 bg-purple-500/20 blur-3xl rounded-full"></div>
             
             <div className="flex flex-col items-center justify-center relative z-10">
-              <span className="text-sm font-medium text-indigo-300 tracking-wider uppercase mb-2">Dias Disponíveis</span>
+              <span className="text-sm font-medium text-indigo-300 tracking-wider uppercase mb-2">Dias Disponíveis <InfoTooltip text="Total de dias de férias que você tem direito e ainda não utilizou. Calculado com base na sua data de admissão conforme a CLT." /></span>
               <div className="flex items-baseline gap-2">
                 <span className="text-7xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-slate-400">
                   {employee.balance.available}
@@ -75,7 +76,7 @@ export default function EmployeeDashboard() {
               <div className="flex items-center gap-3">
                 <Calendar className="w-5 h-5 text-rose-400" />
                 <div className="text-left">
-                  <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Vence em</p>
+                  <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Vence em <InfoTooltip text="Data limite para usufruir das férias. Após esta data, a empresa pode ser multada e você perde o período concessivo." /></p>
                   <p className="text-sm font-bold text-rose-300">{new Date(employee.balance.nextExpiration).toLocaleDateString('pt-BR')}</p>
                 </div>
               </div>
@@ -90,15 +91,15 @@ export default function EmployeeDashboard() {
                 className="w-full bg-white text-slate-950 font-black py-4 rounded-2xl flex items-center justify-center gap-3 active:scale-[0.98] transition-transform shadow-xl shadow-white/10"
               >
                 <Plane className="w-6 h-6" />
-                Solicitar Férias Agora
+                Solicitar Férias Agora <InfoTooltip text="Abre o formulário para solicitar suas férias. A solicitação será enviada ao RH para aprovação." />
               </button>
               <button className="w-full bg-slate-900 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-3 border border-white/5 active:scale-[0.98] transition-transform">
-                Ver Histórico de Recibos
+                Ver Histórico de Recibos <InfoTooltip text="Consulte todos os seus recibos de férias anteriores, datas e valores recebidos." />
               </button>
             </div>
           ) : (
             <div className="bg-slate-900 rounded-[2rem] p-6 border border-white/5 shadow-2xl animate-in slide-in-from-bottom-8 fade-in duration-300">
-              <h3 className="font-bold text-lg mb-4 text-white">Quantos dias deseja tirar?</h3>
+              <h3 className="font-bold text-lg mb-4 text-white">Quantos dias deseja tirar? <InfoTooltip text="Escolha a duração das férias. Pela CLT, o mínimo é 10 dias corridos. Pode dividir em até 3 períodos." /></h3>
               
               <div className="flex bg-slate-950 p-2 rounded-xl mb-6">
                  {[10, 15, 20, 30].map(d => (
@@ -114,7 +115,7 @@ export default function EmployeeDashboard() {
 
               <div className="space-y-4 mb-8 text-left">
                 <div>
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider pl-4 mb-2 block">Data de Início (A partir de)</label>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider pl-4 mb-2 block">Data de Início (A partir de) <InfoTooltip text="Primeiro dia das suas férias. Não pode iniciar em sexta-feira, sábado, domingo ou véspera de feriado (CLT Art. 134 §3)." /></label>
                   <input type="date" className="w-full bg-slate-950 border border-white/5 rounded-xl px-4 py-4 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-mono" />
                 </div>
               </div>
@@ -128,7 +129,7 @@ export default function EmployeeDashboard() {
                   className="flex-1 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 active:scale-[0.98] transition-transform"
                 >
                   <CheckCircle2 className="w-5 h-5" />
-                  Enviar RH
+                  Enviar RH <InfoTooltip text="Envia a solicitação para o RH avaliar. Você será notificado quando houver uma decisão." />
                 </button>
               </div>
             </div>

@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { Check, X, Clock, Filter, Search, RotateCcw, Edit3, Trash2, ShieldAlert } from 'lucide-react'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
+import { InfoTooltip } from '@/components/InfoTooltip'
 import { HttpClient } from '@/lib/api-client'
 import { format, parseISO } from 'date-fns'
 import { toast } from 'sonner'
@@ -128,8 +129,9 @@ export default function ApprovalsPage() {
             <Clock className="w-8 h-8 text-amber-500" />
             Caixa de Aprovações
           </h2>
-          <p className="text-slate-400 mt-2">
+          <p className="text-slate-400 mt-2 flex items-center gap-1">
             Valide, Devolva ou Edite as solicitações de férias (Ações em Massa suportadas).
+            <InfoTooltip text="Aqui você gerencia todas as solicitações de férias dos colaboradores. Pode aprovar, reprovar, devolver para correção ou editar datas." />
           </p>
         </div>
 
@@ -154,6 +156,11 @@ export default function ApprovalsPage() {
               </div>
             </div>
 
+            <div className="px-6 py-2 bg-indigo-500/5 border-b border-white/5 flex items-center gap-2 text-xs text-slate-500">
+              <InfoTooltip text="Dica: Selecione múltiplas solicitações com as caixas de seleção para realizar ações em lote (aprovar, reprovar ou devolver várias de uma vez)." />
+              <span>Dica: Use as caixas de seleção para ações em lote.</span>
+            </div>
+
             {loading ? (
               <div className="p-12 text-center text-slate-500">Recuperando registros...</div>
             ) : filtered.length === 0 ? (
@@ -174,9 +181,9 @@ export default function ApprovalsPage() {
                           className="rounded border-slate-700 bg-slate-800 text-primary focus:ring-primary/50 cursor-pointer"
                         />
                       </th>
-                      <th className="px-6 py-4 font-medium">Colaborador</th>
-                      <th className="px-6 py-4 font-medium">Situação / Datas</th>
-                      <th className="px-6 py-4 font-medium text-right">Ações Abertas</th>
+                      <th className="px-6 py-4 font-medium"><span className="inline-flex items-center gap-1">Colaborador <InfoTooltip text="Nome do colaborador e status atual da solicitação (Pendente, Aprovado, Reprovado, Devolvido)." /></span></th>
+                      <th className="px-6 py-4 font-medium"><span className="inline-flex items-center gap-1">Situação / Datas <InfoTooltip text="Período solicitado para as férias e total de dias. Se as datas foram editadas, mostra o pedido original." /></span></th>
+                      <th className="px-6 py-4 font-medium text-right"><span className="inline-flex items-center gap-1">Ações Abertas <InfoTooltip text="Botões de ação disponíveis para cada solicitação." /></span></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
@@ -252,8 +259,9 @@ export default function ApprovalsPage() {
         {/* Bulk Action Toolbar */}
         {selectedIds.length > 0 && (
           <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-800 border border-slate-700 shadow-2xl shadow-black rounded-full px-6 py-3 flex items-center gap-4 z-40 animate-in slide-in-from-bottom-5 fade-in">
-            <span className="text-white font-bold text-sm bg-slate-900 px-3 py-1 rounded-full">
+            <span className="text-white font-bold text-sm bg-slate-900 px-3 py-1 rounded-full inline-flex items-center gap-1">
               {selectedIds.length} selecionados
+              <InfoTooltip text="Solicitações marcadas para ação em lote." />
             </span>
             <div className="h-6 w-px bg-slate-700" />
             <button onClick={() => openModal('BULK', 'RETURN')} className="flex items-center gap-2 text-sm text-indigo-400 hover:text-indigo-300 font-medium">
@@ -300,18 +308,18 @@ export default function ApprovalsPage() {
               {modalMode === 'EDIT' && actionTarget !== 'BULK' && (
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Início Real</label>
+                    <label className="text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">Início Real <InfoTooltip text="Nova data de início das férias definida pelo RH. A data original do pedido do colaborador será preservada como referência." /></label>
                     <input type="date" value={editDates.startDate} onChange={e => setEditDates({...editDates, startDate: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-sm text-white outline-none" />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Fim Real</label>
+                    <label className="text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">Fim Real <InfoTooltip text="Nova data de término das férias definida pelo RH." /></label>
                     <input type="date" value={editDates.endDate} onChange={e => setEditDates({...editDates, endDate: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-sm text-white outline-none" />
                   </div>
                 </div>
               )}
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Despacho / Motivo</label>
+                <label className="text-xs font-bold text-slate-500 uppercase mb-2 flex items-center gap-1">Despacho / Motivo <InfoTooltip text="Justificativa do RH para a decisão tomada. Este texto será visível para o colaborador. Obrigatório para reprovações e devoluções." /></label>
                 <textarea 
                   value={dispatchNote}
                   onChange={(e) => setDispatchNote(e.target.value)}
