@@ -7,6 +7,7 @@ import {
   UserMinus, CalendarHeart, Briefcase, MapPin, Building2, LayoutGrid, Clock
 } from 'lucide-react'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
+import { InfoTooltip } from '@/components/InfoTooltip'
 import { format, parseISO } from 'date-fns'
 
 interface Employee {
@@ -136,21 +137,21 @@ export default function EmployeesPage() {
             <div className="glass-card px-5 py-3 rounded-xl flex items-center gap-4">
               <div className="p-2 bg-emerald-500/20 rounded-lg"><UserCheck className="w-5 h-5 text-emerald-400"/></div>
               <div>
-                <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Ativos</p>
+                <p className="text-xs text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">Ativos <InfoTooltip text="Colaboradores trabalhando normalmente nos seus postos." /></p>
                 <p className="text-xl font-bold text-white">{totalActives}</p>
               </div>
             </div>
             <div className="glass-card px-5 py-3 rounded-xl flex items-center gap-4">
               <div className="p-2 bg-sky-500/20 rounded-lg"><CalendarHeart className="w-5 h-5 text-sky-400"/></div>
               <div>
-                <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Em Férias</p>
+                <p className="text-xs text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">Em Férias <InfoTooltip text="Colaboradores atualmente em período de férias aprovadas." /></p>
                 <p className="text-xl font-bold text-white">{totalOnVacation}</p>
               </div>
             </div>
             <div className="glass-card px-5 py-3 rounded-xl flex items-center gap-4">
               <div className="p-2 bg-amber-500/20 rounded-lg"><UserMinus className="w-5 h-5 text-amber-400"/></div>
               <div>
-                <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Afastados</p>
+                <p className="text-xs text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">Afastados <InfoTooltip text="Colaboradores em licença médica, maternidade ou afastamento legal." /></p>
                 <p className="text-xl font-bold text-white">{totalLeaves}</p>
               </div>
             </div>
@@ -162,7 +163,7 @@ export default function EmployeesPage() {
             {/* Filter Toolbar */}
             <div className="p-4 border-b border-white/5 bg-slate-900/30 flex flex-wrap gap-4 items-end">
               <div className="flex-1 min-w-[200px]">
-                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Empresa / Filial</label>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1">Empresa / Filial <InfoTooltip text="Filtre por empresa ou filial à qual o colaborador está vinculado contratualmente." /></label>
                 <select 
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary/50"
                   value={filterBranch} onChange={e => setFilterBranch(e.target.value)}
@@ -173,7 +174,7 @@ export default function EmployeesPage() {
               </div>
               
               <div className="flex-1 min-w-[200px]">
-                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Posto de Serviço</label>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1">Posto de Serviço <InfoTooltip text="Local físico onde o colaborador exerce suas funções (ex: INEP, Tribunal)." /></label>
                 <select 
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary/50"
                   value={filterWorkplace} onChange={e => setFilterWorkplace(e.target.value)}
@@ -184,7 +185,7 @@ export default function EmployeesPage() {
               </div>
 
               <div className="flex-1 min-w-[150px]">
-                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Status Base</label>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1">Status Base <InfoTooltip text="Situação atual do colaborador: Ativo (trabalhando), Férias, Afastado ou Inativo (desligado)." /></label>
                 <select 
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-primary font-bold focus:outline-none focus:ring-1 focus:ring-primary/50"
                   value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
@@ -222,22 +223,22 @@ export default function EmployeesPage() {
               <table className="w-full text-left text-sm whitespace-nowrap">
                 <thead className="sticky top-0 z-10">
                   <tr className="bg-slate-900 border-b border-white/5 text-slate-400 uppercase text-[10px] tracking-wider font-bold shadow-sm">
-                    <th className="px-6 py-3 w-16">Matrícula</th>
-                    <th className="px-6 py-3">Colaborador</th>
-                    <th className="px-6 py-3">Status</th>
+                    <th className="px-6 py-3 w-16"><div className="flex items-center gap-1">Matrícula <InfoTooltip text="Número de registro interno do colaborador na empresa." /></div></th>
+                    <th className="px-6 py-3"><div className="flex items-center gap-1">Colaborador <InfoTooltip text="Nome completo do colaborador." /></div></th>
+                    <th className="px-6 py-3"><div className="flex items-center gap-1">Status <InfoTooltip text="Situação atual: verde=ativo, azul=férias, amarelo=afastado." /></div></th>
                     <th className="px-6 py-3">
-                      <div className="flex items-center gap-1.5"><Building2 className="w-3 h-3"/> Empresa</div>
+                      <div className="flex items-center gap-1.5"><Building2 className="w-3 h-3"/> Empresa <InfoTooltip text="Empresa ou filial onde o colaborador é registrado." /></div>
                     </th>
                     <th className="px-6 py-3">
-                      <div className="flex items-center gap-1.5"><MapPin className="w-3 h-3"/> Lotação</div>
+                      <div className="flex items-center gap-1.5"><MapPin className="w-3 h-3"/> Lotação <InfoTooltip text="Posto de serviço/local de trabalho atual do colaborador." /></div>
                     </th>
                     <th className="px-6 py-3">
-                      <div className="flex items-center gap-1.5"><Briefcase className="w-3 h-3"/> Cargo</div>
+                      <div className="flex items-center gap-1.5"><Briefcase className="w-3 h-3"/> Cargo <InfoTooltip text="Função exercida pelo colaborador no posto de trabalho." /></div>
                     </th>
                     <th className="px-6 py-3">
-                      <div className="flex items-center gap-1.5"><Clock className="w-3 h-3"/> Escala</div>
+                      <div className="flex items-center gap-1.5"><Clock className="w-3 h-3"/> Escala <InfoTooltip text="Jornada de trabalho: 8h (comercial), 12x36, 6x1, etc." /></div>
                     </th>
-                    <th className="px-6 py-3 text-right">Admissão</th>
+                    <th className="px-6 py-3 text-right"><div className="flex items-center justify-end gap-1">Admissão <InfoTooltip text="Data em que o colaborador foi contratado pela empresa." /></div></th>
                     <th className="px-4 py-3 text-center"></th>
                   </tr>
                 </thead>

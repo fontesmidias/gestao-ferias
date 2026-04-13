@@ -13,6 +13,7 @@ import {
   Code
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { InfoTooltip } from '@/components/InfoTooltip'
 
 const mockWebhooks = [
   { id: '1', url: 'https://hooks.zapier.com/123/456', events: ['VACATION_SIGNED'], active: true, secret: 'sk_test_51...abc' },
@@ -63,15 +64,15 @@ export default function SettingsPage() {
           <div className="space-y-2">
             <button className="w-full text-left px-4 py-3 rounded-xl bg-primary/10 text-primary font-bold flex items-center gap-3 transition-all">
               <WebhookIcon className="w-5 h-5" />
-              Webhooks & API
+              Webhooks & API <InfoTooltip text="Configure integrações com sistemas externos via webhooks HTTP." />
             </button>
             <button className="w-full text-left px-4 py-3 rounded-xl hover:bg-white/5 text-slate-400 flex items-center gap-3 transition-all">
               <ShieldCheck className="w-5 h-5" />
-              Segurança
+              Segurança <InfoTooltip text="Gerencie políticas de senha, autenticação e controle de acesso." />
             </button>
             <button className="w-full text-left px-4 py-3 rounded-xl hover:bg-white/5 text-slate-400 flex items-center gap-3 transition-all">
               <Zap className="w-5 h-5" />
-              Automações
+              Automações <InfoTooltip text="Configure ações automáticas como envio de e-mails e alertas baseados em eventos." />
             </button>
           </div>
 
@@ -86,7 +87,7 @@ export default function SettingsPage() {
               
               <form onSubmit={addWebhook} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Endpoint URL</label>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Endpoint URL <InfoTooltip text="URL que receberá notificações automáticas quando eventos de férias ocorrerem. Deve ser HTTPS e acessível publicamente (ex: Zapier, n8n, Make)." /></label>
                   <input 
                     type="url" 
                     placeholder="https://sua-api.com/webhook" 
@@ -97,9 +98,9 @@ export default function SettingsPage() {
                 </div>
                 
                 <div className="flex flex-wrap gap-4 mb-4">
-                  <EventCheckbox label="Assinatura de Férias" checked />
-                  <EventCheckbox label="Novo Colaborador" />
-                  <EventCheckbox label="Ajuste de Saldo" />
+                  <span className="flex items-center gap-1"><EventCheckbox label="Assinatura de Férias" checked /> <InfoTooltip text="Dispara webhook quando um documento de férias é assinado digitalmente pelo colaborador." /></span>
+                  <span className="flex items-center gap-1"><EventCheckbox label="Novo Colaborador" /> <InfoTooltip text="Dispara webhook quando um novo colaborador é cadastrado no sistema." /></span>
+                  <span className="flex items-center gap-1"><EventCheckbox label="Ajuste de Saldo" /> <InfoTooltip text="Dispara webhook quando o RH faz um ajuste manual no saldo de férias de um colaborador." /></span>
                 </div>
 
                 <button 
@@ -107,7 +108,7 @@ export default function SettingsPage() {
                   className="bg-primary hover:bg-primary/90 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-primary/20"
                 >
                   <Plus className="w-5 h-5" />
-                  Configurar Webhook
+                  Configurar Webhook <InfoTooltip text="Ativa a integração e começa a enviar notificações para a URL configurada." />
                 </button>
               </form>
             </div>
@@ -135,7 +136,7 @@ export default function SettingsPage() {
 
                   <div className="bg-slate-950/50 rounded-xl p-4 flex items-center justify-between border border-white/5">
                     <div className="flex-1 mr-4">
-                      <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Webhook Secret (HMAC-SHA256)</p>
+                      <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Webhook Secret (HMAC-SHA256) <InfoTooltip text="Chave secreta usada para verificar autenticidade das notificações. Use HMAC-SHA256 para validar que a requisição veio do nosso sistema." /></p>
                       <code className="text-xs text-slate-300 font-mono break-all">{hook.secret}</code>
                     </div>
                     <button 

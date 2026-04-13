@@ -3,6 +3,7 @@
 import React from 'react'
 import { BrainCircuit, TrendingDown, Users, ShieldAlert, Sparkles, ArrowRight } from 'lucide-react'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
+import { InfoTooltip } from '@/components/InfoTooltip'
 
 const aiRecommendations = [
   { id: 1, name: 'Diego Ferreira', risk: 'HIGH', multaSaving: 'R$ 15.420,00', deadline: 'Vence em 15 dias', action: 'Agendar Férias Urgente' },
@@ -36,7 +37,7 @@ export default function AIPredictDashboard() {
             <div className="bg-slate-900/50 backdrop-blur-md rounded-2xl p-6 border border-white/5">
               <div className="flex items-center gap-3 text-rose-400 mb-2">
                 <ShieldAlert className="w-5 h-5" />
-                <span className="font-bold text-sm tracking-widest uppercase">Risco de Passivo (Q3)</span>
+                <span className="font-bold text-sm tracking-widest uppercase">Risco de Passivo (Q3)</span> <InfoTooltip text="Estimativa de multas pela CLT Art. 137 caso as férias vencidas não sejam concedidas a tempo. Quanto maior, mais urgente." />
               </div>
               <p className="text-4xl font-black text-white">R$ 48.5k</p>
               <p className="text-xs text-slate-400 mt-2">Multas estimadas CLT Art. 137 se ignorado.</p>
@@ -45,7 +46,7 @@ export default function AIPredictDashboard() {
             <div className="bg-slate-900/50 backdrop-blur-md rounded-2xl p-6 border border-indigo-500/20 shadow-[0_0_30px_rgba(99,102,241,0.1)]">
               <div className="flex items-center gap-3 text-emerald-400 mb-2">
                 <TrendingDown className="w-5 h-5" />
-                <span className="font-bold text-sm tracking-widest uppercase">Savings Sugerido</span>
+                <span className="font-bold text-sm tracking-widest uppercase">Savings Sugerido</span> <InfoTooltip text="Economia estimada ao seguir as recomendações da IA para agendamento de férias. Evita multas e otimiza cobertura." />
               </div>
               <p className="text-4xl font-black text-emerald-400">R$ 28.8k</p>
               <p className="text-xs text-slate-400 mt-2">Seguindo as 3 recomendações imediatas da AI.</p>
@@ -54,7 +55,7 @@ export default function AIPredictDashboard() {
             <div className="bg-slate-900/50 backdrop-blur-md rounded-2xl p-6 border border-white/5">
               <div className="flex items-center gap-3 text-sky-400 mb-2">
                 <Users className="w-5 h-5" />
-                <span className="font-bold text-sm tracking-widest uppercase">Gargalos Críticos</span>
+                <span className="font-bold text-sm tracking-widest uppercase">Gargalos Críticos</span> <InfoTooltip text="Colaboradores com dois períodos de férias acumulados que vencem em breve. Prioridade máxima para agendamento." />
               </div>
               <p className="text-4xl font-black text-white">3 <span className="text-lg font-medium text-slate-500">pessoas</span></p>
               <p className="text-xs text-slate-400 mt-2">Colaboradores com duplo período concessivo iminente.</p>
@@ -68,7 +69,7 @@ export default function AIPredictDashboard() {
               Plano de Ação Estratégico gerado por AI
             </h3>
             <button className="text-sm text-indigo-400 hover:text-indigo-300 font-bold flex items-center gap-1">
-              Exportar Relatório <ArrowRight className="w-4 h-4" />
+              Exportar Relatório <ArrowRight className="w-4 h-4" /> <InfoTooltip text="Gera um PDF com toda a análise da IA, recomendações e projeções de risco para apresentar à diretoria." />
             </button>
           </div>
 
@@ -95,13 +96,13 @@ export default function AIPredictDashboard() {
                 </div>
 
                 <div className="w-full md:w-1/3 text-left md:text-center p-4 bg-slate-900/50 rounded-xl border border-white/5">
-                  <p className="text-xs text-slate-500 uppercase tracking-wider font-bold mb-1">Risco Evitado</p>
+                  <p className="text-xs text-slate-500 uppercase tracking-wider font-bold mb-1">Risco Evitado <InfoTooltip text="Valor da multa que será evitada se esta recomendação for seguida." /></p>
                   <p className="text-2xl font-black text-emerald-400">{rec.multaSaving}</p>
                 </div>
 
                 <div className="w-full md:w-1/3 flex justify-end">
                   <button className="w-full md:w-auto bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-6 py-3 rounded-xl transition-all shadow-lg shadow-indigo-600/20 active:scale-[0.98]">
-                    {rec.action}
+                    {rec.action} <InfoTooltip text="Inicia o processo de agendamento de férias para este colaborador conforme recomendação da IA." />
                   </button>
                 </div>
               </div>

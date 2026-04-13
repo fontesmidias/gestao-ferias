@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { HttpClient } from '@/lib/api-client'
 import { Settings, Save, Server, Building2, KeyRound } from 'lucide-react'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
+import { InfoTooltip } from '@/components/InfoTooltip'
 import { toast } from 'sonner'
 import { useAuth } from '@/components/AuthContext'
 
@@ -108,7 +109,7 @@ export default function SettingsPage() {
               <div className="space-y-6">
                 <div>
                   <label htmlFor="openaiKey" className="block text-sm font-medium text-slate-300 mb-2">
-                    OpenAI API Key (GPT-4o)
+                    OpenAI API Key (GPT-4o) <InfoTooltip text="Chave de acesso à API da OpenAI. Necessária para ativar o módulo de IA com o modelo GPT-4o. Obtenha em platform.openai.com." />
                   </label>
                   <div className="relative">
                     <input
@@ -131,7 +132,7 @@ export default function SettingsPage() {
                 </div>
                 <div>
                   <label htmlFor="anthropicKey" className="block text-sm font-medium text-slate-300 mb-2">
-                    Anthropic API Key (Claude 3.5)
+                    Anthropic API Key (Claude 3.5) <InfoTooltip text="Chave alternativa para usar o modelo Claude da Anthropic. Configure se preferir este provedor de IA." />
                   </label>
                   <div className="relative">
                     <input
@@ -154,7 +155,7 @@ export default function SettingsPage() {
                 </div>
                 <div>
                   <label htmlFor="geminiKey" className="block text-sm font-medium text-slate-300 mb-2">
-                    Google Gemini API Key (Gemini 1.5 Pro)
+                    Google Gemini API Key (Gemini 1.5 Pro) <InfoTooltip text="Chave da API Google Gemini para análises multimodais. Alternativa gratuita aos demais provedores." />
                   </label>
                   <div className="relative">
                     <input
@@ -192,7 +193,7 @@ export default function SettingsPage() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label htmlFor="smtpHost" className="block text-sm font-medium text-slate-300 mb-2">Servidor SMTP</label>
+                  <label htmlFor="smtpHost" className="block text-sm font-medium text-slate-300 mb-2">Servidor SMTP <InfoTooltip text="Endereço do servidor de e-mail da sua empresa (ex: smtp.zoho.com, smtp.gmail.com). Usado para enviar notificações automáticas de férias." /></label>
                   <input
                     id="smtpHost"
                     type="text"
@@ -203,7 +204,7 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div>
-                  <label htmlFor="smtpPort" className="block text-sm font-medium text-slate-300 mb-2">Porta</label>
+                  <label htmlFor="smtpPort" className="block text-sm font-medium text-slate-300 mb-2">Porta <InfoTooltip text="Porta de conexão do servidor de e-mail. Use 465 para SSL ou 587 para TLS. Consulte seu provedor de e-mail." /></label>
                   <input
                     id="smtpPort"
                     type="number"
@@ -214,7 +215,7 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div className="col-span-full">
-                  <label htmlFor="smtpFrom" className="block text-sm font-medium text-slate-300 mb-2">E-mail Remetente (From)</label>
+                  <label htmlFor="smtpFrom" className="block text-sm font-medium text-slate-300 mb-2">E-mail Remetente (From) <InfoTooltip text="Endereço que aparecerá como remetente em todas as notificações automáticas enviadas pelo sistema." /></label>
                   <input
                     id="smtpFrom"
                     type="email"
@@ -225,7 +226,7 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div>
-                  <label htmlFor="smtpUser" className="block text-sm font-medium text-slate-300 mb-2">Usuário SMTP</label>
+                  <label htmlFor="smtpUser" className="block text-sm font-medium text-slate-300 mb-2">Usuário SMTP <InfoTooltip text="Login de autenticação no servidor de e-mail. Geralmente é o próprio endereço de e-mail." /></label>
                   <input
                     id="smtpUser"
                     type="text"
@@ -236,7 +237,7 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div>
-                  <label htmlFor="smtpPass" className="block text-sm font-medium text-slate-300 mb-2">Senha SMTP</label>
+                  <label htmlFor="smtpPass" className="block text-sm font-medium text-slate-300 mb-2">Senha SMTP <InfoTooltip text="Senha de acesso ao servidor de e-mail. Em provedores como Gmail, use uma 'Senha de App' ao invés da senha normal." /></label>
                   <div className="relative">
                     <input
                       id="smtpPass"
@@ -270,7 +271,7 @@ export default function SettingsPage() {
                 ) : (
                   <Save className="w-5 h-5" />
                 )}
-                {saving ? 'Salvando...' : 'Salvar Configurações'}
+                {saving ? 'Salvando...' : 'Salvar Configurações'} <InfoTooltip text="Salva todas as configurações de API e e-mail. As alterações entram em vigor imediatamente." />
               </button>
             </div>
             
