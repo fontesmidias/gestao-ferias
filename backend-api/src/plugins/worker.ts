@@ -4,9 +4,8 @@ import { SanitizationService } from '../modules/employees/sanitization-service'
 import { WhatsAppService } from '../modules/notifications/whatsapp-service'
 import { WebhookService } from '../modules/integrations/webhook-service'
 
-export default fp(async (fastify) => {
-  // Resolve a URI do Redis caso usem REDIS_URL em vez de REDIS_HOST
-  let redisConfig: any = {
+function getRedisConfig() {
+  const config: any = {
     host: process.env.REDIS_HOST || 'localhost',
     port: parseInt(process.env.REDIS_PORT || '6379')
   }
@@ -14,12 +13,33 @@ export default fp(async (fastify) => {
   if (process.env.REDIS_URL) {
     try {
       const url = new URL(process.env.REDIS_URL)
-      redisConfig = {
-        host: url.hostname,
-        port: parseInt(url.port || '6379')
-      }
+      config.host = url.hostname
+      config.port = parseInt(url.port || '6379')
     } catch (e) {}
   }
+
+  return config
+}
+
+export default fp(async (fastify) => {
+  const redisConfig = getRedisConfig()
+
+  // Skip worker setup if Redis is unavailable
+  const net = await import('net')
+  const redisAvailable = await new Promise<boolean>((resolve) => {
+    const socket = net.createConnection({ host: redisConfig.host, port: redisConfig.port })
+    socket.setTimeout(2000)
+    socket.on('connect', () => { socket.destroy(); resolve(true) })
+    socket.on('error', () => { socket.destroy(); resolve(false) })
+    socket.on('timeout', () => { socket.destroy(); resolve(false) })
+  })
+
+  if (!redisAvailable) {
+    fastify.log.warn('[WORKERS] Redis indisponivel — workers de fila desativados.')
+    return
+  }
+
+  fastify.log.info('[WORKERS] Redis disponivel — iniciando workers.')
 
   // Worker para Processamento de Importações (Story 2.1)
   const importWorker = new Worker('import-queue', async (job) => {
