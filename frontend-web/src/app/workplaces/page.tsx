@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { HttpClient } from '@/lib/api-client'
 import { Building2, MapPin, Users, Plus, ChevronDown, ChevronRight, X } from 'lucide-react'
+import { InfoTooltip } from '@/components/InfoTooltip'
 import { toast } from 'sonner'
 
 interface Position {
@@ -154,15 +155,21 @@ export default function WorkplacesPage() {
                 </div>
 
                 <div className="flex items-center gap-6">
-                  <div className="text-right">
+                  <div className="text-right group/stat relative">
                     <div className={`text-lg font-bold ${hasGap ? 'text-rose-400' : 'text-emerald-400'}`}>
                       {allocated}/{required}
                     </div>
-                    <div className="text-xs text-slate-500">alocados/necessários</div>
+                    <div className="text-xs text-slate-500 flex items-center gap-1">
+                      alocados/necessários
+                      <InfoTooltip text="Quantos colaboradores estão trabalhando neste posto vs. quantos são necessários. Vermelho indica que faltam pessoas." />
+                    </div>
                   </div>
                   <div className="text-right">
                     <div className="text-lg font-bold text-slate-300">{wp.positions.length}</div>
-                    <div className="text-xs text-slate-500">posições</div>
+                    <div className="text-xs text-slate-500 flex items-center gap-1">
+                      posições
+                      <InfoTooltip text="Funções diferentes neste posto (ex: Vigilante, Recepcionista). Cada posição pode ter múltiplos colaboradores." />
+                    </div>
                   </div>
                   <button
                     onClick={(e) => { e.stopPropagation(); openEditModal(wp) }}
@@ -239,7 +246,10 @@ export default function WorkplacesPage() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-bold text-slate-400 mb-1">Nome do Posto *</label>
+                <label className="flex items-center gap-1.5 text-sm font-bold text-slate-400 mb-1">
+                  Nome do Posto *
+                  <InfoTooltip text="Nome de identificação do local de trabalho onde os colaboradores são alocados. Ex: INEP - Sede, Tribunal Regional Federal." />
+                </label>
                 <input
                   type="text"
                   value={form.name}
@@ -249,7 +259,10 @@ export default function WorkplacesPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-bold text-slate-400 mb-1">Cliente (Contratante)</label>
+                <label className="flex items-center gap-1.5 text-sm font-bold text-slate-400 mb-1">
+                  Cliente (Contratante)
+                  <InfoTooltip text="A empresa ou órgão que contrata o serviço terceirizado neste posto. Quem paga pela equipe alocada." />
+                </label>
                 <input
                   type="text"
                   value={form.client}
@@ -259,7 +272,10 @@ export default function WorkplacesPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-bold text-slate-400 mb-1">Endereço</label>
+                <label className="flex items-center gap-1.5 text-sm font-bold text-slate-400 mb-1">
+                  Endereço
+                  <InfoTooltip text="Endereço físico do posto de trabalho. Útil para logística e remanejamento de equipe." />
+                </label>
                 <input
                   type="text"
                   value={form.address}
@@ -269,7 +285,10 @@ export default function WorkplacesPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-bold text-slate-400 mb-1">Equipe Mínima</label>
+                <label className="flex items-center gap-1.5 text-sm font-bold text-slate-400 mb-1">
+                  Equipe Mínima
+                  <InfoTooltip text="Quantidade mínima de colaboradores que este posto precisa ter para funcionar. Se a equipe ficar abaixo desse número (ex: por férias), o sistema alerta que é necessário cobertura." />
+                </label>
                 <input
                   type="number"
                   min={1}
