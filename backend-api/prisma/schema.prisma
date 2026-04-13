@@ -26,13 +26,17 @@ model Tenant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   
-  users         User[]
-  employees     Employee[]
-  auditLogs     AuditLog[]
-  vacationRequests VacationRequest[]
-  signatures    Signature[]
-  refreshTokens RefreshToken[]
-  webhooks      Webhook[]
+  users              User[]
+  employees          Employee[]
+  auditLogs          AuditLog[]
+  vacationRequests   VacationRequest[]
+  signatures         Signature[]
+  refreshTokens      RefreshToken[]
+  webhooks           Webhook[]
+  workplaces         Workplace[]
+  workplacePositions WorkplacePosition[]
+  workplaceAllocations WorkplaceAllocation[]
+  coverageAssignments  CoverageAssignment[]
 
   @@map("tenants")
 }
@@ -62,13 +66,15 @@ model Employee {
   registration  String?  @map("registration")
   birthDate     DateTime? @map("birth_date")
   position      String?  @default("Colaborador")
-  
+  employeeType  String   @default("EFETIVO") @map("employee_type") // EFETIVO, INTERMITENTE, FERISTA
+
   status        String   @default("ATIVO") // ATIVO, FERIAS, AFASTADO, INATIVO
   branch        String?  // Empresa/Filial
   department    String?  // Contrato / CC
-  workplace     String?  // Posto de Serviço / Lotação
+  workplace     String?  // Posto de Serviço (texto legado, será deprecado)
+  workplaceId   String?  @map("workplace_id") @db.Uuid
   shift         String?  // Jornada / Escala
-  
+
   salary        Decimal? @default(0) @db.Decimal(10, 2)
   hireDate      DateTime @map("hire_date")
   balanceOffset Int     @default(0) @map("balance_offset")
@@ -76,8 +82,11 @@ model Employee {
   createdAt     DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
-  requests  VacationRequest[]
+  tenant        Tenant     @relation(fields: [tenantId], references: [id])
+  workplaceRef  Workplace? @relation(fields: [workplaceId], references: [id])
+  requests      VacationRequest[]
+  allocations   WorkplaceAllocation[]
+  coveragesAsReplacement CoverageAssignment[] @relation("CoverageReplacement")
 
   @@unique([cpf, tenantId])
   @@map("employees")
@@ -120,6 +129,7 @@ model VacationRequest {
   tenant       Tenant   @relation(fields: [tenantId], references: [id])
   employee     Employee @relation(fields: [employeeId], references: [id])
   signature    Signature?
+  coverages    CoverageAssignment[]
 
   @@map("vacation_requests")
 }
@@ -154,6 +164,81 @@ model RefreshToken {
   tenant    Tenant   @relation(fields: [tenantId], references: [id])
 
   @@map("refresh_tokens")
+}
+
+model Workplace {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  address   String?
+  client    String?
+  minStaff  Int      @default(1) @map("min_staff")
+  tenantId  String   @map("tenant_id") @db.Uuid
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  positions WorkplacePosition[]
+  employees Employee[]
+
+  @@map("workplaces")
+}
+
+model WorkplacePosition {
+  id            String   @id @default(uuid()) @db.Uuid
+  workplaceId   String   @map("workplace_id") @db.Uuid
+  role          String
+  shiftPattern  String?  @map("shift_pattern")
+  requiredCount Int      @default(1) @map("required_count")
+  tenantId      String   @map("tenant_id") @db.Uuid
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  workplace   Workplace @relation(fields: [workplaceId], references: [id])
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  allocations WorkplaceAllocation[]
+  coverages   CoverageAssignment[]
+
+  @@map("workplace_positions")
+}
+
+model WorkplaceAllocation {
+  id                  String    @id @default(uuid()) @db.Uuid
+  employeeId          String    @map("employee_id") @db.Uuid
+  workplacePositionId String    @map("workplace_position_id") @db.Uuid
+  startDate           DateTime  @map("start_date")
+  endDate             DateTime? @map("end_date")
+  status              String    @default("ACTIVE") // ACTIVE, ENDED
+  tenantId            String    @map("tenant_id") @db.Uuid
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  employee          Employee          @relation(fields: [employeeId], references: [id])
+  workplacePosition WorkplacePosition @relation(fields: [workplacePositionId], references: [id])
+  tenant            Tenant            @relation(fields: [tenantId], references: [id])
+
+  @@map("workplace_allocations")
+}
+
+model CoverageAssignment {
+  id                    String   @id @default(uuid()) @db.Uuid
+  vacationRequestId     String   @map("vacation_request_id") @db.Uuid
+  replacementEmployeeId String   @map("replacement_employee_id") @db.Uuid
+  workplacePositionId   String   @map("workplace_position_id") @db.Uuid
+  startDate             DateTime @map("start_date")
+  endDate               DateTime @map("end_date")
+  type                  String   // INTERMITENTE, FERISTA
+  status                String   @default("PLANNED") // PLANNED, ACTIVE, COMPLETED
+  cost                  Decimal? @db.Decimal(10, 2)
+  tenantId              String   @map("tenant_id") @db.Uuid
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  vacationRequest     VacationRequest   @relation(fields: [vacationRequestId], references: [id])
+  replacementEmployee Employee          @relation("CoverageReplacement", fields: [replacementEmployeeId], references: [id])
+  workplacePosition   WorkplacePosition @relation(fields: [workplacePositionId], references: [id])
+  tenant              Tenant            @relation(fields: [tenantId], references: [id])
+
+  @@map("coverage_assignments")
 }
 
 model Webhook {
