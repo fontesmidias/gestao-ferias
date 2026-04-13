@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, CheckSquare, Users, Settings, BrainCircuit, LogOut, Menu, UserCircle } from 'lucide-react'
+import { LayoutDashboard, CheckSquare, Users, Settings, BrainCircuit, LogOut, Menu, UserCircle, Building2 } from 'lucide-react'
 import { useAuth } from '@/components/AuthContext'
 
 export function Sidebar() {
@@ -34,7 +34,8 @@ export function Sidebar() {
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/predict', label: 'Oráculo AI', icon: BrainCircuit },
     { href: '/approvals', label: 'Aprovações', icon: CheckSquare },
-    { href: '/employees', label: 'Colaboradores', icon: Users }
+    { href: '/employees', label: 'Colaboradores', icon: Users },
+    { href: '/workplaces', label: 'Postos', icon: Building2 }
   ]
 
   return (
