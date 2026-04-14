@@ -3,7 +3,7 @@
 import React, { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, CheckSquare, Users, Settings, BrainCircuit, LogOut, PanelLeftOpen, PanelLeftClose, Building2, Shield } from 'lucide-react'
+import { LayoutDashboard, CheckSquare, Users, Settings, BrainCircuit, LogOut, PanelLeftOpen, PanelLeftClose, Building2, Shield, Crown } from 'lucide-react'
 import { useAuth } from '@/components/AuthContext'
 
 export function Sidebar() {
@@ -23,14 +23,21 @@ export function Sidebar() {
 
   const expanded = pinned || hovered
 
-  const links = [
-    { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { href: '/predict', label: 'Oráculo AI', icon: BrainCircuit },
-    { href: '/approvals', label: 'Aprovações', icon: CheckSquare },
-    { href: '/employees', label: 'Colaboradores', icon: Users },
-    { href: '/workplaces', label: 'Postos', icon: Building2 },
-    { href: '/coverage', label: 'Cobertura', icon: Shield }
-  ]
+  const isSuperAdmin = user?.role === 'SUPERADMIN'
+
+  const links = isSuperAdmin
+    ? [
+        { href: '/admin', label: 'Painel Admin', icon: Crown },
+        { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      ]
+    : [
+        { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+        { href: '/predict', label: 'Oráculo AI', icon: BrainCircuit },
+        { href: '/approvals', label: 'Aprovações', icon: CheckSquare },
+        { href: '/employees', label: 'Colaboradores', icon: Users },
+        { href: '/workplaces', label: 'Postos', icon: Building2 },
+        { href: '/coverage', label: 'Cobertura', icon: Shield },
+      ]
 
   return (
     <aside

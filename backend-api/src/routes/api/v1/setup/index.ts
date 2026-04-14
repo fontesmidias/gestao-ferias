@@ -3,72 +3,47 @@ import * as bcrypt from 'bcryptjs'
 
 const setupRoutes: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   fastify.get('/status', async function (request, reply) {
-    // Retorna se o sistema já foi inicializado (se existe 1 ou mais administradores)
     const usersCount = await fastify.prisma.user.count()
     return { initialized: usersCount > 0 }
   })
 
+  // Setup inicial: cria o SUPERADMIN (sem tenant)
   fastify.post('/', async function (request, reply) {
-    // 1. Barreira de Segurança Ouro: Só prossegue se o DB for Virgem
     const usersCount = await fastify.prisma.user.count()
     if (usersCount > 0) {
-      return reply.code(403).send({ error: "Forbidden", message: "Setup completed. System already initialized." })
+      return reply.code(403).send({ error: "Forbidden", message: "Sistema já inicializado." })
     }
 
-    // 2. Transforma o payload em tipagem básica e aplica as regras
-    const payload = request.body as any
-    const { tenantName, cnpj, adminName, email, password, smtpHost, smtpPort, smtpUser, smtpPass, smtpFrom } = payload
+    const { name, email, password } = request.body as any
 
-    if (!tenantName || !cnpj || !adminName || !email || !password) {
-      return reply.code(400).send({ error: "Bad Request", message: "All fields are required: tenantName, cnpj, adminName, email, password" })
+    if (!name || !email || !password) {
+      return reply.code(400).send({ error: "Bad Request", message: "Campos obrigatórios: name, email, password" })
     }
 
-    // Hash da senha do SuperAdmin
     const passwordHash = await bcrypt.hash(password, 10)
 
     try {
-      // 3. Transação Atômica: Se falhar em um, não faz nada no outro
-      const result = await fastify.prisma.$transaction(async (tx: any) => {
-        // Criação da Master Company (Tenant)
-        const tenant = await tx.tenant.create({
-          data: {
-            name: tenantName,
-            cnpj: cnpj,
-            smtpHost: smtpHost || null,
-            smtpPort: smtpPort ? parseInt(smtpPort, 10) : null,
-            smtpUser: smtpUser || null,
-            smtpPass: smtpPass || null,
-            smtpFrom: smtpFrom || null
-          }
-        })
-
-        // Criação do Superadmin atrelado à Empresa Mestre
-        const admin = await tx.user.create({
-          data: {
-            name: adminName,
-            email: email,
-            passwordHash: passwordHash,
-            role: "ADMIN",
-            tenantId: tenant.id
-          }
-        })
-
-        return { tenant, admin }
+      const superadmin = await fastify.prisma.user.create({
+        data: {
+          name,
+          email,
+          passwordHash,
+          role: 'SUPERADMIN',
+          tenantId: null
+        }
       })
 
-      fastify.log.info(`[SETUP] Sistema Inicializado. Um tenant [${result.tenant.id}] e um admin principal criados! A porta foi trancada.`)
-      
+      fastify.log.info(`[SETUP] SuperAdmin criado: ${email}. Sistema inicializado.`)
+
       return reply.code(201).send({
-        message: "System initialized successfully.",
-        tenantId: result.tenant.id,
-        adminId: result.admin.id
+        message: "Sistema inicializado com sucesso. SuperAdmin criado.",
+        userId: superadmin.id
       })
-      
     } catch (err: any) {
       fastify.log.error(`[SETUP ERROR] ${err.message}`)
-      return reply.code(500).send({ error: "Internal Error", message: "Could not complete the setup." })
+      return reply.code(500).send({ error: "Internal Error", message: "Erro ao inicializar o sistema." })
     }
   })
 }
 
-export default setupRoutes;
+export default setupRoutes

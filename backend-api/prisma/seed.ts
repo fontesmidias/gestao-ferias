@@ -20,13 +20,23 @@ async function main() {
 
   console.log(`Tenant A: ${tenantA.name} (${tenantA.id})`)
 
-  // ─── Admin User ────────────────────────────────────────
+  // ─── SuperAdmin (sem tenant) ───────────────────────────
   const passwordHash = await bcrypt.hash('Senha@123', 10)
 
-  const admin = await prisma.user.upsert({
-    where: { email_tenantId: { email: 'admin@greenhouse.com', tenantId: tenantA.id } },
-    update: {},
-    create: {
+  const superadmin = await prisma.user.create({
+    data: {
+      email: 'superadmin@gestaoferias.com',
+      name: 'Super Admin',
+      passwordHash,
+      role: 'SUPERADMIN',
+      tenantId: null
+    }
+  })
+  console.log(`SuperAdmin: ${superadmin.email}`)
+
+  // ─── Admin do Tenant ───────────────────────────────────
+  const admin = await prisma.user.create({
+    data: {
       email: 'admin@greenhouse.com',
       name: 'Admin RH',
       passwordHash,
@@ -120,8 +130,27 @@ async function main() {
   }
   console.log('Alocações criadas para efetivos')
 
+  // ─── User para 1 colaborador (teste do fluxo employee) ─
+  const carlos = createdEmployees[0] // Carlos Silva
+  const carlosUser = await prisma.user.create({
+    data: {
+      email: 'carlos.silva@greenhouse.com',
+      name: 'Carlos Silva',
+      passwordHash,
+      role: 'USER',
+      tenantId: tenantA.id
+    }
+  })
+  await prisma.employee.update({
+    where: { id: carlos.id },
+    data: { userId: carlosUser.id }
+  })
+  console.log(`User colaborador: ${carlosUser.email} → Employee ${carlos.name}`)
+
   console.log('\n✓ Seed finalizado com sucesso!')
-  console.log('  Login: admin@greenhouse.com / Senha@123')
+  console.log('  SuperAdmin: superadmin@gestaoferias.com / Senha@123')
+  console.log('  Admin RH:   admin@greenhouse.com / Senha@123')
+  console.log('  Colaborador: carlos.silva@greenhouse.com / Senha@123')
   console.log(`  Tenant: ${tenantA.name}`)
   console.log('  3 postos, 6 posições, 12 colaboradores (10 efetivos + 2 feristas)')
 }

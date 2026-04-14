@@ -28,7 +28,7 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     // Verificar se o usuário existe (email não é mais globally unique)
     const user = await fastify.prisma.user.findFirst({
       where: { email },
-      include: { tenant: true }
+      include: { tenant: true, employee: { select: { id: true } } }
     })
 
     if (!user || !(user as any).passwordHash) {
@@ -41,22 +41,27 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
        return reply.code(401).send({ error: 'Unauthorized', message: 'E-mail ou senha incorretos.' })
     }
 
+    // Buscar employeeId vinculado (se existir)
+    const employeeId = (user as any).employee?.id || null
+
     // Gerar Access Token (curto: 15 minutos)
     const accessToken = fastify.jwt.sign(
-      { userId: user.id, tenantId: user.tenantId, email: user.email, role: user.role, name: user.name },
+      { userId: user.id, tenantId: user.tenantId, email: user.email, role: user.role, name: user.name, employeeId },
       { expiresIn: '15m' }
     )
 
     // Gerar Refresh Token (longo: 7 dias) e salvar no banco
     const refreshTokenValue = randomUUID()
-    await fastify.prisma.refreshToken.create({
-      data: {
-        token: refreshTokenValue,
-        userId: user.id,
-        tenantId: user.tenantId,
-        expiresAt: addDays(new Date(), 7)
-      }
-    })
+    if (user.tenantId) {
+      await fastify.prisma.refreshToken.create({
+        data: {
+          token: refreshTokenValue,
+          userId: user.id,
+          tenantId: user.tenantId,
+          expiresAt: addDays(new Date(), 7)
+        }
+      })
+    }
 
     fastify.log.info(`[LOGIN] Usuário logado com sucesso: ${email}`)
 
@@ -68,7 +73,8 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         email: user.email,
         name: user.name,
         role: user.role,
-        tenantId: user.tenantId
+        tenantId: user.tenantId,
+        employeeId
       }
     }
   })

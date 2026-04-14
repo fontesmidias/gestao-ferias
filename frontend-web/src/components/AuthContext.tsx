@@ -10,7 +10,8 @@ interface User {
   email: string
   name: string
   role: string
-  tenantId: string
+  tenantId: string | null
+  employeeId?: string | null
 }
 
 interface AuthContextType {
@@ -63,8 +64,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(data.user)
       toast.success('Login realizado com sucesso!')
       
-      // Se for colaborador (role USER), manda pra PWA, se for ADMIN, manda pro Dashboard
-      if (data.user.role === 'ADMIN') {
+      // Redirect por role
+      if (data.user.role === 'SUPERADMIN') {
+        router.push('/admin')
+      } else if (data.user.role === 'ADMIN') {
         router.push('/dashboard')
       } else {
         router.push('/employee/dashboard')
