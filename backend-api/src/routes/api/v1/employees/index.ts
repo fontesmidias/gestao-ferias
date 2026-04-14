@@ -30,20 +30,41 @@ const employees: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     const extension = data.filename.split('.').pop()?.toLowerCase() || ''
 
     try {
-      // 1. Parsing do arquivo (Síncrono/Rápido para o Buffer)
       const rawData = await ImportService.parseFile(buffer, extension)
+      const tenantId = (request.user as any).tenantId
 
-      // 2. Enfileirar para processamento assíncrono (Sanitização e Inserção)
-      const job = await fastify.importQueue.add('process-import', {
-        rawData,
-        tenantId: (request.user as any).tenantId,
-        uploadedBy: (request.user as any).userId
-      })
-
-      return {
-        message: 'Arquivo recebido e enfileirado para processamento.',
-        jobId: job.id,
-        rowCount: rawData.length
+      // Tentar enfileirar no Redis; se indisponivel, processar sincrono
+      try {
+        const job = await fastify.importQueue.add('process-import', {
+          rawData, tenantId, uploadedBy: (request.user as any).userId
+        })
+        return { message: 'Arquivo recebido e enfileirado para processamento.', jobId: job.id, rowCount: rawData.length }
+      } catch {
+        // Fallback sincrono (sem Redis)
+        const { SanitizationService } = await import('../../../../modules/employees/sanitization-service.js')
+        let success = 0, errors = 0
+        for (const row of rawData) {
+          try {
+            const cpf = SanitizationService.sanitizeCPF(row.cpf)
+            const hireDate = SanitizationService.sanitizeDate(row.hireDate)
+            const name = SanitizationService.sanitizeName(row.name)
+            await fastify.prisma.employee.upsert({
+              where: { cpf_tenantId: { cpf, tenantId } },
+              update: { name, hireDate, phone: row.phone || undefined, position: row.position || undefined,
+                employeeType: row.employeeType || undefined, branch: row.branch || undefined,
+                department: row.department || undefined, workplace: row.workplace || undefined,
+                shift: row.shift || undefined, salary: row.salary ? parseFloat(row.salary) : undefined,
+                registration: row.registration || undefined },
+              create: { name, cpf, hireDate, tenantId, phone: row.phone || null,
+                position: row.position || 'Colaborador', employeeType: row.employeeType || 'EFETIVO',
+                branch: row.branch || null, department: row.department || null,
+                workplace: row.workplace || null, shift: row.shift || null,
+                salary: row.salary ? parseFloat(row.salary) : 0, registration: row.registration || null }
+            })
+            success++
+          } catch { errors++ }
+        }
+        return { message: `Importacao concluida: ${success} processados, ${errors} erros.`, rowCount: rawData.length, success, errors }
       }
     } catch (error: any) {
       request.log.error(error)
@@ -78,13 +99,67 @@ const employees: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
           workplace: data.workplace || undefined,
           shift: data.shift || undefined,
           salary: data.salary || 0,
-          hireDate: new Date(data.hireDate)
+          hireDate: new Date(data.hireDate),
+          phone: data.phone || null,
+          employeeType: data.employeeType || 'EFETIVO',
         }
       })
       return reply.code(201).send(emp)
     } catch (err: any) {
       return reply.code(400).send({ error: 'Erro ao criar colaborador', message: err.message })
     }
+  })
+
+  // Editar colaborador
+  fastify.patch('/:id', {
+    onRequest: [fastify.requireAuth, fastify.requireAdmin],
+    schema: {
+      params: { type: 'object', properties: { id: { type: 'string', format: 'uuid' } } },
+      body: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          cpf: { type: 'string' },
+          phone: { type: 'string' },
+          position: { type: 'string' },
+          employeeType: { type: 'string' },
+          status: { type: 'string' },
+          branch: { type: 'string' },
+          department: { type: 'string' },
+          workplace: { type: 'string' },
+          shift: { type: 'string' },
+          salary: { type: 'number' },
+          registration: { type: 'string' },
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const { tenantId } = request.user as any
+    const data = request.body as any
+
+    const existing = await fastify.prisma.employee.findFirst({ where: { id, tenantId } })
+    if (!existing) return reply.code(404).send({ error: 'Not Found' })
+
+    const updated = await fastify.prisma.employee.update({
+      where: { id },
+      data: {
+        name: data.name !== undefined ? data.name : undefined,
+        cpf: data.cpf !== undefined ? data.cpf : undefined,
+        phone: data.phone !== undefined ? data.phone : undefined,
+        position: data.position !== undefined ? data.position : undefined,
+        employeeType: data.employeeType !== undefined ? data.employeeType : undefined,
+        status: data.status !== undefined ? data.status : undefined,
+        branch: data.branch !== undefined ? data.branch : undefined,
+        department: data.department !== undefined ? data.department : undefined,
+        workplace: data.workplace !== undefined ? data.workplace : undefined,
+        shift: data.shift !== undefined ? data.shift : undefined,
+        salary: data.salary !== undefined ? data.salary : undefined,
+        registration: data.registration !== undefined ? data.registration : undefined,
+      }
+    })
+
+    return updated
   })
 
   // Listar funcionários do Tenant atual (já com isolamento implícito no futuro)

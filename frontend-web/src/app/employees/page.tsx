@@ -4,7 +4,8 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { HttpClient } from '@/lib/api-client'
 import {
   Users, Search, Download, Upload, FileSpreadsheet, MoreHorizontal, UserCheck,
-  UserMinus, CalendarHeart, Briefcase, MapPin, Building2, LayoutGrid, Clock
+  UserMinus, CalendarHeart, Briefcase, MapPin, Building2, LayoutGrid, Clock,
+  X, Phone
 } from 'lucide-react'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { toast } from 'sonner'
@@ -15,9 +16,12 @@ interface Employee {
   id: string
   name: string
   cpf: string
+  phone?: string
   registration?: string
   birthDate?: string
   position?: string
+  employeeType?: string
+  salary?: number
   status: string
   branch?: string
   department?: string
@@ -35,6 +39,14 @@ export default function EmployeesPage() {
   const [filterBranch, setFilterBranch] = useState('')
   const [filterWorkplace, setFilterWorkplace] = useState('')
   const [filterStatus, setFilterStatus] = useState('ATIVOS')
+
+  // Edit modal state
+  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null)
+  const [editForm, setEditForm] = useState({
+    name: '', cpf: '', phone: '', position: '', employeeType: '', status: '',
+    branch: '', department: '', workplace: '', shift: '', salary: '', registration: ''
+  })
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     fetchEmployees()
@@ -109,6 +121,43 @@ export default function EmployeesPage() {
     link.href = URL.createObjectURL(blob)
     link.download = `colaboradores_export_${format(new Date(), 'yyyyMMdd_HHmm')}.csv`
     link.click()
+  }
+
+  const openEditModal = (emp: Employee) => {
+    setEditingEmployee(emp)
+    setEditForm({
+      name: emp.name || '',
+      cpf: emp.cpf || '',
+      phone: emp.phone || '',
+      position: emp.position || '',
+      employeeType: emp.employeeType || '',
+      status: emp.status || '',
+      branch: emp.branch || '',
+      department: emp.department || '',
+      workplace: emp.workplace || '',
+      shift: emp.shift || '',
+      salary: emp.salary != null ? String(emp.salary) : '',
+      registration: emp.registration || '',
+    })
+  }
+
+  const handleSaveEdit = async () => {
+    if (!editingEmployee) return
+    try {
+      setSaving(true)
+      await HttpClient.patch('/employees/' + editingEmployee.id, {
+        ...editForm,
+        salary: editForm.salary ? Number(editForm.salary) : undefined,
+      })
+      toast.success('Colaborador atualizado com sucesso!')
+      setEditingEmployee(null)
+      fetchEmployees()
+    } catch (err) {
+      console.error(err)
+      toast.error('Erro ao atualizar colaborador.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const renderStatusBadge = (status: string) => {
@@ -273,6 +322,9 @@ export default function EmployeesPage() {
                     <th className="px-6 py-3">
                       <div className="flex items-center gap-1.5"><Clock className="w-3 h-3"/> Escala <InfoTooltip text="Jornada de trabalho: 8h (comercial), 12x36, 6x1, etc." /></div>
                     </th>
+                    <th className="px-6 py-3">
+                      <div className="flex items-center gap-1.5"><Phone className="w-3 h-3"/> Telefone <InfoTooltip text="Número de telefone de contato do colaborador." /></div>
+                    </th>
                     <th className="px-6 py-3 text-right"><div className="flex items-center justify-end gap-1">Admissão <InfoTooltip text="Data em que o colaborador foi contratado pela empresa." /></div></th>
                     <th className="px-4 py-3 text-center"></th>
                   </tr>
@@ -280,13 +332,13 @@ export default function EmployeesPage() {
                 <tbody className="divide-y divide-white/[0.03]">
                   {loading ? (
                     <tr>
-                      <td colSpan={9} className="px-6 py-12 text-center text-slate-500">
+                      <td colSpan={10} className="px-6 py-12 text-center text-slate-500">
                         Sincronizando banco de dados de colaboradores...
                       </td>
                     </tr>
                   ) : filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="px-6 py-12 text-center text-slate-500">
+                      <td colSpan={10} className="px-6 py-12 text-center text-slate-500">
                         Nenhum colaborador corresponde aos filtros de busca aplicados.
                       </td>
                     </tr>
@@ -319,11 +371,17 @@ export default function EmployeesPage() {
                         <td className="px-6 py-3 text-[12px] text-slate-400 max-w-[150px] truncate">
                           {emp.shift || <span className="text-slate-600">-</span>}
                         </td>
+                        <td className="px-6 py-3 text-[12px] text-slate-400">
+                          {emp.phone || <span className="text-slate-600">-</span>}
+                        </td>
                         <td className="px-6 py-3 text-right text-[12px] text-slate-400">
                           {format(parseISO(emp.hireDate), 'dd/MM/yyyy')}
                         </td>
                         <td className="px-4 py-3 text-center">
-                          <button className="p-1.5 text-slate-500 hover:text-white hover:bg-white/10 rounded-md transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100">
+                          <button
+                            onClick={() => openEditModal(emp)}
+                            className="p-1.5 text-slate-500 hover:text-white hover:bg-white/10 rounded-md transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                          >
                             <MoreHorizontal className="w-4 h-4" />
                           </button>
                         </td>
@@ -342,6 +400,91 @@ export default function EmployeesPage() {
           </div>
         </ErrorBoundary>
       </main>
+
+      {/* Edit Employee Modal */}
+      {editingEmployee && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setEditingEmployee(null)}>
+          <div className="glass-card bg-slate-800 border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto mx-4 p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-white">Editar Colaborador</h3>
+              <button onClick={() => setEditingEmployee(null)} className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-md transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1">Nome <InfoTooltip text="Nome completo do colaborador." /></label>
+                <input type="text" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary/50" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1">CPF <InfoTooltip text="Cadastro de Pessoa Física do colaborador." /></label>
+                <input type="text" value={editForm.cpf} onChange={e => setEditForm({...editForm, cpf: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary/50" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1">Telefone <InfoTooltip text="Número de telefone de contato do colaborador." /></label>
+                <input type="text" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary/50" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1">Matrícula <InfoTooltip text="Número de registro interno do colaborador." /></label>
+                <input type="text" value={editForm.registration} onChange={e => setEditForm({...editForm, registration: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary/50" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1">Cargo <InfoTooltip text="Função exercida pelo colaborador no posto de trabalho." /></label>
+                <input type="text" value={editForm.position} onChange={e => setEditForm({...editForm, position: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary/50" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1">Tipo de Vínculo <InfoTooltip text="Tipo de contrato: Efetivo (CLT fixo), Intermitente (sob demanda) ou Ferista (cobertura de férias)." /></label>
+                <select value={editForm.employeeType} onChange={e => setEditForm({...editForm, employeeType: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary/50">
+                  <option value="">Selecione...</option>
+                  <option value="EFETIVO">EFETIVO</option>
+                  <option value="INTERMITENTE">INTERMITENTE</option>
+                  <option value="FERISTA">FERISTA</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1">Status <InfoTooltip text="Situação atual do colaborador na empresa." /></label>
+                <select value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary/50">
+                  <option value="">Selecione...</option>
+                  <option value="ATIVO">ATIVO</option>
+                  <option value="FERIAS">FÉRIAS</option>
+                  <option value="AFASTADO">AFASTADO</option>
+                  <option value="INATIVO">INATIVO</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1">Empresa / Filial <InfoTooltip text="Empresa ou filial onde o colaborador é registrado." /></label>
+                <input type="text" value={editForm.branch} onChange={e => setEditForm({...editForm, branch: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary/50" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1">Departamento <InfoTooltip text="Setor ou departamento ao qual o colaborador pertence." /></label>
+                <input type="text" value={editForm.department} onChange={e => setEditForm({...editForm, department: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary/50" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1">Posto de Serviço <InfoTooltip text="Local físico onde o colaborador exerce suas funções." /></label>
+                <input type="text" value={editForm.workplace} onChange={e => setEditForm({...editForm, workplace: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary/50" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1">Escala <InfoTooltip text="Jornada de trabalho: 8h (comercial), 12x36, 6x1, etc." /></label>
+                <input type="text" value={editForm.shift} onChange={e => setEditForm({...editForm, shift: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary/50" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1">Salário <InfoTooltip text="Remuneração mensal bruta do colaborador." /></label>
+                <input type="number" step="0.01" value={editForm.salary} onChange={e => setEditForm({...editForm, salary: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary/50" />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-white/5">
+              <button onClick={() => setEditingEmployee(null)} className="px-4 py-2 text-sm text-slate-400 hover:text-white border border-slate-700 rounded-lg hover:bg-slate-700 transition-colors">
+                Cancelar
+              </button>
+              <button onClick={handleSaveEdit} disabled={saving} className="px-5 py-2 text-sm font-bold text-white bg-primary hover:bg-primary/80 rounded-lg transition-colors disabled:opacity-50">
+                {saving ? 'Salvando...' : 'Salvar Alterações'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
