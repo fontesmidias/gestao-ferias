@@ -176,100 +176,15 @@ export default function SettingsPage() {
         <ErrorBoundary>
           <form onSubmit={handleSubmit} className="space-y-8">
             
-            {/* Oráculo AI Settings */}
+            {/* Configuração Unificada do Oráculo AI */}
             <div className="glass-card p-8 rounded-2xl border border-white/5 relative overflow-hidden">
               <div className="flex items-center gap-3 mb-6 border-b border-white/5 pb-4">
                 <div className="p-2 bg-indigo-500/20 rounded-lg">
-                  <KeyRound className="w-5 h-5 text-indigo-400" />
+                  <BrainCircuit className="w-5 h-5 text-indigo-400" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white">Chaves do Oráculo (LLMs)</h3>
-                  <p className="text-sm text-slate-400">Configure as APIs para liberar a Inteligência Artificial no módulo Predict.</p>
-                </div>
-              </div>
-
-              <div className="space-y-6">
-                <div>
-                  <label htmlFor="openaiKey" className="block text-sm font-medium text-slate-300 mb-2">
-                    OpenAI API Key (GPT-4o) <InfoTooltip text="Chave de acesso à API da OpenAI. Necessária para ativar o módulo de IA com o modelo GPT-4o. Obtenha em platform.openai.com." />
-                  </label>
-                  <div className="relative">
-                    <input
-                      id="openaiKey"
-                      type={showOpenai ? "text" : "password"}
-                      value={formData.openaiKey}
-                      onChange={handleChange}
-                      placeholder="sk-proj-..."
-                      className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 pr-12 text-white focus:ring-2 focus:ring-primary/50 transition-all outline-none"
-                    />
-                    <button 
-                      type="button" 
-                      onClick={() => setShowOpenai(!showOpenai)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-2xl hover:scale-110 transition-transform focus:outline-none"
-                      title={showOpenai ? "Ocultar chave" : "Ver chave"}
-                    >
-                      {showOpenai ? "🐵" : "🙈"}
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <label htmlFor="anthropicKey" className="block text-sm font-medium text-slate-300 mb-2">
-                    Anthropic API Key (Claude 3.5) <InfoTooltip text="Chave alternativa para usar o modelo Claude da Anthropic. Configure se preferir este provedor de IA." />
-                  </label>
-                  <div className="relative">
-                    <input
-                      id="anthropicKey"
-                      type={showAnthropic ? "text" : "password"}
-                      value={formData.anthropicKey}
-                      onChange={handleChange}
-                      placeholder="sk-ant-api03-..."
-                      className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 pr-12 text-white focus:ring-2 focus:ring-primary/50 transition-all outline-none"
-                    />
-                    <button 
-                      type="button" 
-                      onClick={() => setShowAnthropic(!showAnthropic)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-2xl hover:scale-110 transition-transform focus:outline-none"
-                      title={showAnthropic ? "Ocultar chave" : "Ver chave"}
-                    >
-                      {showAnthropic ? "🐵" : "🙈"}
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <label htmlFor="geminiKey" className="block text-sm font-medium text-slate-300 mb-2">
-                    Google Gemini API Key (Gemini 1.5 Pro) <InfoTooltip text="Chave da API Google Gemini para análises multimodais. Alternativa gratuita aos demais provedores." />
-                  </label>
-                  <div className="relative">
-                    <input
-                      id="geminiKey"
-                      type={showGemini ? "text" : "password"}
-                      value={formData.geminiKey}
-                      onChange={handleChange}
-                      placeholder="AIzaSy..."
-                      className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 pr-12 text-white focus:ring-2 focus:ring-primary/50 transition-all outline-none"
-                    />
-                    <button 
-                      type="button" 
-                      onClick={() => setShowGemini(!showGemini)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-2xl hover:scale-110 transition-transform focus:outline-none"
-                      title={showGemini ? "Ocultar chave" : "Ver chave"}
-                    >
-                      {showGemini ? "🐵" : "🙈"}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Configuração do Oráculo AI */}
-            <div className="glass-card p-8 rounded-2xl border border-white/5 relative overflow-hidden">
-              <div className="flex items-center gap-3 mb-6 border-b border-white/5 pb-4">
-                <div className="p-2 bg-purple-500/20 rounded-lg">
-                  <BrainCircuit className="w-5 h-5 text-purple-400" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-white">Configuração do Oráculo AI</h3>
-                  <p className="text-sm text-slate-400">Escolha qual provedor e modelo de IA o Oráculo usará. Se nenhum for selecionado, o sistema tentará todos na ordem: OpenAI, Anthropic, Gemini, Groq.</p>
+                  <h3 className="text-lg font-bold text-white">Oráculo AI</h3>
+                  <p className="text-sm text-slate-400">Escolha o provedor, modelo e configure a chave de API para ativar a inteligência artificial.</p>
                 </div>
               </div>
 
@@ -277,7 +192,7 @@ export default function SettingsPage() {
                 {/* Provider selector */}
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-3">
-                    Provedor de IA <InfoTooltip text="Selecione o provedor preferido. O sistema usará exclusivamente este provedor quando selecionado." />
+                    Provedor de IA <InfoTooltip text="Selecione o provedor preferido. Cada provedor exige sua propria chave de API. O Groq oferece acesso gratuito." />
                   </label>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {Object.entries(providerModels).map(([key, config]) => (
@@ -311,22 +226,62 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                {/* Model selector */}
+                {/* Model selector (when provider is selected) */}
                 {formData.llmProvider && providerModels[formData.llmProvider] && (
                   <div>
                     <label htmlFor="llmModel" className="block text-sm font-medium text-slate-300 mb-2">
-                      Modelo <InfoTooltip text="Escolha o modelo específico do provedor selecionado." />
+                      Modelo <InfoTooltip text="Modelo especifico do provedor. Modelos maiores tem melhor raciocinio mas custam mais." />
                     </label>
                     <select
                       id="llmModel"
                       value={formData.llmModel}
                       onChange={(e) => setFormData({ ...formData, llmModel: e.target.value })}
-                      className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-primary/50 transition-all outline-none"
+                      className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:ring-1 focus:ring-primary/50 outline-none"
                     >
                       {providerModels[formData.llmProvider].models.map((m) => (
                         <option key={m.value} value={m.value}>{m.label}</option>
                       ))}
                     </select>
+                  </div>
+                )}
+
+                {/* API Key field for selected provider */}
+                {formData.llmProvider === 'openai' && (
+                  <div>
+                    <label htmlFor="openaiKey" className="block text-sm font-medium text-slate-300 mb-2">
+                      Chave API OpenAI <InfoTooltip text="Obtenha em platform.openai.com. Necessaria para usar modelos GPT." />
+                    </label>
+                    <div className="relative">
+                      <input id="openaiKey" type={showOpenai ? "text" : "password"} value={formData.openaiKey} onChange={handleChange}
+                        placeholder="sk-proj-..." className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 pr-12 text-white focus:ring-2 focus:ring-primary/50 outline-none" />
+                      <button type="button" onClick={() => setShowOpenai(!showOpenai)} className="absolute right-3 top-1/2 -translate-y-1/2 text-2xl">{showOpenai ? "🐵" : "🙈"}</button>
+                    </div>
+                  </div>
+                )}
+
+                {formData.llmProvider === 'anthropic' && (
+                  <div>
+                    <label htmlFor="anthropicKey" className="block text-sm font-medium text-slate-300 mb-2">
+                      Chave API Anthropic <InfoTooltip text="Obtenha em console.anthropic.com. Necessaria para usar modelos Claude." />
+                    </label>
+                    <div className="relative">
+                      <input id="anthropicKey" type={showAnthropic ? "text" : "password"} value={formData.anthropicKey} onChange={handleChange}
+                        placeholder="sk-ant-api03-..." className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 pr-12 text-white focus:ring-2 focus:ring-primary/50 outline-none" />
+                      <button type="button" onClick={() => setShowAnthropic(!showAnthropic)} className="absolute right-3 top-1/2 -translate-y-1/2 text-2xl">{showAnthropic ? "🐵" : "🙈"}</button>
+                    </div>
+                  </div>
+                )}
+
+                {formData.llmProvider === 'gemini' && (
+                  <div>
+                    <label htmlFor="geminiKey" className="block text-sm font-medium text-slate-300 mb-2">
+                      Chave API Google Gemini <InfoTooltip text="Obtenha em aistudio.google.com. Alternativa com tier gratuito." />
+                    </label>
+                    <div className="relative">
+                      <input id="geminiKey" type={showGemini ? "text" : "password"} value={formData.geminiKey} onChange={handleChange}
+                        placeholder="AIzaSy..." className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 pr-12 text-white focus:ring-2 focus:ring-primary/50 outline-none" />
+                      <button type="button" onClick={() => setShowGemini(!showGemini)} className="absolute right-3 top-1/2 -translate-y-1/2 text-2xl">{showGemini ? "🐵" : "🙈"}</button>
+                    </div>
                   </div>
                 )}
 

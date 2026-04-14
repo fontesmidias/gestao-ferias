@@ -260,6 +260,70 @@ export default function AIPredictDashboard() {
           </div>
         </div>
 
+        {/* ── AI Chat (movido para cima) ─────────────────────────── */}
+        <ErrorBoundary>
+          <div className="mb-6 flex items-center gap-3">
+            <MessageSquare className="w-5 h-5 text-purple-400" />
+            <h3 className="text-xl font-bold text-white">
+              Pergunte ao Oráculo
+            </h3>
+            <InfoTooltip text="Converse com a IA sobre riscos trabalhistas, cobertura de férias e recomendações estratégicas." />
+          </div>
+
+          <div className="glass-card rounded-2xl p-6 border border-white/5 mb-10">
+            {chatMessages.length > 0 && (
+              <div className="mb-4 max-h-80 overflow-y-auto space-y-3 pr-2">
+                {chatMessages.map((msg, i) => (
+                  <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                      msg.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-200 border border-white/5'
+                    }`}>
+                      {msg.role === 'assistant' ? (
+                        <div className="whitespace-pre-wrap" dangerouslySetInnerHTML={{
+                          __html: msg.content
+                            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                            .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                            .replace(/^- /gm, '• ')
+                            .replace(/^(\d+)\. /gm, '<strong>$1.</strong> ')
+                            .replace(/\n/g, '<br/>')
+                        }} />
+                      ) : msg.content}
+                      {msg.provider && (
+                        <span className="inline-block ml-2 mt-1 px-2 py-0.5 text-[10px] uppercase tracking-wider font-bold bg-purple-500/20 text-purple-300 rounded-full">
+                          via {msg.provider}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {chatLoading && (
+                  <div className="flex justify-start">
+                    <div className="bg-slate-800 border border-white/5 rounded-2xl px-4 py-3 flex items-center gap-2 text-sm text-slate-400">
+                      <Loader2 className="w-4 h-4 animate-spin" /> Pensando...
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            {llmUnavailable && (
+              <div className="mb-4 flex items-center gap-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-300 text-sm">
+                <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                <span>Nenhum provedor de IA configurado. Vá em <strong>Configurações</strong> para adicionar sua chave de API.</span>
+              </div>
+            )}
+            <form onSubmit={(e) => { e.preventDefault(); handleAskQuestion() }} className="flex items-center gap-3">
+              <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)}
+                placeholder="Ex: Quais colaboradores têm férias vencidas este mês?"
+                className="flex-1 bg-slate-900/70 border border-white/10 rounded-xl px-4 py-3 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/30 transition-all"
+                disabled={chatLoading} />
+              <button type="submit" disabled={chatLoading || !chatInput.trim()}
+                className="p-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-xl transition-all shadow-lg shadow-indigo-600/20 active:scale-[0.96]">
+                {chatLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+              </button>
+            </form>
+          </div>
+        </ErrorBoundary>
+
         {/* ── Recommendations List ────────────────────────────────── */}
         <ErrorBoundary>
           <div className="mb-6 flex items-center justify-between">
@@ -393,93 +457,7 @@ export default function AIPredictDashboard() {
           )}
         </ErrorBoundary>
 
-        {/* ── AI Chat ─────────────────────────────────────────────── */}
-        <ErrorBoundary>
-          <div className="mt-12 mb-6 flex items-center gap-3">
-            <MessageSquare className="w-5 h-5 text-purple-400" />
-            <h3 className="text-xl font-bold text-white">
-              Pergunte ao Oráculo
-            </h3>
-            <InfoTooltip text="Converse com a IA sobre riscos trabalhistas, cobertura de férias e recomendações estratégicas." />
-          </div>
-
-          <div className="glass-card rounded-2xl p-6 border border-white/5">
-            {/* Messages */}
-            {chatMessages.length > 0 && (
-              <div className="mb-4 max-h-80 overflow-y-auto space-y-3 pr-2">
-                {chatMessages.map((msg, i) => (
-                  <div
-                    key={i}
-                    className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                  >
-                    <div
-                      className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-                        msg.role === 'user'
-                          ? 'bg-indigo-600 text-white'
-                          : 'bg-slate-800 text-slate-200 border border-white/5'
-                      }`}
-                    >
-                      {msg.content}
-                      {msg.provider && (
-                        <span className="inline-block ml-2 px-2 py-0.5 text-[10px] uppercase tracking-wider font-bold bg-purple-500/20 text-purple-300 rounded-full">
-                          {msg.provider}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                {chatLoading && (
-                  <div className="flex justify-start">
-                    <div className="bg-slate-800 border border-white/5 rounded-2xl px-4 py-3 flex items-center gap-2 text-sm text-slate-400">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Pensando...
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* LLM unavailable warning */}
-            {llmUnavailable && (
-              <div className="mb-4 flex items-center gap-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-300 text-sm">
-                <AlertCircle className="w-5 h-5 flex-shrink-0" />
-                <span>
-                  Nenhum provedor de IA configurado. Vá em{' '}
-                  <strong>Configurações</strong> para adicionar sua chave de API.
-                </span>
-              </div>
-            )}
-
-            {/* Input */}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault()
-                handleAskQuestion()
-              }}
-              className="flex items-center gap-3"
-            >
-              <input
-                type="text"
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                placeholder="Ex: Quais colaboradores têm férias vencidas este mês?"
-                className="flex-1 bg-slate-900/70 border border-white/10 rounded-xl px-4 py-3 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/30 transition-all"
-                disabled={chatLoading}
-              />
-              <button
-                type="submit"
-                disabled={chatLoading || !chatInput.trim()}
-                className="p-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-xl transition-all shadow-lg shadow-indigo-600/20 active:scale-[0.96]"
-              >
-                {chatLoading ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
-                  <Send className="w-5 h-5" />
-                )}
-              </button>
-            </form>
-          </div>
-        </ErrorBoundary>
+        {/* Chat moved to top of page */}
       </main>
     </div>
   )
