@@ -113,10 +113,20 @@ export default function SettingsPage() {
     setFormData({ ...formData, [e.target.id]: e.target.value })
   }
 
-  if (user?.role !== 'ADMIN') {
+  if (user?.role !== 'ADMIN' && user?.role !== 'SUPERADMIN') {
     return (
       <div className="flex items-center justify-center h-full text-slate-400">
         Você não tem permissão para acessar esta página.
+      </div>
+    )
+  }
+
+  // SuperAdmin sem impersonar não tem tenant para configurar
+  if (user?.role === 'SUPERADMIN' && !user?.tenantId) {
+    return (
+      <div className="flex items-center justify-center h-full text-slate-400 flex-col gap-2">
+        <p className="font-bold">Entre em uma empresa para configurar.</p>
+        <p className="text-sm">Use o painel SuperAdmin para selecionar uma empresa.</p>
       </div>
     )
   }

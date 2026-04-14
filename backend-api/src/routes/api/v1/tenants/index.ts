@@ -116,6 +116,9 @@ const tenants: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     onRequest: [fastify.requireAuth]
   }, async (request, reply) => {
     const user = request.user as any
+    if (!user.tenantId) {
+      return reply.code(404).send({ error: 'Not Found', message: 'SuperAdmin não possui tenant. Use o painel admin.' })
+    }
     const tenant = await fastify.prisma.tenant.findUnique({
       where: { id: user.tenantId }
     })
