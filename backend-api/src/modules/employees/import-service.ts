@@ -1,33 +1,31 @@
 import * as Papa from 'papaparse'
 import * as XLSX from 'xlsx'
 
+// ─── Types ───────────────────────────────────────────
+
 export interface RawEmployee {
-  name: string;
-  cpf: string;
-  hireDate: string;
-  phone?: string;
-  position?: string;
-  employeeType?: string;
-  branch?: string;
-  department?: string;
-  workplace?: string;
-  shift?: string;
-  salary?: string;
-  registration?: string;
+  name: string; cpf: string; hireDate: string;
+  phone?: string; position?: string; employeeType?: string;
+  branch?: string; department?: string; workplace?: string;
+  shift?: string; salary?: string; registration?: string;
 }
 
 export interface RawWorkplace {
-  name: string;
-  client?: string;
-  address?: string;
-  city?: string;
-  minStaff?: string;
-  positionRole?: string;
-  positionShift?: string;
-  positionCount?: string;
+  name: string; client?: string; address?: string; city?: string;
+  minStaff?: string; positionRole?: string; positionShift?: string; positionCount?: string;
 }
 
-const EMPLOYEE_FIELD_MAP: Record<string, keyof RawEmployee> = {
+export interface RawAllocation {
+  employeeCpf: string; workplaceName: string; positionRole: string; startDate: string;
+}
+
+export interface RawVacationSchedule {
+  employeeCpf: string; startDate: string; endDate: string; days?: string;
+}
+
+// ─── Field Maps ──────────────────────────────────────
+
+const EMPLOYEE_MAP: Record<string, keyof RawEmployee> = {
   'name': 'name', 'nome': 'name', 'Nome': 'name', 'Nome Completo': 'name',
   'cpf': 'cpf', 'CPF': 'cpf',
   'hireDate': 'hireDate', 'hire_date': 'hireDate', 'Data de Admissao': 'hireDate', 'Admissao': 'hireDate', 'Data Admissao': 'hireDate',
@@ -42,7 +40,7 @@ const EMPLOYEE_FIELD_MAP: Record<string, keyof RawEmployee> = {
   'registration': 'registration', 'matricula': 'registration', 'Matricula': 'registration',
 }
 
-const WORKPLACE_FIELD_MAP: Record<string, keyof RawWorkplace> = {
+const WORKPLACE_MAP: Record<string, keyof RawWorkplace> = {
   'name': 'name', 'nome': 'name', 'Nome': 'name', 'Nome do Posto': 'name', 'Posto': 'name',
   'client': 'client', 'cliente': 'client', 'Cliente': 'client', 'Contratante': 'client',
   'address': 'address', 'endereco': 'address', 'Endereco': 'address',
@@ -52,6 +50,22 @@ const WORKPLACE_FIELD_MAP: Record<string, keyof RawWorkplace> = {
   'positionShift': 'positionShift', 'escala': 'positionShift', 'Escala': 'positionShift',
   'positionCount': 'positionCount', 'quantidade': 'positionCount', 'Quantidade': 'positionCount', 'Vagas': 'positionCount',
 }
+
+const ALLOCATION_MAP: Record<string, keyof RawAllocation> = {
+  'CPF Colaborador': 'employeeCpf', 'CPF': 'employeeCpf', 'cpf': 'employeeCpf',
+  'Posto': 'workplaceName', 'Nome do Posto': 'workplaceName', 'posto': 'workplaceName',
+  'Funcao': 'positionRole', 'Cargo': 'positionRole', 'funcao': 'positionRole',
+  'Data Inicio': 'startDate', 'Inicio': 'startDate', 'startDate': 'startDate',
+}
+
+const VACATION_MAP: Record<string, keyof RawVacationSchedule> = {
+  'CPF Colaborador': 'employeeCpf', 'CPF': 'employeeCpf', 'cpf': 'employeeCpf',
+  'Data Inicio': 'startDate', 'Inicio': 'startDate', 'startDate': 'startDate',
+  'Data Fim': 'endDate', 'Fim': 'endDate', 'endDate': 'endDate',
+  'Dias': 'days', 'dias': 'days', 'Total Dias': 'days',
+}
+
+// ─── Helpers ─────────────────────────────────────────
 
 function mapRow<T>(row: any, fieldMap: Record<string, keyof T>): Partial<T> {
   const result: any = {}
@@ -79,19 +93,23 @@ function parseBuffer<T>(buffer: Buffer, ext: string, fieldMap: Record<string, ke
   throw new Error('Formato nao suportado (apenas .csv, .xlsx, .xls)')
 }
 
+function addInstructionSheet(wb: XLSX.WorkBook, instructions: string[][]) {
+  const ws = XLSX.utils.aoa_to_sheet(instructions)
+  ws['!cols'] = [{ wch: 25 }, { wch: 60 }]
+  XLSX.utils.book_append_sheet(wb, ws, 'Instrucoes')
+}
+
+// ─── Import Service ──────────────────────────────────
+
 export class ImportService {
-  static async parseEmployees(buffer: Buffer, ext: string): Promise<RawEmployee[]> {
-    return parseBuffer<RawEmployee>(buffer, ext, EMPLOYEE_FIELD_MAP)
-  }
+  // Parsers
+  static async parseEmployees(buffer: Buffer, ext: string) { return parseBuffer<RawEmployee>(buffer, ext, EMPLOYEE_MAP) }
+  static async parseWorkplaces(buffer: Buffer, ext: string) { return parseBuffer<RawWorkplace>(buffer, ext, WORKPLACE_MAP) }
+  static async parseAllocations(buffer: Buffer, ext: string) { return parseBuffer<RawAllocation>(buffer, ext, ALLOCATION_MAP) }
+  static async parseVacations(buffer: Buffer, ext: string) { return parseBuffer<RawVacationSchedule>(buffer, ext, VACATION_MAP) }
+  static async parseFile(buffer: Buffer, ext: string) { return this.parseEmployees(buffer, ext) }
 
-  static async parseWorkplaces(buffer: Buffer, ext: string): Promise<RawWorkplace[]> {
-    return parseBuffer<RawWorkplace>(buffer, ext, WORKPLACE_FIELD_MAP)
-  }
-
-  // Alias mantido para compatibilidade
-  static async parseFile(buffer: Buffer, ext: string): Promise<RawEmployee[]> {
-    return this.parseEmployees(buffer, ext)
-  }
+  // ─── Templates ────────────────────────────────────
 
   static generateEmployeeTemplate(): Buffer {
     const wb = XLSX.utils.book_new()
@@ -99,10 +117,30 @@ export class ImportService {
       ['Nome Completo', 'CPF', 'Data Admissao', 'Telefone', 'Cargo', 'Tipo Colaborador', 'Empresa', 'Departamento', 'Posto', 'Escala', 'Salario', 'Matricula'],
       ['Carlos Silva', '111.222.333-44', '15/03/2022', '(61) 99999-9999', 'Agente de Portaria', 'EFETIVO', 'Green House', 'Operacional', 'INEP - Sede', '12x36', '2200', 'GH-001'],
       ['Ana Santos', '555.666.777-88', '01/07/2021', '(61) 98888-8888', 'Recepcionista', 'EFETIVO', 'Green House', 'Administrativo', 'TRF', '8h', '1800', 'GH-002'],
+      ['Roberto Dias', '999.888.777-66', '15/01/2024', '(61) 97777-7777', 'Ferista Geral', 'FERISTA', 'Green House', 'Operacional', '', '', '2200', 'GH-003'],
     ]
     const ws = XLSX.utils.aoa_to_sheet(data)
     ws['!cols'] = data[0].map(() => ({ wch: 20 }))
     XLSX.utils.book_append_sheet(wb, ws, 'Colaboradores')
+    addInstructionSheet(wb, [
+      ['Campo', 'Descricao'],
+      ['Nome Completo', 'Nome completo do colaborador (obrigatorio)'],
+      ['CPF', 'CPF com ou sem pontuacao (obrigatorio)'],
+      ['Data Admissao', 'Formato DD/MM/AAAA (obrigatorio)'],
+      ['Telefone', 'Telefone com DDD para WhatsApp (opcional)'],
+      ['Cargo', 'Funcao exercida (opcional, padrao: Colaborador)'],
+      ['Tipo Colaborador', 'EFETIVO, INTERMITENTE ou FERISTA (padrao: EFETIVO)'],
+      ['Empresa', 'Nome da empresa/filial (opcional)'],
+      ['Departamento', 'Centro de custo ou contrato (opcional)'],
+      ['Posto', 'Nome do posto de servico (opcional)'],
+      ['Escala', 'Jornada: 8h, 12x36, 6x1, etc (opcional)'],
+      ['Salario', 'Valor numerico sem R$ (opcional, ex: 2200)'],
+      ['Matricula', 'Numero de registro interno (opcional)'],
+      ['', ''],
+      ['REGRAS', ''],
+      ['CPF duplicado', 'Se o CPF ja existir, os dados serao atualizados (nao duplica)'],
+      ['Campos vazios', 'Campos vazios sao ignorados na atualizacao'],
+    ])
     return Buffer.from(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }))
   }
 
@@ -117,6 +155,70 @@ export class ImportService {
     const ws = XLSX.utils.aoa_to_sheet(data)
     ws['!cols'] = data[0].map(() => ({ wch: 22 }))
     XLSX.utils.book_append_sheet(wb, ws, 'Postos')
+    addInstructionSheet(wb, [
+      ['Campo', 'Descricao'],
+      ['Nome do Posto', 'Nome do local de trabalho (obrigatorio)'],
+      ['Cliente', 'Empresa contratante do servico (opcional)'],
+      ['Endereco', 'Endereco fisico do posto (opcional)'],
+      ['Cidade', 'Cidade do posto (opcional)'],
+      ['Equipe Minima', 'Minimo de colaboradores necessarios (padrao: 1)'],
+      ['Funcao', 'Cargo/funcao neste posto (ex: Vigilante, Recepcionista)'],
+      ['Escala', 'Padrao de jornada (8h, 12x36, etc)'],
+      ['Vagas', 'Quantidade de vagas para esta funcao (padrao: 1)'],
+      ['', ''],
+      ['REGRAS', ''],
+      ['Mesmo posto', 'Varias linhas com o mesmo Nome criam funcoes diferentes no mesmo posto'],
+      ['Posto existente', 'Se o posto ja existir, apenas novas funcoes sao adicionadas'],
+    ])
+    return Buffer.from(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }))
+  }
+
+  static generateAllocationTemplate(): Buffer {
+    const wb = XLSX.utils.book_new()
+    const data = [
+      ['CPF Colaborador', 'Posto', 'Funcao', 'Data Inicio'],
+      ['111.222.333-44', 'INEP - Sede', 'Agente de Portaria', '01/04/2026'],
+      ['555.666.777-88', 'TRF 1a Regiao', 'Recepcionista', '01/04/2026'],
+    ]
+    const ws = XLSX.utils.aoa_to_sheet(data)
+    ws['!cols'] = data[0].map(() => ({ wch: 22 }))
+    XLSX.utils.book_append_sheet(wb, ws, 'Alocacoes')
+    addInstructionSheet(wb, [
+      ['Campo', 'Descricao'],
+      ['CPF Colaborador', 'CPF do colaborador a ser alocado (obrigatorio)'],
+      ['Posto', 'Nome exato do posto de trabalho (obrigatorio, deve existir no sistema)'],
+      ['Funcao', 'Nome exato da funcao/cargo no posto (obrigatorio, deve existir no posto)'],
+      ['Data Inicio', 'Data de inicio da alocacao, formato DD/MM/AAAA (obrigatorio)'],
+      ['', ''],
+      ['REGRAS', ''],
+      ['Colaborador ja alocado', 'Se o colaborador ja tiver alocacao ativa, sera encerrada antes de criar a nova'],
+      ['Posto/Funcao', 'Devem existir previamente no sistema. Importe postos antes de alocacoes'],
+    ])
+    return Buffer.from(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }))
+  }
+
+  static generateVacationTemplate(): Buffer {
+    const wb = XLSX.utils.book_new()
+    const data = [
+      ['CPF Colaborador', 'Data Inicio', 'Data Fim', 'Dias'],
+      ['111.222.333-44', '01/07/2026', '30/07/2026', '30'],
+      ['555.666.777-88', '15/08/2026', '29/08/2026', '15'],
+    ]
+    const ws = XLSX.utils.aoa_to_sheet(data)
+    ws['!cols'] = data[0].map(() => ({ wch: 22 }))
+    XLSX.utils.book_append_sheet(wb, ws, 'Ferias')
+    addInstructionSheet(wb, [
+      ['Campo', 'Descricao'],
+      ['CPF Colaborador', 'CPF do colaborador (obrigatorio, deve existir no sistema)'],
+      ['Data Inicio', 'Primeiro dia das ferias, formato DD/MM/AAAA (obrigatorio)'],
+      ['Data Fim', 'Ultimo dia das ferias, formato DD/MM/AAAA (obrigatorio)'],
+      ['Dias', 'Total de dias (opcional, calculado automaticamente se vazio)'],
+      ['', ''],
+      ['REGRAS', ''],
+      ['Validacao CLT', 'Minimo 5 dias, nao pode iniciar em quinta/sexta (Art. 134)'],
+      ['Saldo', 'O sistema verifica se o colaborador tem saldo disponivel'],
+      ['Status', 'Ferias importadas entram como PENDING (aguardando aprovacao do RH)'],
+    ])
     return Buffer.from(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }))
   }
 }

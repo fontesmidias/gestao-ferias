@@ -4,9 +4,69 @@ import { AuditService } from '../../../../modules/shared/audit-service'
 import { WhatsAppService } from '../../../../modules/notifications/whatsapp-service'
 import { ZapSignService } from '../../../../modules/integrations/zapsign-service'
 import { SignatureService } from '../../../../modules/signatures/signature-service'
+import { ImportService } from '../../../../modules/employees/import-service'
+import { SanitizationService } from '../../../../modules/employees/sanitization-service'
 import { differenceInDays, parseISO, format } from 'date-fns'
 
 const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
+  // Download template de programacao de ferias
+  fastify.get('/import/template', {
+    onRequest: [fastify.requireAuth]
+  }, async (request, reply) => {
+    const buffer = ImportService.generateVacationTemplate()
+    return reply
+      .header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+      .header('Content-Disposition', 'attachment; filename="modelo-ferias.xlsx"')
+      .send(buffer)
+  })
+
+  // Importar programacao de ferias em massa
+  fastify.post('/import', {
+    onRequest: [fastify.requireAuth, fastify.requireAdmin]
+  }, async (request, reply) => {
+    const data = await request.file()
+    if (!data) return reply.code(400).send({ error: 'Bad Request', message: 'Nenhum arquivo enviado.' })
+
+    const buffer = await data.toBuffer()
+    const ext = data.filename.split('.').pop()?.toLowerCase() || ''
+    const { tenantId } = request.user as any
+
+    try {
+      const rows = await ImportService.parseVacations(buffer, ext)
+      let created = 0; let errors = 0; const errorDetails: string[] = []
+
+      for (const row of rows) {
+        try {
+          if (!row.employeeCpf || !row.startDate || !row.endDate) {
+            errors++; errorDetails.push(`Linha com dados incompletos`); continue
+          }
+          const cpf = SanitizationService.sanitizeCPF(row.employeeCpf)
+          const employee = await fastify.prisma.employee.findFirst({ where: { cpf, tenantId } })
+          if (!employee) { errors++; errorDetails.push(`CPF ${row.employeeCpf} nao encontrado`); continue }
+
+          const start = SanitizationService.sanitizeDate(row.startDate)
+          const end = SanitizationService.sanitizeDate(row.endDate)
+          const days = row.days ? parseInt(row.days) : differenceInDays(end, start) + 1
+
+          await fastify.prisma.vacationRequest.create({
+            data: { tenantId, employeeId: employee.id, startDate: start, endDate: end, days, status: 'PENDING' }
+          })
+          created++
+        } catch (err: any) {
+          errors++; errorDetails.push(err.message)
+        }
+      }
+
+      return {
+        message: `Importacao concluida: ${created} ferias criadas (PENDING), ${errors} erros.`,
+        created, errors,
+        errorDetails: errorDetails.slice(0, 10)
+      }
+    } catch (error: any) {
+      return reply.code(400).send({ error: 'Import Error', message: error.message })
+    }
+  })
+
   // Criar solicitação de férias (Story 3.2)
   fastify.post('/', {
     onRequest: [fastify.requireAuth],

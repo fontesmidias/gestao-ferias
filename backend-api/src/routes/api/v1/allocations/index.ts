@@ -1,6 +1,81 @@
 import { FastifyPluginAsync } from 'fastify'
+import { ImportService } from '../../../../modules/employees/import-service'
+import { SanitizationService } from '../../../../modules/employees/sanitization-service'
 
 const allocations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
+  // Download template de alocacoes
+  fastify.get('/import/template', {
+    onRequest: [fastify.requireAuth]
+  }, async (request, reply) => {
+    const buffer = ImportService.generateAllocationTemplate()
+    return reply
+      .header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+      .header('Content-Disposition', 'attachment; filename="modelo-alocacoes.xlsx"')
+      .send(buffer)
+  })
+
+  // Importar alocacoes em massa
+  fastify.post('/import', {
+    onRequest: [fastify.requireAuth, fastify.requireAdmin]
+  }, async (request, reply) => {
+    const data = await request.file()
+    if (!data) return reply.code(400).send({ error: 'Bad Request', message: 'Nenhum arquivo enviado.' })
+
+    const buffer = await data.toBuffer()
+    const ext = data.filename.split('.').pop()?.toLowerCase() || ''
+    const { tenantId } = request.user as any
+
+    try {
+      const rows = await ImportService.parseAllocations(buffer, ext)
+      let created = 0; let errors = 0
+
+      for (const row of rows) {
+        try {
+          if (!row.employeeCpf || !row.workplaceName || !row.positionRole) { errors++; continue }
+          const cpf = SanitizationService.sanitizeCPF(row.employeeCpf)
+
+          const employee = await fastify.prisma.employee.findFirst({ where: { cpf, tenantId } })
+          if (!employee) { errors++; continue }
+
+          const workplace = await fastify.prisma.workplace.findFirst({ where: { name: row.workplaceName, tenantId } })
+          if (!workplace) { errors++; continue }
+
+          const position = await fastify.prisma.workplacePosition.findFirst({
+            where: { workplaceId: workplace.id, role: row.positionRole, tenantId }
+          })
+          if (!position) { errors++; continue }
+
+          // Encerrar alocacao ativa anterior
+          await fastify.prisma.workplaceAllocation.updateMany({
+            where: { employeeId: employee.id, status: 'ACTIVE', tenantId },
+            data: { status: 'ENDED', endDate: new Date() }
+          })
+
+          await fastify.prisma.workplaceAllocation.create({
+            data: {
+              employeeId: employee.id,
+              workplacePositionId: position.id,
+              startDate: SanitizationService.sanitizeDate(row.startDate),
+              status: 'ACTIVE',
+              tenantId,
+            }
+          })
+
+          await fastify.prisma.employee.update({
+            where: { id: employee.id },
+            data: { workplaceId: workplace.id }
+          })
+
+          created++
+        } catch { errors++ }
+      }
+
+      return { message: `Importacao concluida: ${created} alocacoes criadas, ${errors} erros.`, created, errors }
+    } catch (error: any) {
+      return reply.code(400).send({ error: 'Import Error', message: error.message })
+    }
+  })
+
   // Alocar colaborador em uma posição do posto
   fastify.post('/', {
     onRequest: [fastify.requireAuth, fastify.requireAdmin],
