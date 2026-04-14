@@ -265,13 +265,31 @@ export default function EmployeesPage() {
                 >
                   <Download className="w-5 h-5" />
                 </button>
-                <a
-                  href={`${process.env.NEXT_PUBLIC_API_URL}/employees/import/template`}
-                  className="p-2 border border-slate-700 bg-slate-800 text-emerald-400 rounded-lg hover:bg-slate-700 hover:text-emerald-300 transition-colors"
+                <button
+                  onClick={async () => {
+                    try {
+                      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/employees/import/template`, {
+                        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                      })
+                      if (!res.ok) throw new Error('Erro ao baixar template')
+                      const blob = await res.blob()
+                      const url = window.URL.createObjectURL(blob)
+                      const a = document.createElement('a')
+                      a.href = url
+                      a.download = 'modelo-colaboradores.xlsx'
+                      document.body.appendChild(a)
+                      a.click()
+                      document.body.removeChild(a)
+                      window.URL.revokeObjectURL(url)
+                    } catch (err) {
+                      alert('Erro ao baixar template: ' + (err instanceof Error ? err.message : 'Erro desconhecido'))
+                    }
+                  }}
+                  className="p-2 border border-slate-700 bg-slate-800 text-emerald-400 rounded-lg hover:bg-slate-700 hover:text-emerald-300 transition-colors cursor-pointer"
                   title="Baixar modelo de planilha para importar colaboradores"
                 >
                   <FileSpreadsheet className="w-5 h-5" />
-                </a>
+                </button>
                 <label
                   className="p-2 border border-slate-700 bg-slate-800 text-sky-400 rounded-lg hover:bg-slate-700 hover:text-sky-300 transition-colors cursor-pointer"
                   title="Importar colaboradores via planilha (CSV/Excel)"

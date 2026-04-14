@@ -140,13 +140,31 @@ export default function ApprovalsPage() {
             <div className="p-6 border-b border-white/5 flex flex-col md:flex-row items-center justify-between gap-4">
               <h3 className="font-bold text-lg">Solicitações Registradas ({filtered.length})</h3>
               <div className="flex items-center gap-2">
-                <a
-                  href={`${process.env.NEXT_PUBLIC_API_URL}/vacations/import/template`}
-                  className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-700 text-emerald-400 rounded-lg hover:bg-slate-800 text-xs font-bold"
+                <button
+                  onClick={async () => {
+                    try {
+                      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/vacations/import/template`, {
+                        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                      })
+                      if (!res.ok) throw new Error('Erro ao baixar template')
+                      const blob = await res.blob()
+                      const url = window.URL.createObjectURL(blob)
+                      const a = document.createElement('a')
+                      a.href = url
+                      a.download = 'modelo-ferias.xlsx'
+                      document.body.appendChild(a)
+                      a.click()
+                      document.body.removeChild(a)
+                      window.URL.revokeObjectURL(url)
+                    } catch (err) {
+                      alert('Erro ao baixar template: ' + (err instanceof Error ? err.message : 'Erro desconhecido'))
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-700 text-emerald-400 rounded-lg hover:bg-slate-800 text-xs font-bold cursor-pointer"
                   title="Baixar modelo de planilha para programação de férias em massa"
                 >
                   <FileSpreadsheet className="w-3.5 h-3.5" /> Modelo
-                </a>
+                </button>
                 <label className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-700 text-sky-400 rounded-lg hover:bg-slate-800 text-xs font-bold cursor-pointer"
                   title="Importar programação de férias via planilha">
                   <Upload className="w-3.5 h-3.5" /> Importar Férias

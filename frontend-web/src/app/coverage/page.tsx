@@ -230,13 +230,31 @@ export default function CoveragePage() {
 
           {/* Actions + Month Selector */}
           <div className="flex items-center gap-2">
-            <a
-              href={`${process.env.NEXT_PUBLIC_API_URL}/allocations/import/template`}
-              className="flex items-center gap-1.5 px-3 py-2 border border-slate-700 text-emerald-400 rounded-xl hover:bg-slate-800 text-xs font-bold"
+            <button
+              onClick={async () => {
+                try {
+                  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/allocations/import/template`, {
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                  })
+                  if (!res.ok) throw new Error('Erro ao baixar template')
+                  const blob = await res.blob()
+                  const url = window.URL.createObjectURL(blob)
+                  const a = document.createElement('a')
+                  a.href = url
+                  a.download = 'modelo-alocacoes.xlsx'
+                  document.body.appendChild(a)
+                  a.click()
+                  document.body.removeChild(a)
+                  window.URL.revokeObjectURL(url)
+                } catch (err) {
+                  alert('Erro ao baixar template: ' + (err instanceof Error ? err.message : 'Erro desconhecido'))
+                }
+              }}
+              className="flex items-center gap-1.5 px-3 py-2 border border-slate-700 text-emerald-400 rounded-xl hover:bg-slate-800 text-xs font-bold cursor-pointer"
               title="Baixar modelo de planilha de alocacoes"
             >
               <FileSpreadsheet className="w-3.5 h-3.5" /> Modelo Alocacoes
-            </a>
+            </button>
             <label className="flex items-center gap-1.5 px-3 py-2 border border-slate-700 text-sky-400 rounded-xl hover:bg-slate-800 text-xs font-bold cursor-pointer"
               title="Importar alocacoes via planilha">
               <Upload className="w-3.5 h-3.5" /> Importar
