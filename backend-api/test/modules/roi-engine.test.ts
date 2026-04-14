@@ -44,4 +44,30 @@ test('ROIEngine - Financial Impact Calculation', async (t) => {
     assert.strictEqual(impact.replacementCost, 200) // 20% of 1000
     assert.strictEqual(impact.totalContingency, 1640)
   })
+
+  await t.test('Should return all zeros for salary of 0', () => {
+    const impact = ROIEngine.calculateImpact(0, 30)
+
+    assert.strictEqual(impact.baseAmount, 0)
+    assert.strictEqual(impact.bonusOneThird, 0)
+    assert.strictEqual(impact.fgts, 0)
+    assert.strictEqual(impact.replacementCost, 0)
+    assert.strictEqual(impact.totalContingency, 0)
+  })
+
+  await t.test('Should match known values for salary 3000 and 30 days', () => {
+    const impact = ROIEngine.calculateImpact(3000, 30)
+
+    assert.strictEqual(impact.baseAmount, 3000)
+    assert.strictEqual(impact.bonusOneThird, 1000)
+    assert.strictEqual(impact.fgts, 320)
+    assert.strictEqual(impact.replacementCost, 600)
+  })
+
+  await t.test('totalContingency should equal sum of all components', () => {
+    const impact = ROIEngine.calculateImpact(5000, 20)
+
+    const expectedTotal = impact.baseAmount + impact.bonusOneThird + impact.fgts + impact.replacementCost
+    assert.strictEqual(impact.totalContingency, ROIEngine['round'](expectedTotal))
+  })
 })
