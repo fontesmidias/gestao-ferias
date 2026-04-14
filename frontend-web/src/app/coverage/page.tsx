@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { Shield, AlertTriangle, Users, Calendar, ChevronLeft, ChevronRight, UserCheck, X } from 'lucide-react'
+import { Shield, AlertTriangle, Users, Calendar, ChevronLeft, ChevronRight, UserCheck, X, FileSpreadsheet, Upload } from 'lucide-react'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { HttpClient } from '@/lib/api-client'
@@ -228,7 +228,37 @@ export default function CoveragePage() {
             </p>
           </div>
 
-          {/* Month Selector */}
+          {/* Actions + Month Selector */}
+          <div className="flex items-center gap-2">
+            <a
+              href={`${process.env.NEXT_PUBLIC_API_URL}/allocations/import/template`}
+              className="flex items-center gap-1.5 px-3 py-2 border border-slate-700 text-emerald-400 rounded-xl hover:bg-slate-800 text-xs font-bold"
+              title="Baixar modelo de planilha de alocacoes"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5" /> Modelo Alocacoes
+            </a>
+            <label className="flex items-center gap-1.5 px-3 py-2 border border-slate-700 text-sky-400 rounded-xl hover:bg-slate-800 text-xs font-bold cursor-pointer"
+              title="Importar alocacoes via planilha">
+              <Upload className="w-3.5 h-3.5" /> Importar
+              <input type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={async (e) => {
+                const file = e.target.files?.[0]
+                if (!file) return
+                const formData = new FormData()
+                formData.append('file', file)
+                try {
+                  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/allocations/import`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+                    body: formData
+                  })
+                  const data = await res.json()
+                  if (res.ok) { toast.success(data.message); fetchData() }
+                  else { toast.error(data.message || 'Erro na importacao') }
+                } catch { toast.error('Erro ao importar') }
+                e.target.value = ''
+              }} />
+            </label>
+          </div>
           <div className="flex items-center gap-2 bg-slate-900/50 border border-white/5 p-2 rounded-xl">
             <button
               onClick={goToPrevMonth}

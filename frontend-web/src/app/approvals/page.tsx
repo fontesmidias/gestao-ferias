@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Check, X, Clock, Filter, Search, RotateCcw, Edit3, Trash2, ShieldAlert, FileSignature, ExternalLink } from 'lucide-react'
+import { Check, X, Clock, Filter, Search, RotateCcw, Edit3, Trash2, ShieldAlert, FileSignature, ExternalLink, FileSpreadsheet, Upload } from 'lucide-react'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { HttpClient } from '@/lib/api-client'
@@ -139,6 +139,36 @@ export default function ApprovalsPage() {
           <div className="glass-card rounded-2xl overflow-hidden border border-white/5 pb-20">
             <div className="p-6 border-b border-white/5 flex flex-col md:flex-row items-center justify-between gap-4">
               <h3 className="font-bold text-lg">Solicitações Registradas ({filtered.length})</h3>
+              <div className="flex items-center gap-2">
+                <a
+                  href={`${process.env.NEXT_PUBLIC_API_URL}/vacations/import/template`}
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-700 text-emerald-400 rounded-lg hover:bg-slate-800 text-xs font-bold"
+                  title="Baixar modelo de planilha para programação de férias em massa"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5" /> Modelo
+                </a>
+                <label className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-700 text-sky-400 rounded-lg hover:bg-slate-800 text-xs font-bold cursor-pointer"
+                  title="Importar programação de férias via planilha">
+                  <Upload className="w-3.5 h-3.5" /> Importar Férias
+                  <input type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={async (e) => {
+                    const file = e.target.files?.[0]
+                    if (!file) return
+                    const formData = new FormData()
+                    formData.append('file', file)
+                    try {
+                      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/vacations/import`, {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+                        body: formData
+                      })
+                      const data = await res.json()
+                      if (res.ok) { toast.success(data.message); fetchRequests() }
+                      else { toast.error(data.message || 'Erro na importação') }
+                    } catch { toast.error('Erro ao importar') }
+                    e.target.value = ''
+                  }} />
+                </label>
+              </div>
               <div className="flex items-center gap-3 w-full md:w-auto">
                 <div className="relative flex-1 md:w-64">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
