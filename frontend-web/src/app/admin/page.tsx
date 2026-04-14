@@ -5,7 +5,7 @@ import { HttpClient } from '@/lib/api-client'
 import Link from 'next/link'
 import {
   Shield, Building2, Users, UserPlus, X, Edit3, Plus,
-  Briefcase, CalendarDays, Eye, LogIn, Trash2
+  Briefcase, CalendarDays, Eye, LogIn, Trash2, UserCog
 } from 'lucide-react'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { toast } from 'sonner'
@@ -52,6 +52,11 @@ export default function AdminPage() {
   })
   const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'ADMIN' })
   const [switchingTenantId, setSwitchingTenantId] = useState<string | null>(null)
+
+  // Profile modal
+  const [showProfileModal, setShowProfileModal] = useState(false)
+  const [profileForm, setProfileForm] = useState({ name: '', email: '', password: '' })
+  const [savingProfile, setSavingProfile] = useState(false)
 
   useEffect(() => {
     if (user?.role === 'SUPERADMIN') fetchData()
@@ -140,6 +145,28 @@ export default function AdminPage() {
     }
   }
 
+  const openProfileModal = () => {
+    setProfileForm({ name: user?.name || '', email: user?.email || '', password: '' })
+    setShowProfileModal(true)
+  }
+
+  const saveProfile = async () => {
+    try {
+      setSavingProfile(true)
+      const payload: any = {}
+      if (profileForm.name) payload.name = profileForm.name
+      if (profileForm.email) payload.email = profileForm.email
+      if (profileForm.password) payload.password = profileForm.password
+      await HttpClient.patch('/admin/profile', payload)
+      toast.success('Perfil atualizado com sucesso!')
+      setShowProfileModal(false)
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao atualizar perfil.')
+    } finally {
+      setSavingProfile(false)
+    }
+  }
+
   if (user?.role !== 'SUPERADMIN') {
     return (
       <div className="flex-1 flex items-center justify-center text-slate-400">
@@ -167,7 +194,8 @@ export default function AdminPage() {
     <div className="flex-1 p-8 overflow-auto bg-dashboard">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <div className="mb-8">
+        <div className="mb-8 flex items-start justify-between">
+        <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-3">
             <Shield className="w-7 h-7 text-amber-500" />
             Sala de Controle
@@ -175,6 +203,13 @@ export default function AdminPage() {
           <p className="text-slate-400 mt-1">
             Visão geral de todas as empresas, usuários e métricas da plataforma.
           </p>
+        </div>
+        <button
+          onClick={openProfileModal}
+          className="flex items-center gap-2 px-4 py-2 bg-slate-700/50 text-slate-300 rounded-xl hover:bg-slate-700 font-bold text-sm transition-colors border border-white/10"
+        >
+          <UserCog className="w-4 h-4" /> Meu Perfil
+        </button>
         </div>
 
         {/* KPI Cards */}
@@ -427,6 +462,76 @@ export default function AdminPage() {
                 className="flex-1 py-2.5 bg-primary text-white rounded-xl hover:bg-primary/80 font-bold text-sm disabled:opacity-50"
               >
                 {editingTenant ? 'Salvar Alterações' : 'Criar Empresa'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Meu Perfil */}
+      {showProfileModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-slate-800 border border-white/10 rounded-2xl p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <UserCog className="w-5 h-5 text-amber-400" /> Meu Perfil
+              </h2>
+              <button onClick={() => setShowProfileModal(false)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="flex items-center gap-1.5 text-sm font-bold text-slate-400 mb-1">
+                  Nome
+                  <InfoTooltip text="Seu nome de exibição no sistema." />
+                </label>
+                <input
+                  type="text"
+                  value={profileForm.name}
+                  onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="flex items-center gap-1.5 text-sm font-bold text-slate-400 mb-1">
+                  Email
+                  <InfoTooltip text="Seu email de login." />
+                </label>
+                <input
+                  type="email"
+                  value={profileForm.email}
+                  onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="flex items-center gap-1.5 text-sm font-bold text-slate-400 mb-1">
+                  Nova Senha
+                  <InfoTooltip text="Deixe em branco para manter a senha atual." />
+                </label>
+                <input
+                  type="password"
+                  value={profileForm.password}
+                  onChange={(e) => setProfileForm({ ...profileForm, password: e.target.value })}
+                  placeholder="Deixe em branco para não alterar"
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowProfileModal(false)}
+                className="flex-1 py-2.5 border border-white/10 text-slate-400 rounded-xl hover:bg-white/5 font-bold text-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={saveProfile}
+                disabled={savingProfile || (!profileForm.name && !profileForm.email && !profileForm.password)}
+                className="flex-1 py-2.5 bg-primary text-white rounded-xl hover:bg-primary/80 font-bold text-sm disabled:opacity-50"
+              >
+                {savingProfile ? 'Salvando...' : 'Salvar Perfil'}
               </button>
             </div>
           </div>

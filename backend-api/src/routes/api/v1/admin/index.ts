@@ -287,6 +287,42 @@ const admin: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     })
   })
 
+  // ─── Perfil do SuperAdmin ──────────────────────────────
+
+  fastify.patch('/profile', {
+    onRequest: [fastify.requireAuth, fastify.requireSuperAdmin],
+    schema: {
+      body: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', minLength: 2 },
+          email: { type: 'string', format: 'email' },
+          password: { type: 'string', minLength: 6 }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const { userId } = request.user as any
+    const { name, email, password } = request.body as { name?: string; email?: string; password?: string }
+
+    const data: any = {}
+    if (name !== undefined) data.name = name
+    if (email !== undefined) data.email = email
+    if (password !== undefined) data.passwordHash = await bcrypt.hash(password, 10)
+
+    if (Object.keys(data).length === 0) {
+      return reply.code(400).send({ error: 'Nenhum campo para atualizar.' })
+    }
+
+    const updated = await fastify.prisma.user.update({
+      where: { id: userId },
+      data,
+      select: { id: true, name: true, email: true, role: true }
+    })
+
+    return updated
+  })
+
   // ─── Stats globais ────────────────────────────────────
 
   fastify.get('/stats', {

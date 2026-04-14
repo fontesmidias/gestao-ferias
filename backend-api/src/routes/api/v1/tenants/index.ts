@@ -89,14 +89,17 @@ const tenants: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     const user = request.user as any
     const payload = request.body as any
 
-    const { openaiKey, anthropicKey, geminiKey, smtpHost, smtpPort, smtpUser, smtpPass, smtpFrom } = payload
-    
+    const { openaiKey, anthropicKey, geminiKey, groqKey, llmProvider, llmModel, smtpHost, smtpPort, smtpUser, smtpPass, smtpFrom } = payload
+
     await fastify.prisma.tenant.update({
       where: { id: user.tenantId },
       data: {
         openaiKey: openaiKey !== undefined ? openaiKey : undefined,
         anthropicKey: anthropicKey !== undefined ? anthropicKey : undefined,
         geminiKey: geminiKey !== undefined ? geminiKey : undefined,
+        groqKey: groqKey !== undefined ? groqKey : undefined,
+        llmProvider: llmProvider !== undefined ? llmProvider : undefined,
+        llmModel: llmModel !== undefined ? llmModel : undefined,
         smtpHost: smtpHost !== undefined ? smtpHost : undefined,
         smtpPort: smtpPort !== undefined ? Number(smtpPort) : undefined,
         smtpUser: smtpUser !== undefined ? smtpUser : undefined,
@@ -131,6 +134,9 @@ const tenants: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       openaiKey: maskSecret(tenant.openaiKey),
       anthropicKey: maskSecret(tenant.anthropicKey),
       geminiKey: maskSecret(tenant.geminiKey),
+      groqKey: maskSecret(tenant.groqKey),
+      llmProvider: tenant.llmProvider,
+      llmModel: tenant.llmModel,
     }
   })
 }

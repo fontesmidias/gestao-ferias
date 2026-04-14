@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { HttpClient } from '@/lib/api-client'
-import { Settings, Save, Server, Building2, KeyRound } from 'lucide-react'
+import { Settings, Save, Server, Building2, KeyRound, BrainCircuit, ExternalLink } from 'lucide-react'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { toast } from 'sonner'
@@ -15,17 +15,57 @@ export default function SettingsPage() {
   const [showOpenai, setShowOpenai] = useState(false)
   const [showAnthropic, setShowAnthropic] = useState(false)
   const [showGemini, setShowGemini] = useState(false)
+  const [showGroq, setShowGroq] = useState(false)
   const [showSmtpPass, setShowSmtpPass] = useState(false)
   const [formData, setFormData] = useState({
     openaiKey: '',
     anthropicKey: '',
     geminiKey: '',
+    groqKey: '',
+    llmProvider: '',
+    llmModel: '',
     smtpHost: '',
     smtpPort: '',
     smtpUser: '',
     smtpPass: '',
     smtpFrom: ''
   })
+
+  const providerModels: Record<string, { label: string; models: { value: string; label: string }[]; tooltip: string }> = {
+    openai: {
+      label: 'OpenAI',
+      models: [
+        { value: 'gpt-4o', label: 'GPT-4o' },
+        { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
+        { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
+      ],
+      tooltip: 'Modelos GPT da OpenAI. GPT-4o é o mais capaz, 4o-mini é mais barato e rápido.',
+    },
+    anthropic: {
+      label: 'Anthropic',
+      models: [
+        { value: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4' },
+        { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5' },
+      ],
+      tooltip: 'Modelos Claude da Anthropic. Sonnet é equilibrado, Haiku é mais rápido e barato.',
+    },
+    gemini: {
+      label: 'Gemini',
+      models: [
+        { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
+        { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' },
+      ],
+      tooltip: 'Modelos do Google. Pro é mais capaz, Flash é mais rápido.',
+    },
+    groq: {
+      label: 'Groq (Gratuito)',
+      models: [
+        { value: 'llama-3.3-70b-versatile', label: 'LLaMA 3.3 70B' },
+        { value: 'mixtral-8x7b-32768', label: 'Mixtral 8x7B' },
+      ],
+      tooltip: 'Acesso GRATUITO com limite de requisições. Usa modelos open-source (LLaMA, Mixtral). Ideal para testar sem custo. Crie sua chave em console.groq.com',
+    },
+  }
 
   useEffect(() => {
     fetchSettings()
@@ -39,6 +79,9 @@ export default function SettingsPage() {
         openaiKey: data.openaiKey || '',
         anthropicKey: data.anthropicKey || '',
         geminiKey: data.geminiKey || '',
+        groqKey: data.groqKey || '',
+        llmProvider: data.llmProvider || '',
+        llmModel: data.llmModel || '',
         smtpHost: data.smtpHost || '',
         smtpPort: data.smtpPort || '',
         smtpUser: data.smtpUser || '',
@@ -176,6 +219,113 @@ export default function SettingsPage() {
                     </button>
                   </div>
                 </div>
+              </div>
+            </div>
+
+            {/* Configuração do Oráculo AI */}
+            <div className="glass-card p-8 rounded-2xl border border-white/5 relative overflow-hidden">
+              <div className="flex items-center gap-3 mb-6 border-b border-white/5 pb-4">
+                <div className="p-2 bg-purple-500/20 rounded-lg">
+                  <BrainCircuit className="w-5 h-5 text-purple-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">Configuração do Oráculo AI</h3>
+                  <p className="text-sm text-slate-400">Escolha qual provedor e modelo de IA o Oráculo usará. Se nenhum for selecionado, o sistema tentará todos na ordem: OpenAI, Anthropic, Gemini, Groq.</p>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                {/* Provider selector */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-3">
+                    Provedor de IA <InfoTooltip text="Selecione o provedor preferido. O sistema usará exclusivamente este provedor quando selecionado." />
+                  </label>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {Object.entries(providerModels).map(([key, config]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => {
+                          const newProvider = formData.llmProvider === key ? '' : key
+                          const defaultModel = newProvider ? config.models[0].value : ''
+                          setFormData({ ...formData, llmProvider: newProvider, llmModel: defaultModel })
+                        }}
+                        className={`relative p-4 rounded-xl border text-left transition-all ${
+                          formData.llmProvider === key
+                            ? 'border-primary bg-primary/10 ring-2 ring-primary/30'
+                            : 'border-white/10 bg-slate-900/50 hover:border-white/20'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className={`text-sm font-bold ${formData.llmProvider === key ? 'text-white' : 'text-slate-300'}`}>
+                            {config.label}
+                          </span>
+                          <InfoTooltip text={config.tooltip} />
+                        </div>
+                        {key === 'groq' && (
+                          <span className="inline-block mt-1 px-2 py-0.5 bg-emerald-500/20 text-emerald-400 text-[10px] font-bold rounded-full uppercase">
+                            Gratuito
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Model selector */}
+                {formData.llmProvider && providerModels[formData.llmProvider] && (
+                  <div>
+                    <label htmlFor="llmModel" className="block text-sm font-medium text-slate-300 mb-2">
+                      Modelo <InfoTooltip text="Escolha o modelo específico do provedor selecionado." />
+                    </label>
+                    <select
+                      id="llmModel"
+                      value={formData.llmModel}
+                      onChange={(e) => setFormData({ ...formData, llmModel: e.target.value })}
+                      className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-primary/50 transition-all outline-none"
+                    >
+                      {providerModels[formData.llmProvider].models.map((m) => (
+                        <option key={m.value} value={m.value}>{m.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Groq API Key (only when Groq is selected) */}
+                {formData.llmProvider === 'groq' && (
+                  <div>
+                    <label htmlFor="groqKey" className="block text-sm font-medium text-slate-300 mb-2">
+                      Groq API Key <InfoTooltip text="Chave de acesso à API da Groq. Gratuita com limites de requisições por minuto." />
+                    </label>
+                    <div className="relative">
+                      <input
+                        id="groqKey"
+                        type={showGroq ? "text" : "password"}
+                        value={formData.groqKey}
+                        onChange={handleChange}
+                        placeholder="gsk_..."
+                        className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 pr-12 text-white focus:ring-2 focus:ring-primary/50 transition-all outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowGroq(!showGroq)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-2xl hover:scale-110 transition-transform focus:outline-none"
+                        title={showGroq ? "Ocultar chave" : "Ver chave"}
+                      >
+                        {showGroq ? "🐵" : "🙈"}
+                      </button>
+                    </div>
+                    <a
+                      href="https://console.groq.com"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 mt-2 text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      Não tem chave? Crie gratuitamente em console.groq.com
+                    </a>
+                  </div>
+                )}
               </div>
             </div>
 

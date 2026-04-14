@@ -29,6 +29,9 @@ model Tenant {
   openaiKey    String?  @map("openai_key")
   anthropicKey String?  @map("anthropic_key")
   geminiKey    String?  @map("gemini_key")
+  llmProvider  String?  @map("llm_provider")
+  llmModel     String?  @map("llm_model")
+  groqKey      String?  @map("groq_key")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

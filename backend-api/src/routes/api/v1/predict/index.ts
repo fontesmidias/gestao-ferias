@@ -166,17 +166,17 @@ Cite artigos da CLT quando relevante (Art. 130, 134, 137).
 
 ${context}`
 
-    // Tentar OpenAI primeiro, depois Anthropic, depois Gemini
-    if (tenant.openaiKey) {
+    // Helper functions for each provider
+    async function callOpenAI(apiKey: string, model: string): Promise<{ answer: string; provider: string } | null> {
       try {
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${tenant.openaiKey}`
+            'Authorization': `Bearer ${apiKey}`
           },
           body: JSON.stringify({
-            model: 'gpt-4o-mini',
+            model,
             messages: [
               { role: 'system', content: systemPrompt },
               { role: 'user', content: question }
@@ -191,19 +191,20 @@ ${context}`
       } catch (err) {
         fastify.log.error(`[PREDICT] OpenAI error: ${err}`)
       }
+      return null
     }
 
-    if (tenant.anthropicKey) {
+    async function callAnthropic(apiKey: string, model: string): Promise<{ answer: string; provider: string } | null> {
       try {
         const response = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-api-key': tenant.anthropicKey,
+            'x-api-key': apiKey,
             'anthropic-version': '2023-06-01'
           },
           body: JSON.stringify({
-            model: 'claude-sonnet-4-20250514',
+            model,
             max_tokens: 1000,
             system: systemPrompt,
             messages: [{ role: 'user', content: question }]
@@ -216,12 +217,13 @@ ${context}`
       } catch (err) {
         fastify.log.error(`[PREDICT] Anthropic error: ${err}`)
       }
+      return null
     }
 
-    if (tenant.geminiKey) {
+    async function callGemini(apiKey: string, model: string): Promise<{ answer: string; provider: string } | null> {
       try {
         const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${tenant.geminiKey}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -237,11 +239,96 @@ ${context}`
       } catch (err) {
         fastify.log.error(`[PREDICT] Gemini error: ${err}`)
       }
+      return null
+    }
+
+    async function callGroq(apiKey: string, model: string): Promise<{ answer: string; provider: string } | null> {
+      try {
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            model,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: question }
+            ],
+            max_tokens: 1000
+          })
+        })
+        const data = await response.json() as any
+        if (data.choices?.[0]?.message?.content) {
+          return { answer: data.choices[0].message.content, provider: 'groq' }
+        }
+      } catch (err) {
+        fastify.log.error(`[PREDICT] Groq error: ${err}`)
+      }
+      return null
+    }
+
+    // If tenant has an explicit provider selected, use ONLY that provider
+    if (tenant.llmProvider) {
+      const selectedModel = tenant.llmModel
+      let result: { answer: string; provider: string } | null = null
+
+      switch (tenant.llmProvider) {
+        case 'openai':
+          if (tenant.openaiKey) {
+            result = await callOpenAI(tenant.openaiKey, selectedModel || 'gpt-4o-mini')
+          }
+          break
+        case 'anthropic':
+          if (tenant.anthropicKey) {
+            result = await callAnthropic(tenant.anthropicKey, selectedModel || 'claude-sonnet-4-20250514')
+          }
+          break
+        case 'gemini':
+          if (tenant.geminiKey) {
+            result = await callGemini(tenant.geminiKey, selectedModel || 'gemini-1.5-flash')
+          }
+          break
+        case 'groq':
+          if (tenant.groqKey) {
+            result = await callGroq(tenant.groqKey, selectedModel || 'llama-3.3-70b-versatile')
+          }
+          break
+      }
+
+      if (result) return result
+
+      return reply.code(503).send({
+        error: 'Falha no provedor selecionado',
+        message: `O provedor "${tenant.llmProvider}" está configurado mas a chamada falhou. Verifique a chave de API nas Configurações.`
+      })
+    }
+
+    // Fallback chain: OpenAI -> Anthropic -> Gemini -> Groq
+    if (tenant.openaiKey) {
+      const result = await callOpenAI(tenant.openaiKey, 'gpt-4o-mini')
+      if (result) return result
+    }
+
+    if (tenant.anthropicKey) {
+      const result = await callAnthropic(tenant.anthropicKey, 'claude-sonnet-4-20250514')
+      if (result) return result
+    }
+
+    if (tenant.geminiKey) {
+      const result = await callGemini(tenant.geminiKey, 'gemini-1.5-flash')
+      if (result) return result
+    }
+
+    if (tenant.groqKey) {
+      const result = await callGroq(tenant.groqKey, 'llama-3.3-70b-versatile')
+      if (result) return result
     }
 
     return reply.code(503).send({
       error: 'Nenhuma LLM configurada',
-      message: 'Configure uma chave de API (OpenAI, Anthropic ou Gemini) nas Configurações do Tenant para ativar o Oráculo AI.'
+      message: 'Configure uma chave de API (OpenAI, Anthropic, Gemini ou Groq) nas Configurações do Tenant para ativar o Oráculo AI.'
     })
   })
 }
