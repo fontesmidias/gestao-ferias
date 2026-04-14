@@ -2,11 +2,12 @@
 
 import React, { useState, useEffect, useMemo } from 'react'
 import { HttpClient } from '@/lib/api-client'
-import { 
-  Users, Search, Download, Filter, MoreHorizontal, UserCheck, 
+import {
+  Users, Search, Download, Upload, FileSpreadsheet, MoreHorizontal, UserCheck,
   UserMinus, CalendarHeart, Briefcase, MapPin, Building2, LayoutGrid, Clock
 } from 'lucide-react'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
+import { toast } from 'sonner'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { format, parseISO } from 'date-fns'
 
@@ -208,13 +209,47 @@ export default function EmployeesPage() {
                     className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/50"
                   />
                 </div>
-                <button 
+                <button
                   onClick={handleExportCSV}
                   className="p-2 border border-slate-700 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 hover:text-white transition-colors"
-                  title="Exportar Filtrados para CSV"
+                  title="Exportar filtrados para CSV"
                 >
                   <Download className="w-5 h-5" />
                 </button>
+                <a
+                  href={`${process.env.NEXT_PUBLIC_API_URL}/employees/import/template`}
+                  className="p-2 border border-slate-700 bg-slate-800 text-emerald-400 rounded-lg hover:bg-slate-700 hover:text-emerald-300 transition-colors"
+                  title="Baixar modelo de planilha para importar colaboradores"
+                >
+                  <FileSpreadsheet className="w-5 h-5" />
+                </a>
+                <label
+                  className="p-2 border border-slate-700 bg-slate-800 text-sky-400 rounded-lg hover:bg-slate-700 hover:text-sky-300 transition-colors cursor-pointer"
+                  title="Importar colaboradores via planilha (CSV/Excel)"
+                >
+                  <Upload className="w-5 h-5" />
+                  <input type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={async (e) => {
+                    const file = e.target.files?.[0]
+                    if (!file) return
+                    const formData = new FormData()
+                    formData.append('file', file)
+                    try {
+                      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/employees/import`, {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+                        body: formData
+                      })
+                      const data = await res.json()
+                      if (res.ok) {
+                        toast.success(data.message || 'Importacao concluida!')
+                        fetchEmployees()
+                      } else {
+                        toast.error(data.message || 'Erro na importacao')
+                      }
+                    } catch { toast.error('Erro ao importar arquivo') }
+                    e.target.value = ''
+                  }} />
+                </label>
               </div>
             </div>
 

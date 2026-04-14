@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { HttpClient } from '@/lib/api-client'
-import { Building2, MapPin, Users, Plus, ChevronDown, ChevronRight, X } from 'lucide-react'
+import { Building2, MapPin, Users, Plus, ChevronDown, ChevronRight, X, FileSpreadsheet, Upload } from 'lucide-react'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { toast } from 'sonner'
 
@@ -111,13 +111,47 @@ export default function WorkplacesPage() {
           </h1>
           <p className="text-slate-400 mt-1">{workplaces.length} postos cadastrados</p>
         </div>
-        <button
-          onClick={openCreateModal}
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl hover:bg-primary/80 transition-colors font-bold text-sm"
-        >
-          <Plus className="w-4 h-4" />
-          Novo Posto
-        </button>
+        <div className="flex items-center gap-2">
+          <a
+            href={`${process.env.NEXT_PUBLIC_API_URL}/workplaces/import/template`}
+            className="flex items-center gap-2 px-3 py-2 border border-slate-700 text-emerald-400 rounded-xl hover:bg-slate-800 text-sm font-bold"
+            title="Baixar modelo de planilha para importar postos"
+          >
+            <FileSpreadsheet className="w-4 h-4" /> Modelo
+          </a>
+          <label className="flex items-center gap-2 px-3 py-2 border border-slate-700 text-sky-400 rounded-xl hover:bg-slate-800 text-sm font-bold cursor-pointer"
+            title="Importar postos via planilha (CSV/Excel)">
+            <Upload className="w-4 h-4" /> Importar
+            <input type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={async (e) => {
+              const file = e.target.files?.[0]
+              if (!file) return
+              const formData = new FormData()
+              formData.append('file', file)
+              try {
+                const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/workplaces/import`, {
+                  method: 'POST',
+                  headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+                  body: formData
+                })
+                const data = await res.json()
+                if (res.ok) {
+                  toast.success(data.message || 'Importacao concluida!')
+                  fetchWorkplaces()
+                } else {
+                  toast.error(data.message || 'Erro na importacao')
+                }
+              } catch { toast.error('Erro ao importar') }
+              e.target.value = ''
+            }} />
+          </label>
+          <button
+            onClick={openCreateModal}
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl hover:bg-primary/80 transition-colors font-bold text-sm"
+          >
+            <Plus className="w-4 h-4" />
+            Novo Posto
+          </button>
+        </div>
       </div>
 
       {/* Cards Grid */}

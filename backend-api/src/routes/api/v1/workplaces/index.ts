@@ -1,6 +1,92 @@
 import { FastifyPluginAsync } from 'fastify'
+import { ImportService } from '../../../../modules/employees/import-service'
 
 const workplaces: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
+  // Download template de importacao de postos
+  fastify.get('/import/template', {
+    onRequest: [fastify.requireAuth]
+  }, async (request, reply) => {
+    const buffer = ImportService.generateWorkplaceTemplate()
+    return reply
+      .header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+      .header('Content-Disposition', 'attachment; filename="modelo-postos.xlsx"')
+      .send(buffer)
+  })
+
+  // Importar postos em massa via arquivo (CSV/Excel)
+  fastify.post('/import', {
+    onRequest: [fastify.requireAuth, fastify.requireAdmin]
+  }, async (request, reply) => {
+    const data = await request.file()
+    if (!data) {
+      return reply.code(400).send({ error: 'Bad Request', message: 'Nenhum arquivo enviado.' })
+    }
+
+    const buffer = await data.toBuffer()
+    const ext = data.filename.split('.').pop()?.toLowerCase() || ''
+    const { tenantId } = request.user as any
+
+    try {
+      const rawData = await ImportService.parseWorkplaces(buffer, ext)
+      let created = 0
+      let positions = 0
+
+      // Agrupar por nome do posto (pode ter varias linhas = varias funcoes)
+      const grouped = new Map<string, typeof rawData>()
+      for (const row of rawData) {
+        if (!row.name) continue
+        const key = row.name
+        if (!grouped.has(key)) grouped.set(key, [])
+        grouped.get(key)!.push(row)
+      }
+
+      for (const [name, rows] of grouped) {
+        const first = rows[0]
+        // Criar ou encontrar o posto
+        let workplace = await fastify.prisma.workplace.findFirst({
+          where: { name, tenantId }
+        })
+        if (!workplace) {
+          workplace = await fastify.prisma.workplace.create({
+            data: {
+              name,
+              client: first.client || null,
+              address: first.address || null,
+              minStaff: first.minStaff ? parseInt(first.minStaff) : 1,
+              tenantId,
+            }
+          })
+          created++
+        }
+
+        // Criar posicoes (funcoes) para cada linha que tem positionRole
+        for (const row of rows) {
+          if (row.positionRole) {
+            await fastify.prisma.workplacePosition.create({
+              data: {
+                workplaceId: workplace.id,
+                role: row.positionRole,
+                shiftPattern: row.positionShift || null,
+                requiredCount: row.positionCount ? parseInt(row.positionCount) : 1,
+                tenantId,
+              }
+            })
+            positions++
+          }
+        }
+      }
+
+      return {
+        message: `Importacao concluida: ${created} postos criados, ${positions} posicoes adicionadas.`,
+        workplaces: created,
+        positions,
+      }
+    } catch (error: any) {
+      request.log.error(error)
+      return reply.code(400).send({ error: 'Import Error', message: error.message })
+    }
+  })
+
   // Criar posto de trabalho
   fastify.post('/', {
     onRequest: [fastify.requireAuth, fastify.requireAdmin],

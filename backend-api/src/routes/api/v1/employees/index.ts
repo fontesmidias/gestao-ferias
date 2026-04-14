@@ -5,6 +5,17 @@ import { AuditService } from '../../../../modules/shared/audit-service'
 import { VacationEngine } from '../../../../modules/vacations/vacation-engine'
 
 const employees: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
+  // Download template de importacao
+  fastify.get('/import/template', {
+    onRequest: [fastify.requireAuth]
+  }, async (request, reply) => {
+    const buffer = ImportService.generateEmployeeTemplate()
+    return reply
+      .header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+      .header('Content-Disposition', 'attachment; filename="modelo-colaboradores.xlsx"')
+      .send(buffer)
+  })
+
   // Rota para importar colaboradores via arquivo (CSV/Excel)
   fastify.post('/import', {
     onRequest: [fastify.requireAuth, fastify.requireAdmin] // Requer login admin
