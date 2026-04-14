@@ -104,7 +104,7 @@ export function Sidebar() {
           {expanded && (
             <div className="flex-1 overflow-hidden text-left">
               <p className="text-sm font-bold text-white truncate">{user?.name || 'Gestor'}</p>
-              <p className="text-[11px] text-slate-500 truncate">{user.role}</p>
+              <p className="text-[11px] text-slate-500 truncate">{user?.role}</p>
             </div>
           )}
           {/* Tooltip quando retraído */}
