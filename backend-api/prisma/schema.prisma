@@ -38,6 +38,8 @@ model Tenant {
   evoInstanceName String?  @map("evo_instance_name")
   whatsappEnabled Boolean  @default(false) @map("whatsapp_enabled")
 
+  zapSignToken    String?  @map("zapsign_token")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   
@@ -163,6 +165,9 @@ model Signature {
   evidenceDossier   Json?    @map("evidence_dossier")
   otpCode           String?  @map("otp_code")
   otpExpiresAt      DateTime? @map("otp_expires_at")
+  zapSignDocToken   String?  @map("zapsign_doc_token")
+  zapSignSignerToken String? @map("zapsign_signer_token")
+  signUrl           String?  @map("sign_url")
   signedAt          DateTime? @map("signed_at")
   createdAt         DateTime @default(now())
 

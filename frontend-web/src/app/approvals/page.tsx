@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Check, X, Clock, Filter, Search, RotateCcw, Edit3, Trash2, ShieldAlert } from 'lucide-react'
+import { Check, X, Clock, Filter, Search, RotateCcw, Edit3, Trash2, ShieldAlert, FileSignature, ExternalLink } from 'lucide-react'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { HttpClient } from '@/lib/api-client'
@@ -209,8 +209,28 @@ export default function ApprovalsPage() {
                                 {req.status === 'APPROVED' && <span className="text-emerald-500">Aprovado</span>}
                                 {req.status === 'REJECTED' && <span className="text-rose-500">Reprovado</span>}
                                 {req.status === 'RETURNED' && <span className="text-indigo-400">Devolvido (Corrigir)</span>}
+                                {req.status === 'SIGNED' && <span className="text-emerald-400">Assinado</span>}
                               </p>
                             </div>
+                            {/* Badges de assinatura digital */}
+                            {req.status === 'APPROVED' && req.signature?.signUrl && !req.signature?.signedAt && (
+                              <a
+                                href={req.signature.signUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 bg-amber-500/15 text-amber-400 text-[10px] font-bold rounded-full uppercase hover:bg-amber-500/25 transition-colors"
+                              >
+                                <FileSignature className="w-3 h-3" />
+                                Aguardando Assinatura
+                                <ExternalLink className="w-2.5 h-2.5" />
+                              </a>
+                            )}
+                            {req.status === 'SIGNED' && (
+                              <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 bg-emerald-500/15 text-emerald-400 text-[10px] font-bold rounded-full uppercase">
+                                <FileSignature className="w-3 h-3" />
+                                Assinado
+                              </span>
+                            )}
                           </div>
                         </td>
                         <td className="px-6 py-4 text-slate-300">

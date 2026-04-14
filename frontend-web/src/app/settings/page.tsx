@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { HttpClient } from '@/lib/api-client'
-import { Settings, Save, Server, Building2, KeyRound, BrainCircuit, ExternalLink, MessageSquare, Wifi, WifiOff } from 'lucide-react'
+import { Settings, Save, Server, Building2, KeyRound, BrainCircuit, ExternalLink, MessageSquare, Wifi, WifiOff, FileSignature } from 'lucide-react'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { toast } from 'sonner'
@@ -18,6 +18,7 @@ export default function SettingsPage() {
   const [showGroq, setShowGroq] = useState(false)
   const [showSmtpPass, setShowSmtpPass] = useState(false)
   const [showEvoApiKey, setShowEvoApiKey] = useState(false)
+  const [showZapSignToken, setShowZapSignToken] = useState(false)
   const [whatsappStatus, setWhatsappStatus] = useState<{ loading: boolean; connected?: boolean; state?: string; error?: string }>({ loading: false })
   const [formData, setFormData] = useState({
     openaiKey: '',
@@ -35,6 +36,7 @@ export default function SettingsPage() {
     evoApiKey: '',
     evoInstanceName: '',
     whatsappEnabled: false,
+    zapSignToken: '',
   })
 
   const providerModels: Record<string, { label: string; models: { value: string; label: string }[]; tooltip: string }> = {
@@ -97,6 +99,7 @@ export default function SettingsPage() {
         evoApiKey: data.evoApiKey || '',
         evoInstanceName: data.evoInstanceName || '',
         whatsappEnabled: data.whatsappEnabled || false,
+        zapSignToken: data.zapSignToken || '',
       })
     } catch (err) {
       console.error(err)
@@ -557,6 +560,54 @@ export default function SettingsPage() {
                       {whatsappStatus.error && ` — ${whatsappStatus.error}`}
                     </span>
                   )}
+                </div>
+              </div>
+            </div>
+
+            {/* Assinatura Digital (ZapSign) */}
+            <div className="glass-card p-8 rounded-2xl border border-white/5 relative overflow-hidden">
+              <div className="flex items-center gap-3 mb-6 border-b border-white/5 pb-4">
+                <div className="p-2 bg-blue-500/20 rounded-lg">
+                  <FileSignature className="w-5 h-5 text-blue-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">Assinatura Digital (ZapSign)</h3>
+                  <p className="text-sm text-slate-400">Configure a integração com a ZapSign para assinatura digital dos avisos de férias.</p>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <div>
+                  <label htmlFor="zapSignToken" className="block text-sm font-medium text-slate-300 mb-2">
+                    ZapSign API Token <InfoTooltip text="Token de acesso à API da ZapSign. Necessário para enviar documentos para assinatura digital. Obtenha no painel da ZapSign em app.zapsign.com.br > Integrações > API." />
+                  </label>
+                  <div className="relative">
+                    <input
+                      id="zapSignToken"
+                      type={showZapSignToken ? "text" : "password"}
+                      value={formData.zapSignToken}
+                      onChange={handleChange}
+                      placeholder="Seu token da API ZapSign..."
+                      className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 pr-12 text-white focus:ring-2 focus:ring-primary/50 transition-all outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowZapSignToken(!showZapSignToken)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-2xl hover:scale-110 transition-transform focus:outline-none"
+                      title={showZapSignToken ? "Ocultar token" : "Ver token"}
+                    >
+                      {showZapSignToken ? "🐵" : "🙈"}
+                    </button>
+                  </div>
+                  <a
+                    href="https://www.zapsign.com.br"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 mt-2 text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    Não tem conta? Crie em zapsign.com.br
+                  </a>
                 </div>
               </div>
             </div>
