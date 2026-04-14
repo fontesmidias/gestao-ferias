@@ -29,11 +29,11 @@ interface Webhook {
 }
 
 const AVAILABLE_EVENTS = [
-  { value: 'VACATION_SIGNED', label: 'Assinatura de F\érias', tooltip: 'Dispara webhook quando um documento de f\érias \é assinado digitalmente pelo colaborador.' },
-  { value: 'EMPLOYEE_CREATED', label: 'Novo Colaborador', tooltip: 'Dispara webhook quando um novo colaborador \é cadastrado no sistema.' },
-  { value: 'BALANCE_ADJUSTED', label: 'Ajuste de Saldo', tooltip: 'Dispara webhook quando o RH faz um ajuste manual no saldo de f\érias de um colaborador.' },
-  { value: 'VACATION_APPROVED', label: 'F\érias Aprovadas', tooltip: 'Dispara webhook quando uma solicita\ç\ão de f\érias \é aprovada pelo gestor.' },
-  { value: 'VACATION_REJECTED', label: 'F\érias Rejeitadas', tooltip: 'Dispara webhook quando uma solicita\ç\ão de f\érias \é rejeitada.' },
+  { value: 'VACATION_SIGNED', label: 'Assinatura de Férias', tooltip: 'Dispara webhook quando um documento de férias é assinado digitalmente pelo colaborador.' },
+  { value: 'EMPLOYEE_CREATED', label: 'Novo Colaborador', tooltip: 'Dispara webhook quando um novo colaborador é cadastrado no sistema.' },
+  { value: 'BALANCE_ADJUSTED', label: 'Ajuste de Saldo', tooltip: 'Dispara webhook quando o RH faz um ajuste manual no saldo de férias de um colaborador.' },
+  { value: 'VACATION_APPROVED', label: 'Férias Aprovadas', tooltip: 'Dispara webhook quando uma solicitação de férias é aprovada pelo gestor.' },
+  { value: 'VACATION_REJECTED', label: 'Férias Rejeitadas', tooltip: 'Dispara webhook quando uma solicitação de férias é rejeitada.' },
 ]
 
 export default function SettingsPage() {
@@ -70,7 +70,7 @@ export default function SettingsPage() {
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
-    toast.success('Copiado para a \área de transfer\ência!')
+    toast.success('Copiado para a área de transferência!')
   }
 
   const addWebhook = async (e: React.FormEvent) => {
@@ -139,8 +139,8 @@ export default function SettingsPage() {
             <Settings className="w-8 h-8" />
           </div>
           <div>
-            <h1 className="text-4xl font-bold text-white tracking-tight">Configura\ç\ões</h1>
-            <p className="text-slate-400">Gerencie suas integra\ç\ões e seguran\ça. <InfoTooltip text="Central de configura\ç\ões do sistema. Gerencie webhooks, seguran\ça e automa\ç\ões." /></p>
+            <h1 className="text-4xl font-bold text-white tracking-tight">Configurações</h1>
+            <p className="text-slate-400">Gerencie suas integrações e segurança. <InfoTooltip text="Central de configurações do sistema. Gerencie webhooks, segurança e automações." /></p>
           </div>
         </div>
 
@@ -149,15 +149,15 @@ export default function SettingsPage() {
           <div className="space-y-2">
             <button className="w-full text-left px-4 py-3 rounded-xl bg-primary/10 text-primary font-bold flex items-center gap-3 transition-all">
               <WebhookIcon className="w-5 h-5" />
-              Webhooks & API <InfoTooltip text="Configure integra\ç\ões com sistemas externos via webhooks HTTP." />
+              Webhooks & API <InfoTooltip text="Configure integrações com sistemas externos via webhooks HTTP." />
             </button>
             <button className="w-full text-left px-4 py-3 rounded-xl hover:bg-white/5 text-slate-400 flex items-center gap-3 transition-all">
               <ShieldCheck className="w-5 h-5" />
-              Seguran\ça <InfoTooltip text="Gerencie pol\íticas de senha, autentica\ç\ão e controle de acesso." />
+              Segurança <InfoTooltip text="Gerencie políticas de senha, autenticação e controle de acesso." />
             </button>
             <button className="w-full text-left px-4 py-3 rounded-xl hover:bg-white/5 text-slate-400 flex items-center gap-3 transition-all">
               <Zap className="w-5 h-5" />
-              Automa\ç\ões <InfoTooltip text="Configure a\ç\ões autom\áticas como envio de e-mails e alertas baseados em eventos." />
+              Automações <InfoTooltip text="Configure ações automáticas como envio de e-mails e alertas baseados em eventos." />
             </button>
           </div>
 
@@ -167,12 +167,12 @@ export default function SettingsPage() {
             <div className="glass-card p-6 rounded-2xl border border-white/5">
               <div className="flex items-center gap-2 mb-6">
                 <Code className="w-5 h-5 text-indigo-400" />
-                <h2 className="text-lg font-bold text-white">Adicionar Novo Webhook <InfoTooltip text="Webhooks enviam notifica\ç\ões HTTP autom\áticas para URLs externas quando eventos ocorrem no sistema." /></h2>
+                <h2 className="text-lg font-bold text-white">Adicionar Novo Webhook <InfoTooltip text="Webhooks enviam notificações HTTP automáticas para URLs externas quando eventos ocorrem no sistema." /></h2>
               </div>
 
               <form onSubmit={addWebhook} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Endpoint URL <InfoTooltip text="URL que receber\á notifica\ç\ões autom\áticas quando eventos de f\érias ocorrerem. Deve ser HTTPS e acess\ível publicamente (ex: Zapier, n8n, Make)." /></label>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Endpoint URL <InfoTooltip text="URL que receberá notificações automáticas quando eventos de férias ocorrerem. Deve ser HTTPS e acessível publicamente (ex: Zapier, n8n, Make)." /></label>
                   <input
                     type="url"
                     placeholder="https://sua-api.com/webhook"
@@ -183,7 +183,7 @@ export default function SettingsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Eventos <InfoTooltip text="Selecione quais eventos devem disparar notifica\ç\ões para esta URL." /></label>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Eventos <InfoTooltip text="Selecione quais eventos devem disparar notificações para esta URL." /></label>
                   <div className="flex flex-wrap gap-3 mb-4">
                     {AVAILABLE_EVENTS.map((evt) => (
                       <span key={evt.value} className="flex items-center gap-1">
@@ -208,14 +208,14 @@ export default function SettingsPage() {
                   ) : (
                     <Plus className="w-5 h-5" />
                   )}
-                  {creating ? 'Criando...' : 'Configurar Webhook'} <InfoTooltip text="Ativa a integra\ç\ão e come\ça a enviar notifica\ç\ões para a URL configurada. Um secret HMAC-SHA256 ser\á gerado automaticamente." />
+                  {creating ? 'Criando...' : 'Configurar Webhook'} <InfoTooltip text="Ativa a integração e começa a enviar notificações para a URL configurada. Um secret HMAC-SHA256 será gerado automaticamente." />
                 </button>
               </form>
             </div>
 
             {/* List Webhooks */}
             <div className="space-y-4">
-              <h3 className="text-sm font-bold text-slate-500 uppercase px-2">Webhooks Configurados <InfoTooltip text="Lista de todos os webhooks ativos no seu tenant. Cada um possui um secret \único para valida\ç\ão HMAC." /></h3>
+              <h3 className="text-sm font-bold text-slate-500 uppercase px-2">Webhooks Configurados <InfoTooltip text="Lista de todos os webhooks ativos no seu tenant. Cada um possui um secret único para validação HMAC." /></h3>
 
               {loading && (
                 <div className="flex items-center justify-center py-12">
@@ -227,7 +227,7 @@ export default function SettingsPage() {
                 <div className="glass-card p-8 rounded-2xl border border-white/5 text-center">
                   <AlertCircle className="w-10 h-10 text-slate-600 mx-auto mb-3" />
                   <p className="text-slate-500 text-sm">Nenhum webhook configurado ainda.</p>
-                  <p className="text-slate-600 text-xs mt-1">Adicione um acima para come\çar a receber notifica\ç\ões.</p>
+                  <p className="text-slate-600 text-xs mt-1">Adicione um acima para começar a receber notificações.</p>
                 </div>
               )}
 
@@ -240,7 +240,7 @@ export default function SettingsPage() {
                       </div>
                       <div>
                         <p className="font-bold text-white truncate max-w-[200px] md:max-w-sm">{hook.url}</p>
-                        <p className="text-xs text-slate-400">Eventos: {hook.events.join(', ')} <InfoTooltip text="Tipos de evento que disparam notifica\ç\ões para este endpoint." /></p>
+                        <p className="text-xs text-slate-400">Eventos: {hook.events.join(', ')} <InfoTooltip text="Tipos de evento que disparam notificações para este endpoint." /></p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -273,7 +273,7 @@ export default function SettingsPage() {
 
                   <div className="bg-slate-950/50 rounded-xl p-4 flex items-center justify-between border border-white/5">
                     <div className="flex-1 mr-4">
-                      <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Webhook Secret (HMAC-SHA256) <InfoTooltip text="Chave secreta usada para verificar autenticidade das notifica\ç\ões. Use HMAC-SHA256 para validar que a requisi\ç\ão veio do nosso sistema." /></p>
+                      <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Webhook Secret (HMAC-SHA256) <InfoTooltip text="Chave secreta usada para verificar autenticidade das notificações. Use HMAC-SHA256 para validar que a requisição veio do nosso sistema." /></p>
                       <code className="text-xs text-slate-300 font-mono break-all">{hook.secret}</code>
                     </div>
                     <button
