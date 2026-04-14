@@ -1,5 +1,6 @@
 import { FastifyPluginAsync } from 'fastify'
 import { VacationEngine } from '../../../../modules/vacations/vacation-engine'
+import { AuditService } from '../../../../modules/shared/audit-service'
 import { differenceInDays, parseISO } from 'date-fns'
 
 const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
@@ -91,8 +92,6 @@ const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       data: { status, dispatchNote: dispatchNote || undefined }
     })
 
-    // (Opcional: registrar AuditLog aqui no futuro)
-
     return reply.send({ message: `Atualizados ${count} registros para ${status}.` })
   })
 
@@ -122,6 +121,20 @@ const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     const updated = await fastify.prisma.vacationRequest.update({
       where: { id: existing.id },
       data: updateData
+    })
+
+    // Audit log
+    const { userId } = request.user as any
+    await AuditService.log(fastify.prisma as any, {
+      tenantId, userId,
+      action: status === 'APPROVED' ? 'VACATION_APPROVED' : status === 'REJECTED' ? 'VACATION_REJECTED' : `VACATION_${status}`,
+      resourceId: existing.id,
+      resourceType: 'VACATION_REQUEST',
+      previousData: { status: existing.status },
+      newData: { status: updated.status },
+      reason: dispatchNote || undefined,
+      ip: request.ip,
+      userAgent: request.headers['user-agent']
     })
 
     return updated
