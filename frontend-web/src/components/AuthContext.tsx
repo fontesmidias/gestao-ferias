@@ -20,6 +20,9 @@ interface AuthContextType {
   login: (email: string, password?: string) => Promise<void>
   verifyToken: (token: string) => Promise<void>
   logout: () => Promise<void>
+  switchTenant: (tenantId: string) => Promise<void>
+  returnToAdmin: () => Promise<void>
+  isImpersonating: boolean
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -27,6 +30,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+  const [isImpersonating, setIsImpersonating] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
 
@@ -40,11 +44,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const userData = await HttpClient.get('/auth/me')
       setUser(userData)
+      setIsImpersonating(!!localStorage.getItem('adminToken'))
     } catch (err) {
       console.error('Failed to fetch user:', err)
       localStorage.removeItem('token')
       localStorage.removeItem('refreshToken')
       setUser(null)
+      setIsImpersonating(false)
     } finally {
       setLoading(false)
     }
@@ -83,6 +89,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Retido apenas por compatibilidade estrutural caso precise usar cookies de recuperar senha.
   }
 
+  const switchTenant = async (tenantId: string) => {
+    try {
+      const currentToken = localStorage.getItem('token')
+      const data = await HttpClient.post('/admin/switch-tenant', { tenantId })
+      if (currentToken) {
+        localStorage.setItem('adminToken', currentToken)
+      }
+      localStorage.setItem('token', data.token)
+      if (data.refreshToken) {
+        localStorage.setItem('refreshToken', data.refreshToken)
+      }
+      await checkUser()
+      router.push('/dashboard')
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao trocar de tenant.')
+      throw err
+    }
+  }
+
+  const returnToAdmin = async () => {
+    const adminToken = localStorage.getItem('adminToken')
+    if (!adminToken) return
+    localStorage.setItem('token', adminToken)
+    localStorage.removeItem('adminToken')
+    await checkUser()
+    router.push('/admin')
+  }
+
   const logout = async () => {
     const refreshToken = localStorage.getItem('refreshToken')
     // Invalidar refresh token no servidor
@@ -108,7 +142,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user, loading, pathname, router])
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, verifyToken, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, verifyToken, logout, switchTenant, returnToAdmin, isImpersonating }}>
       {children}
     </AuthContext.Provider>
   )

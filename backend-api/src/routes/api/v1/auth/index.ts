@@ -35,10 +35,23 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       return reply.code(401).send({ error: 'Unauthorized', message: 'E-mail ou senha incorretos.' })
     }
 
+    // Verificar se conta esta ativa
+    if ((user as any).isActive === false) {
+      return reply.code(401).send({ error: 'Unauthorized', message: 'Conta desativada. Entre em contato com o administrador.' })
+    }
+
     // Validar a Hash BCrypt
     const isPasswordValid = await bcrypt.compare(password, (user as any).passwordHash)
     if (!isPasswordValid) {
        return reply.code(401).send({ error: 'Unauthorized', message: 'E-mail ou senha incorretos.' })
+    }
+
+    // Atualizar lastLoginAt do tenant
+    if (user.tenantId) {
+      await fastify.prisma.tenant.update({
+        where: { id: user.tenantId },
+        data: { lastLoginAt: new Date() }
+      })
     }
 
     // Buscar employeeId vinculado (se existir)
@@ -99,10 +112,10 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   }, async (request, reply) => {
     const { refreshToken } = request.body as { refreshToken: string }
 
-    // 1. Buscar token no banco
+    // 1. Buscar token no banco (com employee para manter employeeId)
     const stored = await fastify.prisma.refreshToken.findUnique({
       where: { token: refreshToken },
-      include: { user: true }
+      include: { user: { include: { employee: { select: { id: true } } } } }
     })
 
     if (!stored) {
@@ -118,10 +131,11 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     // 3. Revogar token antigo (rotation)
     await fastify.prisma.refreshToken.delete({ where: { id: stored.id } })
 
-    // 4. Gerar novo par
+    // 4. Gerar novo par (preservar employeeId e contexto de switch)
     const user = stored.user
+    const refreshEmployeeId = (user as any).employee?.id || null
     const newAccessToken = fastify.jwt.sign(
-      { userId: user.id, tenantId: stored.tenantId, email: user.email, role: user.role, name: user.name },
+      { userId: user.id, tenantId: stored.tenantId, email: user.email, role: user.role, name: user.name, employeeId: refreshEmployeeId },
       { expiresIn: '15m' }
     )
 

@@ -8,7 +8,7 @@ import { useAuth } from '@/components/AuthContext'
 
 export function Sidebar() {
   const pathname = usePathname()
-  const { user, logout, loading } = useAuth()
+  const { user, logout, loading, isImpersonating } = useAuth()
   const [pinned, setPinned] = useState(false)
   const [hovered, setHovered] = useState(false)
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
@@ -25,19 +25,23 @@ export function Sidebar() {
 
   const isSuperAdmin = user?.role === 'SUPERADMIN'
 
-  const links = isSuperAdmin
+  const adminLinks = [
+    { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { href: '/predict', label: 'Oráculo AI', icon: BrainCircuit },
+    { href: '/approvals', label: 'Aprovações', icon: CheckSquare },
+    { href: '/employees', label: 'Colaboradores', icon: Users },
+    { href: '/workplaces', label: 'Postos', icon: Building2 },
+    { href: '/coverage', label: 'Cobertura', icon: Shield },
+  ]
+
+  const links = isSuperAdmin && !isImpersonating
     ? [
         { href: '/admin', label: 'Painel Admin', icon: Crown },
-        { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+        { href: '/dashboard', label: 'Dashboard Global', icon: LayoutDashboard },
       ]
-    : [
-        { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-        { href: '/predict', label: 'Oráculo AI', icon: BrainCircuit },
-        { href: '/approvals', label: 'Aprovações', icon: CheckSquare },
-        { href: '/employees', label: 'Colaboradores', icon: Users },
-        { href: '/workplaces', label: 'Postos', icon: Building2 },
-        { href: '/coverage', label: 'Cobertura', icon: Shield },
-      ]
+    : isImpersonating
+      ? adminLinks
+      : adminLinks
 
   return (
     <aside

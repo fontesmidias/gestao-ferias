@@ -25,6 +25,7 @@ model Tenant {
   smtpPass  String?  @map("smtp_pass")
   smtpFrom  String?  @map("smtp_from")
 
+  lastLoginAt DateTime? @map("last_login_at")
   openaiKey    String?  @map("openai_key")
   anthropicKey String?  @map("anthropic_key")
   geminiKey    String?  @map("gemini_key")
@@ -53,6 +54,7 @@ model User {
   name         String?
   passwordHash String?  @map("password_hash")
   role         String   @default("USER") // SUPERADMIN, ADMIN, USER, AUDITOR
+  isActive     Boolean  @default(true) @map("is_active")
   tenantId     String?  @map("tenant_id") @db.Uuid // nullable para SUPERADMIN
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt

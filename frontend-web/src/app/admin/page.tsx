@@ -2,7 +2,11 @@
 
 import React, { useState, useEffect } from 'react'
 import { HttpClient } from '@/lib/api-client'
-import { Shield, Building2, Users, Plus, Trash2, UserPlus, X, Edit3, ChevronDown, ChevronRight } from 'lucide-react'
+import Link from 'next/link'
+import {
+  Shield, Building2, Users, UserPlus, X, Edit3, Plus,
+  Briefcase, CalendarDays, Eye, LogIn, Trash2
+} from 'lucide-react'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { toast } from 'sonner'
 import { useAuth } from '@/components/AuthContext'
@@ -17,17 +21,25 @@ interface Tenant {
   city?: string
   state?: string
   responsible?: string
+  lastLoginAt?: string | null
   createdAt: string
   _count: { users: number; employees: number }
 }
 
+function activityColor(lastLoginAt?: string | null): { dot: string; label: string } {
+  if (!lastLoginAt) return { dot: 'bg-rose-500', label: 'Sem atividade' }
+  const diff = Date.now() - new Date(lastLoginAt).getTime()
+  const days = diff / (1000 * 60 * 60 * 24)
+  if (days < 7) return { dot: 'bg-emerald-500', label: 'Ativo recentemente' }
+  if (days < 30) return { dot: 'bg-amber-500', label: 'Inativo há mais de 7 dias' }
+  return { dot: 'bg-rose-500', label: 'Inativo há mais de 30 dias' }
+}
+
 export default function AdminPage() {
-  const { user } = useAuth()
+  const { user, switchTenant } = useAuth()
   const [stats, setStats] = useState<any>(null)
   const [tenants, setTenants] = useState<Tenant[]>([])
   const [loading, setLoading] = useState(true)
-  const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [tenantUsers, setTenantUsers] = useState<any[]>([])
 
   // Modals
   const [showTenantModal, setShowTenantModal] = useState(false)
@@ -39,6 +51,7 @@ export default function AdminPage() {
     name: '', cnpj: '', email: '', phone: '', address: '', city: '', state: '', responsible: ''
   })
   const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'ADMIN' })
+  const [switchingTenantId, setSwitchingTenantId] = useState<string | null>(null)
 
   useEffect(() => {
     if (user?.role === 'SUPERADMIN') fetchData()
@@ -53,17 +66,12 @@ export default function AdminPage() {
       ])
       setStats(s)
       setTenants(t)
-    } catch (err) { console.error(err) }
-    finally { setLoading(false) }
-  }
-
-  const expandTenant = async (id: string) => {
-    if (expandedId === id) { setExpandedId(null); return }
-    setExpandedId(id)
-    try {
-      const users = await HttpClient.get(`/admin/tenants/${id}/users`)
-      setTenantUsers(users)
-    } catch { setTenantUsers([]) }
+    } catch (err) {
+      console.error(err)
+      toast.error('Erro ao carregar dados do painel.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const openCreateTenant = () => {
@@ -85,163 +93,209 @@ export default function AdminPage() {
     try {
       if (editingTenant) {
         await HttpClient.patch(`/admin/tenants/${editingTenant.id}`, tenantForm)
-        toast.success('Empresa atualizada!')
+        toast.success('Empresa atualizada com sucesso!')
       } else {
         await HttpClient.post('/admin/tenants', tenantForm)
-        toast.success('Empresa criada!')
+        toast.success('Empresa criada com sucesso!')
       }
       setShowTenantModal(false)
       fetchData()
-    } catch (err: any) { toast.error(err.message) }
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao salvar empresa.')
+    }
   }
 
   const deleteTenant = async (id: string) => {
-    if (!confirm('Tem certeza? Esta acao nao pode ser desfeita.')) return
+    if (!confirm('Tem certeza? Esta ação não pode ser desfeita. Todos os dados da empresa serão removidos.')) return
     try {
       await HttpClient.delete(`/admin/tenants/${id}`)
-      toast.success('Empresa removida.')
+      toast.success('Empresa removida com sucesso.')
       fetchData()
-    } catch (err: any) { toast.error(err.message) }
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao remover empresa.')
+    }
+  }
+
+  const handleSwitchTenant = async (tenantId: string) => {
+    try {
+      setSwitchingTenantId(tenantId)
+      await switchTenant(tenantId)
+      toast.success('Você entrou na empresa. Use "Voltar ao Admin" para retornar.')
+    } catch {
+      // error handled by switchTenant
+    } finally {
+      setSwitchingTenantId(null)
+    }
   }
 
   const createUser = async () => {
     try {
       await HttpClient.post(`/admin/tenants/${selectedTenantId}/users`, userForm)
-      toast.success('Usuario criado!')
+      toast.success('Usuário criado com sucesso!')
       setShowUserModal(false)
       setUserForm({ name: '', email: '', password: '', role: 'ADMIN' })
-      expandTenant(selectedTenantId)
       fetchData()
-    } catch (err: any) { toast.error(err.message) }
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao criar usuário.')
+    }
   }
 
   if (user?.role !== 'SUPERADMIN') {
-    return <div className="flex-1 flex items-center justify-center text-slate-400">Acesso restrito ao Super Administrador.</div>
+    return (
+      <div className="flex-1 flex items-center justify-center text-slate-400">
+        Acesso restrito ao Super Administrador.
+      </div>
+    )
   }
 
   if (loading) {
-    return <div className="flex-1 flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>
+    return (
+      <div className="flex-1 flex items-center justify-center bg-dashboard">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    )
   }
 
+  const kpis = [
+    { label: 'Empresas', value: stats?.tenants ?? 0, icon: Building2, color: 'text-indigo-400', bg: 'bg-indigo-500/10', tooltip: 'Total de empresas cadastradas na plataforma.' },
+    { label: 'Usuários', value: stats?.users ?? 0, icon: Users, color: 'text-emerald-400', bg: 'bg-emerald-500/10', tooltip: 'Total de usuários com acesso ao sistema.' },
+    { label: 'Colaboradores', value: stats?.employees ?? 0, icon: Briefcase, color: 'text-sky-400', bg: 'bg-sky-500/10', tooltip: 'Total de colaboradores registrados em todas as empresas.' },
+    { label: 'Férias', value: stats?.vacations ?? 0, icon: CalendarDays, color: 'text-amber-400', bg: 'bg-amber-500/10', tooltip: 'Total de solicitações de férias no sistema.' },
+  ]
+
   return (
-    <div className="flex-1 p-8 overflow-auto">
-      <div className="max-w-5xl mx-auto">
+    <div className="flex-1 p-8 overflow-auto bg-dashboard">
+      <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-white flex items-center gap-3">
             <Shield className="w-7 h-7 text-amber-500" />
-            Painel Super Admin
+            Sala de Controle
           </h1>
-          <p className="text-slate-400 mt-1">Gerenciamento de empresas, usuarios e plataforma.</p>
+          <p className="text-slate-400 mt-1">
+            Visão geral de todas as empresas, usuários e métricas da plataforma.
+          </p>
         </div>
 
-        {/* KPIs */}
-        {stats && (
-          <div className="grid grid-cols-4 gap-4 mb-8">
-            {[
-              { label: 'Empresas', value: stats.tenants, color: 'text-indigo-400' },
-              { label: 'Usuarios', value: stats.users, color: 'text-emerald-400' },
-              { label: 'Colaboradores', value: stats.employees, color: 'text-sky-400' },
-              { label: 'Solicitacoes', value: stats.vacations, color: 'text-amber-400' },
-            ].map((kpi) => (
-              <div key={kpi.label} className="glass-card p-4 rounded-xl border border-white/5 text-center">
-                <p className="text-xs text-slate-500 uppercase font-bold">{kpi.label}</p>
-                <p className={`text-2xl font-black mt-1 ${kpi.color}`}>{kpi.value}</p>
+        {/* KPI Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          {kpis.map((kpi) => (
+            <div key={kpi.label} className="glass-card p-5 rounded-xl border border-white/5">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs text-slate-500 uppercase font-bold tracking-wide flex items-center gap-1.5">
+                  {kpi.label}
+                  <InfoTooltip text={kpi.tooltip} />
+                </span>
+                <div className={`p-2 rounded-lg ${kpi.bg}`}>
+                  <kpi.icon className={`w-4 h-4 ${kpi.color}`} />
+                </div>
               </div>
-            ))}
-          </div>
-        )}
+              <p className={`text-3xl font-black ${kpi.color}`}>{kpi.value}</p>
+            </div>
+          ))}
+        </div>
 
-        {/* Tenants */}
-        <div className="flex items-center justify-between mb-4">
+        {/* Tenant List Header */}
+        <div className="flex items-center justify-between mb-5">
           <h2 className="text-lg font-bold text-white flex items-center gap-2">
             <Building2 className="w-5 h-5" /> Empresas
-            <InfoTooltip text="Cada empresa opera isolada com seus proprios dados, colaboradores e configuracoes." />
+            <InfoTooltip text="Cada empresa opera de forma isolada com seus próprios dados, colaboradores e configurações." />
           </h2>
-          <button onClick={openCreateTenant}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl hover:bg-primary/80 font-bold text-sm">
+          <button
+            onClick={openCreateTenant}
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl hover:bg-primary/80 font-bold text-sm transition-colors"
+          >
             <Plus className="w-4 h-4" /> Nova Empresa
           </button>
         </div>
 
-        <div className="space-y-3">
-          {tenants.map((t) => (
-            <div key={t.id} className="bg-slate-800/50 border border-white/5 rounded-xl overflow-hidden">
-              <div className="p-5 flex items-center justify-between cursor-pointer hover:bg-white/5" onClick={() => expandTenant(t.id)}>
-                <div className="flex items-center gap-3">
-                  {expandedId === t.id ? <ChevronDown className="w-4 h-4 text-slate-500" /> : <ChevronRight className="w-4 h-4 text-slate-500" />}
-                  <div>
-                    <h3 className="font-bold text-white">{t.name}</h3>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      CNPJ: {t.cnpj}
-                      {t.city && ` | ${t.city}`}{t.state && `/${t.state}`}
-                      {t.responsible && ` | Resp: ${t.responsible}`}
-                      {` | ${t._count.users} usuarios | ${t._count.employees} colaboradores`}
-                    </p>
+        {/* Tenant Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {tenants.map((t) => {
+            const activity = activityColor(t.lastLoginAt)
+            return (
+              <div key={t.id} className="glass-card rounded-xl border border-white/5 p-5 flex flex-col gap-4">
+                {/* Top row: name + activity */}
+                <div className="flex items-start justify-between">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-white text-base truncate">{t.name}</h3>
+                      <span title={activity.label} className={`w-2.5 h-2.5 rounded-full ${activity.dot} shrink-0`} />
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5 font-mono">{t.cnpj}</p>
                   </div>
-                </div>
-                <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                  <button onClick={() => openEditTenant(t)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-400 border border-white/10 rounded-lg hover:bg-white/5">
-                    <Edit3 className="w-3.5 h-3.5" /> Editar
-                  </button>
-                  <button onClick={() => { setSelectedTenantId(t.id); setShowUserModal(true) }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-indigo-400 border border-indigo-500/20 rounded-lg hover:bg-indigo-500/10">
-                    <UserPlus className="w-3.5 h-3.5" /> Usuario
-                  </button>
-                  <button onClick={() => deleteTenant(t.id)}
-                    className="p-1.5 text-slate-600 hover:text-rose-400 rounded-lg hover:bg-rose-500/10">
+                  <button
+                    onClick={() => deleteTenant(t.id)}
+                    className="p-1.5 text-slate-600 hover:text-rose-400 rounded-lg hover:bg-rose-500/10 transition-colors shrink-0"
+                    title="Excluir empresa"
+                  >
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
-              </div>
 
-              {/* Expanded: users + details */}
-              {expandedId === t.id && (
-                <div className="border-t border-white/5 p-5 space-y-4">
-                  {/* Company details */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                    {t.email && <div><span className="text-slate-500">Email:</span> <span className="text-white">{t.email}</span></div>}
-                    {t.phone && <div><span className="text-slate-500">Telefone:</span> <span className="text-white">{t.phone}</span></div>}
-                    {t.address && <div className="col-span-2"><span className="text-slate-500">Endereco:</span> <span className="text-white">{t.address}</span></div>}
-                  </div>
-
-                  {/* Users list */}
-                  <div>
-                    <h4 className="text-sm font-bold text-slate-400 mb-2">Usuarios desta empresa</h4>
-                    {tenantUsers.length > 0 ? (
-                      <div className="space-y-2">
-                        {tenantUsers.map((u: any) => (
-                          <div key={u.id} className="flex items-center justify-between bg-slate-900/50 rounded-lg px-4 py-2">
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-bold">
-                                {u.name?.charAt(0) || '?'}
-                              </div>
-                              <div>
-                                <p className="text-sm font-bold text-white">{u.name}</p>
-                                <p className="text-xs text-slate-500">{u.email}</p>
-                              </div>
-                            </div>
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                              u.role === 'ADMIN' ? 'bg-amber-500/20 text-amber-400' :
-                              u.role === 'USER' ? 'bg-emerald-500/20 text-emerald-400' :
-                              'bg-slate-700 text-slate-400'
-                            }`}>{u.role}</span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-slate-600 italic">Nenhum usuario cadastrado.</p>
-                    )}
-                  </div>
+                {/* Details */}
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400">
+                  {t.city && (
+                    <span>{t.city}{t.state ? `/${t.state}` : ''}</span>
+                  )}
+                  {t.responsible && (
+                    <span>Resp: {t.responsible}</span>
+                  )}
                 </div>
-              )}
-            </div>
-          ))}
-          {tenants.length === 0 && (
-            <p className="text-center text-slate-500 py-8">Nenhuma empresa cadastrada.</p>
-          )}
+
+                {/* Metrics */}
+                <div className="flex items-center gap-4 text-xs">
+                  <span className="flex items-center gap-1.5 text-slate-300">
+                    <Users className="w-3.5 h-3.5 text-indigo-400" />
+                    <span className="font-bold">{t._count.users}</span> usuários
+                  </span>
+                  <span className="flex items-center gap-1.5 text-slate-300">
+                    <Briefcase className="w-3.5 h-3.5 text-sky-400" />
+                    <span className="font-bold">{t._count.employees}</span> colaboradores
+                  </span>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center gap-2 pt-2 border-t border-white/5">
+                  <Link
+                    href={`/admin/tenants/${t.id}`}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-300 border border-white/10 rounded-lg hover:bg-white/5 transition-colors"
+                  >
+                    <Eye className="w-3.5 h-3.5" /> Ver Detalhes
+                  </Link>
+                  <button
+                    onClick={() => handleSwitchTenant(t.id)}
+                    disabled={switchingTenantId === t.id}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-emerald-400 border border-emerald-500/20 rounded-lg hover:bg-emerald-500/10 transition-colors disabled:opacity-50"
+                  >
+                    <LogIn className="w-3.5 h-3.5" />
+                    {switchingTenantId === t.id ? 'Entrando...' : 'Entrar'}
+                  </button>
+                  <button
+                    onClick={() => openEditTenant(t)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-400 border border-white/10 rounded-lg hover:bg-white/5 transition-colors"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" /> Editar
+                  </button>
+                  <button
+                    onClick={() => { setSelectedTenantId(t.id); setShowUserModal(true) }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-indigo-400 border border-indigo-500/20 rounded-lg hover:bg-indigo-500/10 transition-colors"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" /> Criar Usuário
+                  </button>
+                </div>
+              </div>
+            )
+          })}
         </div>
+
+        {tenants.length === 0 && (
+          <div className="text-center py-16">
+            <Building2 className="w-12 h-12 text-slate-700 mx-auto mb-3" />
+            <p className="text-slate-500 font-medium">Nenhuma empresa cadastrada.</p>
+            <p className="text-slate-600 text-sm mt-1">Clique em "Nova Empresa" para começar.</p>
+          </div>
+        )}
       </div>
 
       {/* Modal: Tenant (criar/editar) */}
@@ -249,117 +303,218 @@ export default function AdminPage() {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-slate-800 border border-white/10 rounded-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-bold text-white">{editingTenant ? 'Editar Empresa' : 'Nova Empresa'}</h2>
-              <button onClick={() => setShowTenantModal(false)} className="text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
+              <h2 className="text-lg font-bold text-white">
+                {editingTenant ? 'Editar Empresa' : 'Nova Empresa'}
+              </h2>
+              <button onClick={() => setShowTenantModal(false)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
             </div>
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
                   <label className="flex items-center gap-1.5 text-sm font-bold text-slate-400 mb-1">
-                    Nome da Empresa * <InfoTooltip text="Razao social ou nome fantasia da empresa." />
+                    Nome da Empresa *
+                    <InfoTooltip text="Razão social ou nome fantasia da empresa." />
                   </label>
-                  <input type="text" value={tenantForm.name} onChange={(e) => setTenantForm({ ...tenantForm, name: e.target.value })}
-                    className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none" />
-                </div>
-                <div>
-                  <label className="flex items-center gap-1.5 text-sm font-bold text-slate-400 mb-1">
-                    CNPJ * <InfoTooltip text="Cadastro Nacional da Pessoa Juridica." />
-                  </label>
-                  <input type="text" value={tenantForm.cnpj} onChange={(e) => setTenantForm({ ...tenantForm, cnpj: e.target.value })}
+                  <input
+                    type="text"
+                    value={tenantForm.name}
+                    onChange={(e) => setTenantForm({ ...tenantForm, name: e.target.value })}
                     className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none"
-                    placeholder="00.000.000/0000-00" />
+                  />
                 </div>
                 <div>
                   <label className="flex items-center gap-1.5 text-sm font-bold text-slate-400 mb-1">
-                    Responsavel <InfoTooltip text="Nome do responsavel ou representante legal da empresa." />
+                    CNPJ *
+                    <InfoTooltip text="Cadastro Nacional da Pessoa Jurídica." />
                   </label>
-                  <input type="text" value={tenantForm.responsible} onChange={(e) => setTenantForm({ ...tenantForm, responsible: e.target.value })}
-                    className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none" />
-                </div>
-                <div>
-                  <label className="flex items-center gap-1.5 text-sm font-bold text-slate-400 mb-1">
-                    Email <InfoTooltip text="Email comercial da empresa para contato." />
-                  </label>
-                  <input type="email" value={tenantForm.email} onChange={(e) => setTenantForm({ ...tenantForm, email: e.target.value })}
-                    className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none" />
-                </div>
-                <div>
-                  <label className="flex items-center gap-1.5 text-sm font-bold text-slate-400 mb-1">
-                    Telefone <InfoTooltip text="Telefone comercial com DDD." />
-                  </label>
-                  <input type="text" value={tenantForm.phone} onChange={(e) => setTenantForm({ ...tenantForm, phone: e.target.value })}
+                  <input
+                    type="text"
+                    value={tenantForm.cnpj}
+                    onChange={(e) => setTenantForm({ ...tenantForm, cnpj: e.target.value })}
                     className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none"
-                    placeholder="(00) 00000-0000" />
+                    placeholder="00.000.000/0000-00"
+                  />
+                </div>
+                <div>
+                  <label className="flex items-center gap-1.5 text-sm font-bold text-slate-400 mb-1">
+                    Responsável
+                    <InfoTooltip text="Nome do responsável ou representante legal da empresa." />
+                  </label>
+                  <input
+                    type="text"
+                    value={tenantForm.responsible}
+                    onChange={(e) => setTenantForm({ ...tenantForm, responsible: e.target.value })}
+                    className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="flex items-center gap-1.5 text-sm font-bold text-slate-400 mb-1">
+                    Email
+                    <InfoTooltip text="Email comercial da empresa para contato." />
+                  </label>
+                  <input
+                    type="email"
+                    value={tenantForm.email}
+                    onChange={(e) => setTenantForm({ ...tenantForm, email: e.target.value })}
+                    className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="flex items-center gap-1.5 text-sm font-bold text-slate-400 mb-1">
+                    Telefone
+                    <InfoTooltip text="Telefone comercial com DDD." />
+                  </label>
+                  <input
+                    type="text"
+                    value={tenantForm.phone}
+                    onChange={(e) => setTenantForm({ ...tenantForm, phone: e.target.value })}
+                    className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none"
+                    placeholder="(00) 00000-0000"
+                  />
                 </div>
                 <div className="col-span-2">
                   <label className="flex items-center gap-1.5 text-sm font-bold text-slate-400 mb-1">
-                    Endereco <InfoTooltip text="Endereco comercial da empresa." />
+                    Endereço
+                    <InfoTooltip text="Endereço comercial da empresa." />
                   </label>
-                  <input type="text" value={tenantForm.address} onChange={(e) => setTenantForm({ ...tenantForm, address: e.target.value })}
-                    className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none" />
-                </div>
-                <div>
-                  <label className="text-sm font-bold text-slate-400 mb-1 block">Cidade</label>
-                  <input type="text" value={tenantForm.city} onChange={(e) => setTenantForm({ ...tenantForm, city: e.target.value })}
-                    className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none" />
-                </div>
-                <div>
-                  <label className="text-sm font-bold text-slate-400 mb-1 block">UF</label>
-                  <input type="text" value={tenantForm.state} onChange={(e) => setTenantForm({ ...tenantForm, state: e.target.value })}
+                  <input
+                    type="text"
+                    value={tenantForm.address}
+                    onChange={(e) => setTenantForm({ ...tenantForm, address: e.target.value })}
                     className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none"
-                    placeholder="DF" maxLength={2} />
+                  />
+                </div>
+                <div>
+                  <label className="flex items-center gap-1.5 text-sm font-bold text-slate-400 mb-1">
+                    Cidade
+                    <InfoTooltip text="Cidade onde a empresa está localizada." />
+                  </label>
+                  <input
+                    type="text"
+                    value={tenantForm.city}
+                    onChange={(e) => setTenantForm({ ...tenantForm, city: e.target.value })}
+                    className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="flex items-center gap-1.5 text-sm font-bold text-slate-400 mb-1">
+                    UF
+                    <InfoTooltip text="Unidade federativa (estado) da empresa." />
+                  </label>
+                  <input
+                    type="text"
+                    value={tenantForm.state}
+                    onChange={(e) => setTenantForm({ ...tenantForm, state: e.target.value })}
+                    className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none"
+                    placeholder="DF"
+                    maxLength={2}
+                  />
                 </div>
               </div>
             </div>
             <div className="flex gap-3 mt-6">
-              <button onClick={() => setShowTenantModal(false)} className="flex-1 py-2.5 border border-white/10 text-slate-400 rounded-xl hover:bg-white/5 font-bold text-sm">Cancelar</button>
-              <button onClick={saveTenant} disabled={!tenantForm.name || !tenantForm.cnpj}
-                className="flex-1 py-2.5 bg-primary text-white rounded-xl hover:bg-primary/80 font-bold text-sm disabled:opacity-50">
-                {editingTenant ? 'Salvar' : 'Criar'}
+              <button
+                onClick={() => setShowTenantModal(false)}
+                className="flex-1 py-2.5 border border-white/10 text-slate-400 rounded-xl hover:bg-white/5 font-bold text-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={saveTenant}
+                disabled={!tenantForm.name || !tenantForm.cnpj}
+                className="flex-1 py-2.5 bg-primary text-white rounded-xl hover:bg-primary/80 font-bold text-sm disabled:opacity-50"
+              >
+                {editingTenant ? 'Salvar Alterações' : 'Criar Empresa'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Modal: Criar Usuario */}
+      {/* Modal: Criar Usuário */}
       {showUserModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-slate-800 border border-white/10 rounded-2xl p-6 w-full max-w-md">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-bold text-white">Criar Usuario</h2>
-              <button onClick={() => setShowUserModal(false)} className="text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
+              <h2 className="text-lg font-bold text-white">Criar Usuário</h2>
+              <button onClick={() => setShowUserModal(false)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
             </div>
             <div className="space-y-4">
               <div>
-                <label className="flex items-center gap-1.5 text-sm font-bold text-slate-400 mb-1">Nome * <InfoTooltip text="Nome completo do usuario." /></label>
-                <input type="text" value={userForm.name} onChange={(e) => setUserForm({ ...userForm, name: e.target.value })}
-                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none" />
+                <label className="flex items-center gap-1.5 text-sm font-bold text-slate-400 mb-1">
+                  Nome *
+                  <InfoTooltip text="Nome completo do usuário." />
+                </label>
+                <input
+                  type="text"
+                  value={userForm.name}
+                  onChange={(e) => setUserForm({ ...userForm, name: e.target.value })}
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none"
+                />
               </div>
               <div>
-                <label className="flex items-center gap-1.5 text-sm font-bold text-slate-400 mb-1">Email * <InfoTooltip text="Email para login. Unico por empresa." /></label>
-                <input type="email" value={userForm.email} onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
-                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none" />
+                <label className="flex items-center gap-1.5 text-sm font-bold text-slate-400 mb-1">
+                  Email *
+                  <InfoTooltip text="Email para login. Deve ser único por empresa." />
+                </label>
+                <input
+                  type="email"
+                  value={userForm.email}
+                  onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none"
+                />
               </div>
               <div>
-                <label className="flex items-center gap-1.5 text-sm font-bold text-slate-400 mb-1">Senha * <InfoTooltip text="Senha inicial. O usuario podera alterar depois." /></label>
-                <input type="password" value={userForm.password} onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
-                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none" />
+                <label className="flex items-center gap-1.5 text-sm font-bold text-slate-400 mb-1">
+                  Senha *
+                  <InfoTooltip text="Senha inicial. O usuário poderá alterar depois." />
+                </label>
+                <input
+                  type="password"
+                  value={userForm.password}
+                  onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none"
+                />
               </div>
               <div>
-                <label className="flex items-center gap-1.5 text-sm font-bold text-slate-400 mb-1">Perfil * <InfoTooltip text="ADMIN: gestao completa do RH. USER: colaborador. AUDITOR: somente leitura." /></label>
-                <select value={userForm.role} onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}
-                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none">
+                <label className="flex items-center gap-1.5 text-sm font-bold text-slate-400 mb-1">
+                  Perfil *
+                  <InfoTooltip text="ADMIN: gestão completa do RH. USER: colaborador com acesso limitado. AUDITOR: somente leitura." />
+                </label>
+                <select
+                  value={userForm.role}
+                  onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none"
+                >
                   <option value="ADMIN">Administrador (RH)</option>
                   <option value="USER">Colaborador</option>
                   <option value="AUDITOR">Auditor</option>
                 </select>
               </div>
+              {userForm.role === 'USER' && (
+                <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg px-4 py-3 text-xs text-amber-300">
+                  <strong>Nota:</strong> Vincule este usuário a um colaborador na página de detalhes da empresa após a criação.
+                </div>
+              )}
             </div>
             <div className="flex gap-3 mt-6">
-              <button onClick={() => setShowUserModal(false)} className="flex-1 py-2.5 border border-white/10 text-slate-400 rounded-xl hover:bg-white/5 font-bold text-sm">Cancelar</button>
-              <button onClick={createUser} disabled={!userForm.name || !userForm.email || !userForm.password}
-                className="flex-1 py-2.5 bg-primary text-white rounded-xl hover:bg-primary/80 font-bold text-sm disabled:opacity-50">Criar</button>
+              <button
+                onClick={() => setShowUserModal(false)}
+                className="flex-1 py-2.5 border border-white/10 text-slate-400 rounded-xl hover:bg-white/5 font-bold text-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={createUser}
+                disabled={!userForm.name || !userForm.email || !userForm.password}
+                className="flex-1 py-2.5 bg-primary text-white rounded-xl hover:bg-primary/80 font-bold text-sm disabled:opacity-50"
+              >
+                Criar Usuário
+              </button>
             </div>
           </div>
         </div>

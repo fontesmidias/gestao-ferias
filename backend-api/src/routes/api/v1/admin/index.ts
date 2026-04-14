@@ -172,6 +172,106 @@ const admin: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     }
   })
 
+  // Editar usuario de um tenant
+  fastify.patch('/tenants/:tenantId/users/:userId', {
+    onRequest: [fastify.requireAuth, fastify.requireSuperAdmin],
+    schema: {
+      body: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          email: { type: 'string' },
+          role: { type: 'string', enum: ['ADMIN', 'USER', 'AUDITOR'] },
+          isActive: { type: 'boolean' }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const { tenantId, userId } = request.params as { tenantId: string; userId: string }
+    const data = request.body as any
+
+    const existing = await fastify.prisma.user.findFirst({ where: { id: userId, tenantId } })
+    if (!existing) return reply.code(404).send({ error: 'Not Found' })
+    if (existing.role === 'SUPERADMIN') return reply.code(403).send({ error: 'Forbidden', message: 'Nao e possivel editar o SuperAdmin.' })
+
+    const updated = await fastify.prisma.user.update({
+      where: { id: userId },
+      data: {
+        name: data.name !== undefined ? data.name : undefined,
+        email: data.email !== undefined ? data.email : undefined,
+        role: data.role !== undefined ? data.role : undefined,
+        isActive: data.isActive !== undefined ? data.isActive : undefined,
+      },
+      select: { id: true, name: true, email: true, role: true, isActive: true }
+    })
+    return updated
+  })
+
+  // Desativar usuario (soft delete)
+  fastify.delete('/tenants/:tenantId/users/:userId', {
+    onRequest: [fastify.requireAuth, fastify.requireSuperAdmin]
+  }, async (request, reply) => {
+    const { tenantId, userId } = request.params as { tenantId: string; userId: string }
+    const existing = await fastify.prisma.user.findFirst({ where: { id: userId, tenantId } })
+    if (!existing) return reply.code(404).send({ error: 'Not Found' })
+    if (existing.role === 'SUPERADMIN') return reply.code(403).send({ error: 'Forbidden' })
+
+    await fastify.prisma.user.update({ where: { id: userId }, data: { isActive: false } })
+    return { message: 'Usuario desativado.' }
+  })
+
+  // Switch tenant (impersonar)
+  fastify.post('/switch-tenant', {
+    onRequest: [fastify.requireAuth, fastify.requireSuperAdmin],
+    schema: {
+      body: { type: 'object', required: ['tenantId'], properties: { tenantId: { type: 'string', format: 'uuid' } } }
+    }
+  }, async (request, reply) => {
+    const { tenantId } = request.body as { tenantId: string }
+    const { userId, email, name } = request.user as any
+
+    const tenant = await fastify.prisma.tenant.findUnique({ where: { id: tenantId } })
+    if (!tenant) return reply.code(404).send({ error: 'Tenant nao encontrado.' })
+
+    const token = fastify.jwt.sign(
+      { userId, tenantId, email, role: 'SUPERADMIN', name, employeeId: null },
+      { expiresIn: '1h' }
+    )
+
+    return { token, tenant: { id: tenant.id, name: tenant.name } }
+  })
+
+  // Metricas de um tenant especifico
+  fastify.get('/tenants/:id/metrics', {
+    onRequest: [fastify.requireAuth, fastify.requireSuperAdmin]
+  }, async (request) => {
+    const { id } = request.params as { id: string }
+
+    const [employeesByStatus, pendingVacations, totalWorkplaces, activeAllocations, uncoveredVacations] = await Promise.all([
+      fastify.prisma.employee.groupBy({ by: ['status'], where: { tenantId: id }, _count: { id: true } }),
+      fastify.prisma.vacationRequest.count({ where: { tenantId: id, status: 'PENDING' } }),
+      fastify.prisma.workplace.count({ where: { tenantId: id } }),
+      fastify.prisma.workplaceAllocation.count({ where: { tenantId: id, status: 'ACTIVE' } }),
+      fastify.prisma.vacationRequest.count({
+        where: { tenantId: id, status: { in: ['APPROVED', 'SIGNED'] }, coverages: { none: {} } }
+      })
+    ])
+
+    const statusMap = employeesByStatus.reduce((acc, curr) => {
+      acc[curr.status] = curr._count.id
+      return acc
+    }, {} as Record<string, number>)
+
+    return {
+      employees: statusMap,
+      totalEmployees: Object.values(statusMap).reduce((a, b) => a + b, 0),
+      pendingVacations,
+      totalWorkplaces,
+      activeAllocations,
+      coverageGaps: uncoveredVacations
+    }
+  })
+
   // Listar usuários de um tenant
   fastify.get('/tenants/:tenantId/users', {
     onRequest: [fastify.requireAuth, fastify.requireSuperAdmin]
@@ -180,7 +280,7 @@ const admin: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     return await fastify.prisma.user.findMany({
       where: { tenantId },
       select: {
-        id: true, name: true, email: true, role: true, createdAt: true,
+        id: true, name: true, email: true, role: true, isActive: true, createdAt: true,
         employee: { select: { id: true, name: true, cpf: true } }
       },
       orderBy: { createdAt: 'desc' }

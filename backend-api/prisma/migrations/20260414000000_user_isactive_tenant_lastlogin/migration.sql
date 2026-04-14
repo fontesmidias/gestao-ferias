@@ -1,0 +1,2 @@
+ALTER TABLE "users" ADD COLUMN "is_active" BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE "tenants" ADD COLUMN "last_login_at" TIMESTAMP(3);
