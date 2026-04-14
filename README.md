@@ -1,89 +1,127 @@
 <div align="center">
-  <img src="docs/assets/cover.png" alt="Gestão de Férias Banner" width="800">
-  <h1>🌴 Gestão de Férias - Multi-tenant BMM</h1>
-  <p>Uma solução empresarial de alta performance para gerenciamento de ciclos de férias, integrada ao framework BMM.</p>
+  <h1>Gestao de Ferias V3.0 - SaaS Multi-tenant</h1>
+  <p>Plataforma de gestao de ferias com cobertura inteligente, AI preditiva e conformidade CLT para empresas de terceirizacao.</p>
 
-  [![Status](https://img.shields.io/badge/Status-Project%20Ready-success?style=for-the-badge)]()
-  [![Docker](https://img.shields.io/badge/Docker-Ready-0db7ed?logo=docker&logoColor=white&style=for-the-badge)]()
-  [![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js&style=for-the-badge)]()
-  [![Stack](https://img.shields.io/badge/Portainer-Stack-blue?logo=portainer&style=for-the-badge)]()
+  [![CI](https://github.com/fontesmidias/gestao-ferias/actions/workflows/ci.yml/badge.svg)](https://github.com/fontesmidias/gestao-ferias/actions/workflows/ci.yml)
+  [![Docker](https://img.shields.io/badge/Docker-Ready-0db7ed?logo=docker&logoColor=white&style=flat-square)]()
+  [![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js&style=flat-square)]()
+  [![Fastify](https://img.shields.io/badge/Fastify-5-black?logo=fastify&style=flat-square)]()
 </div>
 
 ---
 
-## 🔍 Visão Geral
+## Diferencial Competitivo
 
-Este projeto é uma plataforma robusta de **Gestão de Férias**, desenvolvida sobre o framework **BMM**. Ele oferece uma arquitetura multi-tenant escalável, permitindo que diferentes empresas ou departamentos gerenciem seus cronogramas de descanso de forma isolada e segura.
-
-## 🏗️ Matriz de Deploy (Tríplice Flexibilidade)
-
-Este repositório foi projetado para rodar em qualquer lugar. Escolha sua estratégia:
-
-| Cenário | Arquivo Manifesto | Proxy / SSL | Build | Quando Usar |
-| :--- | :--- | :--- | :--- | :--- |
-| **🏠 Local** | `docker-compose.yml` | `http://localhost` | On-the-fly | Desktop do dev e testes rápidos |
-| **🚀 Solo VPS** | `docker-compose.prod.yml` | Nginx Externo (Host) | Imagem Docker | VPS simples (Single Node) sem Swarm |
-| **🐝 Swarm Hub** | `docker-stack.yml` | Traefik (Overlay) | Imagem Docker | Produção Escalonada / Portainer |
+1. **Gestao integrada ferias + cobertura** - Nao existe no mercado para terceirizadoras
+2. **AI preditiva** - Responde "quantos intermitentes preciso em setembro?" com dados reais
+3. **Chat em linguagem natural** - Diretoria pergunta sem navegar dashboards
+4. **Otimizacao financeira** - Sugere ferista efetivo vs intermitente por custo-beneficio
+5. **Timeline de cobertura** - Quem cobre quem, onde e quando
 
 ---
 
-## 🚀 Guia de Configuração Rápida
+## Stack
 
-### 1. Preparando o Ambiente
-Antes de tudo, crie seu arquivo `.env`:
+| Camada | Tecnologia |
+|--------|-----------|
+| Frontend | Next.js 16 (App Router, Turbopack) |
+| Backend | Fastify 5, TypeScript, Prisma 7 |
+| Banco | PostgreSQL 15 |
+| Cache/Filas | Redis 7 + BullMQ |
+| AI | OpenAI / Anthropic / Google Gemini |
+| Deploy | Docker Swarm, Portainer, Traefik |
+| CI | GitHub Actions |
+
+---
+
+## Dev Local (sem Docker)
+
 ```bash
-cp .env.example .env
-```
-Edite as variáveis conforme as instruções internas do arquivo.
+# 1. Instalar dependencias
+cd backend-api && npm install
+cd ../frontend-web && npm install
 
-### 2. Rodando Localmente
+# 2. Configurar .env
+# backend-api/.env
+DATABASE_URL="postgresql://admin:adminpassword@localhost:5432/gestaoferias?schema=public"
+JWT_SECRET=sua_chave_secreta_aqui
+PORT=3000
+
+# frontend-web/.env.local
+NEXT_PUBLIC_API_URL=http://localhost:3000/api/v1
+
+# 3. Migrations + Seed
+cd backend-api
+npx prisma migrate deploy
+npx ts-node prisma/seed.ts
+
+# 4. Subir com PM2
+cd .. && npm run pm2:start
+```
+
+Acesse: http://localhost:3002 (login: admin@greenhouse.com / Senha@123)
+
+---
+
+## Deploy Docker
+
+### Local
 ```bash
 docker-compose up --build
 ```
-- API: [http://localhost:3000](http://localhost:3000)
-- Web: [http://localhost:3002](http://localhost:3002)
 
-### 3. Deploy em VPS Solo (Nginx Externo)
-1. Certifique-se de que o Nginx no seu host está rodando.
-2. Suba o ambiente: `docker-compose -f docker-compose.prod.yml up -d`.
-3. Configure seu bloco `server` do Nginx para apontar:
-   - **API:** `proxy_pass http://localhost:8080/`
-   - **Web:** `proxy_pass http://localhost:3001/`
-
-### 4. Deploy em VPS Swarm (Portainer / Traefik)
-1. No Portainer, crie uma **Stack** usando o [`docker-stack.yml`](./docker-stack.yml).
-2. Configure as **Environment Variables** no formulário do Portainer.
-3. Garanta que a rede `traefik_public` exista no Swarm.
-
----
-
-## ✨ Funcionalidades em Destaque
-
-- **💼 Gestão Multi-tenant:** Controle isolado por empresa.
-- **🛡️ Segurança Máxima:** Validação rígida de variáveis críticas em produção (`:?`).
-- **📧 Fluxo de Signatures:** Assinatura eletrônica de avisos integrada.
-- **📊 Relatórios Financeiros:** Simulação de proventos e encargos.
-
----
-
-## 📂 Estrutura do Repositório
-
-```text
-├── backend-api/      # Código fonte do Servidor (Node.js)
-├── frontend-web/     # Interface WEB (Next.js)
-├── docs/             # Documentação e Assets
-├── docker-stack.yml  # Configuração Swarm (Traefik)
-├── docker-compose.prod.yml # Configuração VPS Solo (Nginx)
-├── docker-compose.yml # Configuração Local (Dev)
-└── .env.example      # Mapa de variáveis
+### VPS Solo (Nginx externo)
+```bash
+docker-compose -f docker-compose.prod.yml up -d
 ```
 
-## 🛡️ Licença
+### Swarm + Portainer + Traefik
+```bash
+docker stack deploy -c docker-stack.yml gestao-ferias
+```
 
-Distribuído sob a licença MIT. Veja `LICENSE` para mais detalhes.
+Variaveis obrigatorias em producao:
+- `DB_USER`, `DB_PASSWORD` - credenciais do PostgreSQL
+- `JWT_SECRET` - chave secreta para tokens JWT
+- `PUBLIC_API_URL` - URL publica da API (ex: https://api.seudominio.com)
 
 ---
 
+## Endpoints Principais
+
+| Endpoint | Descricao |
+|----------|-----------|
+| POST /auth/login | Login (retorna access + refresh token) |
+| POST /auth/refresh | Renovar tokens |
+| GET /employees | Listar colaboradores |
+| GET /employees/:id/balance | Saldo de ferias (CLT) |
+| POST /vacations | Solicitar ferias |
+| GET /workplaces | Listar postos de trabalho |
+| GET /allocations | Alocacoes ativas |
+| GET /coverages/gaps | Detectar postos descobertos |
+| GET /coverages/suggestions | Sugerir cobertura |
+| GET /predict/risks | Riscos de multa CLT Art. 137 |
+| POST /predict/ask | Chat com AI |
+| GET /audit-logs | Logs de auditoria |
+
+---
+
+## Testes
+
+```bash
+# Backend (30 testes)
+cd backend-api && npx tsx --test test/modules/*.test.ts
+
+# Frontend (6 testes)
+cd frontend-web && npx vitest run
+```
+
+---
+
+## Licenca
+
+MIT - Veja `LICENSE`.
+
 <div align="center">
-  <p>Desenvolvido com ❤️ pela equipe Fontes Mídias</p>
+  <p>Green House Terceirizacao - Fontes Midias</p>
 </div>
