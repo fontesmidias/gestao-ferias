@@ -4,12 +4,13 @@ const dashboard: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   fastify.get('/metrics', {
     onRequest: [fastify.requireAuth]
   }, async (request, reply) => {
-    const tenantId = (request.user as any).tenantId
+    const { tenantId, role } = request.user as any
+    const whereClause = role === 'SUPERADMIN' ? {} : { tenantId }
 
     // 1. Employee Composition KPIs (Active vs Leaves)
     const employeesAggr = await fastify.prisma.employee.groupBy({
       by: ['status'],
-      where: { tenantId },
+      where: whereClause,
       _count: { id: true }
     })
     
@@ -24,14 +25,14 @@ const dashboard: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
 
     // 2. Pending Requests Metrics
     const pendingRequestsCount = await fastify.prisma.vacationRequest.count({
-      where: { tenantId, status: 'PENDING' }
+      where: { ...whereClause, status: 'PENDING' }
     })
 
     // 3. Approval Timeline (Vacations scheduled in the near future)
     // Here we query requests that are APPROVED and map them out by MM/YYYY
     const futureVacations = await fastify.prisma.vacationRequest.findMany({
-      where: { 
-        tenantId, 
+      where: {
+        ...whereClause,
         status: { in: ['APPROVED', 'COMPLETED', 'SIGNED'] },
         startDate: { gte: new Date(new Date().setHours(0,0,0,0)) } // From today onwards
       },
@@ -60,7 +61,7 @@ const dashboard: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
 
     // 4. Recent Activity (Latest Audit logs)
     const recentActivity = await fastify.prisma.auditLog.findMany({
-      where: { tenantId },
+      where: whereClause,
       orderBy: { createdAt: 'desc' },
       take: 5,
       include: {

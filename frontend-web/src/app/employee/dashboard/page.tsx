@@ -71,31 +71,28 @@ export default function EmployeeDashboard() {
     setError(null)
 
     try {
-      // 1. Fetch all employees and find the one matching the logged-in user by name
-      const employees: Employee[] = await HttpClient.get('/employees')
-      const matched = employees.find(
-        (emp) => emp.name.toLowerCase().trim() === user.name.toLowerCase().trim()
-      )
-
-      if (!matched) {
-        setError('Colaborador n\u00e3o encontrado. Verifique com o RH se seu cadastro est\u00e1 vinculado.')
+      // Usar employeeId do JWT (vem do AuthContext)
+      const employeeId = (user as any).employeeId
+      if (!employeeId) {
+        setError('Seu usuário não está vinculado a um colaborador. Solicite ao RH a vinculação.')
         setLoadingData(false)
         return
       }
 
-      setEmployee(matched)
-
-      // 2. Fetch balance and vacations in parallel
-      const [balanceData, vacationsData] = await Promise.all([
-        HttpClient.get(`/employees/${matched.id}/balance`),
+      // Fetch employee, balance and vacations in parallel
+      const [employees, balanceData, vacationsData] = await Promise.all([
+        HttpClient.get('/employees'),
+        HttpClient.get(`/employees/${employeeId}/balance`),
         HttpClient.get('/vacations'),
       ])
 
+      const matched = (employees as Employee[]).find(e => e.id === employeeId)
+      if (matched) setEmployee(matched)
+
       setBalance(balanceData)
 
-      // Filter vacations for this employee only
       const myVacations = (vacationsData as VacationRequest[]).filter(
-        (v) => v.employeeId === matched.id
+        (v) => v.employeeId === employeeId
       )
       setVacations(myVacations)
     } catch (err: any) {
