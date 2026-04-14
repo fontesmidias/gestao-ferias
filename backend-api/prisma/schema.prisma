@@ -13,6 +13,12 @@ model Tenant {
   id        String   @id @default(uuid()) @db.Uuid
   name      String
   cnpj      String   @unique
+  email     String?
+  phone     String?
+  address   String?
+  city      String?
+  state     String?
+  responsible String?
   smtpHost  String?  @map("smtp_host")
   smtpPort  Int?     @map("smtp_port")
   smtpUser  String?  @map("smtp_user")

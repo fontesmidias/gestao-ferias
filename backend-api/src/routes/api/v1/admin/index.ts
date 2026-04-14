@@ -61,6 +61,48 @@ const admin: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     return tenant
   })
 
+  // Atualizar tenant
+  fastify.patch('/tenants/:id', {
+    onRequest: [fastify.requireAuth, fastify.requireSuperAdmin],
+    schema: {
+      params: { type: 'object', properties: { id: { type: 'string' } } },
+      body: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          cnpj: { type: 'string' },
+          email: { type: 'string' },
+          phone: { type: 'string' },
+          address: { type: 'string' },
+          city: { type: 'string' },
+          state: { type: 'string' },
+          responsible: { type: 'string' }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const data = request.body as any
+
+    const existing = await fastify.prisma.tenant.findUnique({ where: { id } })
+    if (!existing) return reply.code(404).send({ error: 'Not Found' })
+
+    const updated = await fastify.prisma.tenant.update({
+      where: { id },
+      data: {
+        name: data.name !== undefined ? data.name : undefined,
+        cnpj: data.cnpj !== undefined ? data.cnpj.replace(/\D/g, '') : undefined,
+        email: data.email !== undefined ? data.email : undefined,
+        phone: data.phone !== undefined ? data.phone : undefined,
+        address: data.address !== undefined ? data.address : undefined,
+        city: data.city !== undefined ? data.city : undefined,
+        state: data.state !== undefined ? data.state : undefined,
+        responsible: data.responsible !== undefined ? data.responsible : undefined,
+      }
+    })
+    return updated
+  })
+
   // Deletar tenant (apenas se vazio)
   fastify.delete('/tenants/:id', {
     onRequest: [fastify.requireAuth, fastify.requireSuperAdmin]
