@@ -1,56 +1,82 @@
 import { FastifyPluginAsync } from 'fastify'
+import { ZapSignService } from '../../../../modules/integrations/zapsign-service'
 
 const zapsignWebhook: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
-  // Webhook público recebido da ZapSign quando um documento é assinado
+  // Webhook publico recebido da ZapSign quando um documento e assinado
   fastify.post('/zapsign', async (request, reply) => {
     try {
       const body = request.body as any
 
-      // ZapSign envia evento doc_signed quando todos os signatários assinaram
       const event = body?.event || body?.type
       const externalId = body?.external_id || body?.doc?.external_id
+      const docToken = body?.token || body?.doc?.token
 
       if (!externalId) {
         fastify.log.warn('[ZapSign Webhook] Payload sem external_id, ignorando.')
         return reply.code(200).send({ ok: true })
       }
 
-      // Verificar se a solicitação de férias existe
+      // Verificar se a solicitacao de ferias existe
       const vacationRequest = await fastify.prisma.vacationRequest.findUnique({
         where: { id: externalId },
         include: { signature: true },
       })
 
       if (!vacationRequest) {
-        fastify.log.warn(`[ZapSign Webhook] VacationRequest ${externalId} não encontrado.`)
+        fastify.log.warn(`[ZapSign Webhook] VacationRequest ${externalId} nao encontrado.`)
         return reply.code(200).send({ ok: true })
+      }
+
+      // Validar: o docToken do webhook deve bater com o que temos no banco
+      if (vacationRequest.signature?.zapSignDocToken && docToken) {
+        if (vacationRequest.signature.zapSignDocToken !== docToken) {
+          fastify.log.warn(`[ZapSign Webhook] Token mismatch para ${externalId}. Possivel fraude.`)
+          return reply.code(200).send({ ok: true })
+        }
       }
 
       // Processar evento de documento assinado
       if (event === 'doc_signed' || event === 'signed') {
         const now = new Date()
 
-        // Atualizar assinatura com data de assinatura
+        // Tentar baixar o PDF assinado
+        let signedFileUrl: string | null = null
+        if (vacationRequest.signature?.zapSignDocToken) {
+          try {
+            const docStatus = await ZapSignService.getDocumentStatus(
+              vacationRequest.tenantId,
+              vacationRequest.signature.zapSignDocToken,
+              fastify.prisma as any
+            )
+            signedFileUrl = docStatus.signed_file || null
+          } catch (err) {
+            fastify.log.error(`[ZapSign Webhook] Falha ao buscar PDF assinado: ${err}`)
+          }
+        }
+
+        // Atualizar assinatura com data e URL do PDF assinado
         if (vacationRequest.signature) {
           await fastify.prisma.signature.update({
             where: { id: vacationRequest.signature.id },
-            data: { signedAt: now },
+            data: {
+              signedAt: now,
+              pdfUrl: signedFileUrl,
+            },
           })
         }
 
-        // Atualizar status da solicitação para SIGNED
+        // Atualizar status da solicitacao para SIGNED
         await fastify.prisma.vacationRequest.update({
           where: { id: externalId },
           data: { status: 'SIGNED' },
         })
 
-        fastify.log.info(`[ZapSign Webhook] Documento assinado para férias ${externalId}.`)
+        fastify.log.info(`[ZapSign Webhook] Documento assinado para ferias ${externalId}.`)
       }
 
       return reply.code(200).send({ ok: true })
     } catch (err: any) {
       fastify.log.error(`[ZapSign Webhook] Erro ao processar: ${err.message}`)
-      // Sempre retorna 200 para evitar reenvios do ZapSign
       return reply.code(200).send({ ok: true })
     }
   })

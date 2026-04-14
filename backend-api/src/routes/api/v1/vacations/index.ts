@@ -171,26 +171,30 @@ const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
             if (zapSignConfigured) {
               const emp = employee || await fastify.prisma.employee.findUnique({
                 where: { id: existing.employeeId },
-                select: { phone: true, name: true, cpf: true },
+                select: { phone: true, name: true, cpf: true, position: true, hireDate: true, salary: true },
               })
 
               if (emp) {
                 const tenant = await fastify.prisma.tenant.findUnique({
                   where: { id: tenantId },
-                  select: { name: true },
+                  select: { name: true, cnpj: true },
                 })
 
                 const startFormatted = format(updated.startDate, 'dd/MM/yyyy')
                 const endFormatted = format(updated.endDate, 'dd/MM/yyyy')
 
-                // Gerar PDF do aviso de férias
+                // Gerar PDF do aviso de ferias (completo para validade juridica)
                 const receiptData = {
                   tenantName: tenant?.name || 'Empresa',
+                  tenantCnpj: tenant?.cnpj || '',
                   employeeName: emp.name,
                   cpf: emp.cpf,
+                  position: (emp as any).position || 'Colaborador',
+                  hireDate: (emp as any).hireDate ? format((emp as any).hireDate, 'dd/MM/yyyy') : '',
                   startDate: startFormatted,
                   endDate: endFormatted,
                   days: updated.days,
+                  salary: (emp as any).salary ? Number((emp as any).salary) : 0,
                 }
                 const { buffer, hash } = await SignatureService.generateReceipt(receiptData)
                 const pdfBase64 = buffer.toString('base64')

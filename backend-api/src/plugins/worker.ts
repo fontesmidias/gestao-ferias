@@ -58,17 +58,35 @@ export default fp(async (fastify) => {
         const sanitizedCPF = SanitizationService.sanitizeCPF(row.cpf)
         const sanitizedHireDate = SanitizationService.sanitizeDate(row.hireDate)
 
-        // 2. Persistência no Banco (Upsert por CPF+Tenant para isolamento multi-tenant)
+        // 2. Persistência no Banco (Upsert por CPF+Tenant com todos os campos)
         await fastify.prisma.employee.upsert({
           where: { cpf_tenantId: { cpf: sanitizedCPF, tenantId } },
           update: {
             name: sanitizedName,
             hireDate: sanitizedHireDate,
+            phone: row.phone || undefined,
+            position: row.position || undefined,
+            employeeType: row.employeeType || undefined,
+            branch: row.branch || undefined,
+            department: row.department || undefined,
+            workplace: row.workplace || undefined,
+            shift: row.shift || undefined,
+            salary: row.salary ? parseFloat(row.salary) : undefined,
+            registration: row.registration || undefined,
           },
           create: {
             name: sanitizedName,
             cpf: sanitizedCPF,
             hireDate: sanitizedHireDate,
+            phone: row.phone || null,
+            position: row.position || 'Colaborador',
+            employeeType: row.employeeType || 'EFETIVO',
+            branch: row.branch || null,
+            department: row.department || null,
+            workplace: row.workplace || null,
+            shift: row.shift || null,
+            salary: row.salary ? parseFloat(row.salary) : 0,
+            registration: row.registration || null,
             tenantId: tenantId
           }
         })
