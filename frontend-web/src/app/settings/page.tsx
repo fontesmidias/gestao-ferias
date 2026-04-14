@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { HttpClient } from '@/lib/api-client'
-import { Settings, Save, Server, Building2, KeyRound, BrainCircuit, ExternalLink } from 'lucide-react'
+import { Settings, Save, Server, Building2, KeyRound, BrainCircuit, ExternalLink, MessageSquare, Wifi, WifiOff } from 'lucide-react'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { toast } from 'sonner'
@@ -17,6 +17,8 @@ export default function SettingsPage() {
   const [showGemini, setShowGemini] = useState(false)
   const [showGroq, setShowGroq] = useState(false)
   const [showSmtpPass, setShowSmtpPass] = useState(false)
+  const [showEvoApiKey, setShowEvoApiKey] = useState(false)
+  const [whatsappStatus, setWhatsappStatus] = useState<{ loading: boolean; connected?: boolean; state?: string; error?: string }>({ loading: false })
   const [formData, setFormData] = useState({
     openaiKey: '',
     anthropicKey: '',
@@ -28,7 +30,11 @@ export default function SettingsPage() {
     smtpPort: '',
     smtpUser: '',
     smtpPass: '',
-    smtpFrom: ''
+    smtpFrom: '',
+    evoApiUrl: '',
+    evoApiKey: '',
+    evoInstanceName: '',
+    whatsappEnabled: false,
   })
 
   const providerModels: Record<string, { label: string; models: { value: string; label: string }[]; tooltip: string }> = {
@@ -86,7 +92,11 @@ export default function SettingsPage() {
         smtpPort: data.smtpPort || '',
         smtpUser: data.smtpUser || '',
         smtpPass: data.smtpPass || '',
-        smtpFrom: data.smtpFrom || ''
+        smtpFrom: data.smtpFrom || '',
+        evoApiUrl: data.evoApiUrl || '',
+        evoApiKey: data.evoApiKey || '',
+        evoInstanceName: data.evoInstanceName || '',
+        whatsappEnabled: data.whatsappEnabled || false,
       })
     } catch (err) {
       console.error(err)
@@ -111,6 +121,22 @@ export default function SettingsPage() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.id]: e.target.value })
+  }
+
+  const testWhatsappConnection = async () => {
+    setWhatsappStatus({ loading: true })
+    try {
+      const result = await HttpClient.get('/tenants/whatsapp/status')
+      setWhatsappStatus({ loading: false, ...result })
+      if (result.connected) {
+        toast.success('WhatsApp conectado com sucesso!')
+      } else {
+        toast.error(`WhatsApp desconectado. Estado: ${result.state || result.error || 'desconhecido'}`)
+      }
+    } catch (err: any) {
+      setWhatsappStatus({ loading: false, connected: false, error: err.message })
+      toast.error('Falha ao testar conexão WhatsApp.')
+    }
   }
 
   if (user?.role !== 'ADMIN' && user?.role !== 'SUPERADMIN') {
@@ -416,6 +442,121 @@ export default function SettingsPage() {
                       {showSmtpPass ? "🐵" : "🙈"}
                     </button>
                   </div>
+                </div>
+              </div>
+            </div>
+
+            {/* WhatsApp (Evolution API) */}
+            <div className="glass-card p-8 rounded-2xl border border-white/5 relative overflow-hidden">
+              <div className="flex items-center gap-3 mb-6 border-b border-white/5 pb-4">
+                <div className="p-2 bg-emerald-500/20 rounded-lg">
+                  <MessageSquare className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">WhatsApp (Evolution API)</h3>
+                  <p className="text-sm text-slate-400">Configure a integração com WhatsApp para envio automático de notificações de férias.</p>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                {/* Toggle WhatsApp habilitado */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm font-medium text-slate-300">WhatsApp habilitado</label>
+                    <InfoTooltip text="Ativa ou desativa o envio de notificações automáticas via WhatsApp. Quando habilitado, aprovações e reprovações de férias serão notificadas ao colaborador." />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, whatsappEnabled: !formData.whatsappEnabled })}
+                    className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
+                      formData.whatsappEnabled ? 'bg-emerald-500' : 'bg-slate-600'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                        formData.whatsappEnabled ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="col-span-full">
+                    <label htmlFor="evoApiUrl" className="block text-sm font-medium text-slate-300 mb-2">
+                      URL da Evolution API <InfoTooltip text="URL do servidor da Evolution API. Ex: https://evo.suaempresa.com" />
+                    </label>
+                    <input
+                      id="evoApiUrl"
+                      type="text"
+                      value={formData.evoApiUrl}
+                      onChange={handleChange}
+                      placeholder="https://evo.suaempresa.com"
+                      className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:ring-1 focus:ring-primary/50 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="evoApiKey" className="block text-sm font-medium text-slate-300 mb-2">
+                      API Key <InfoTooltip text="Chave de autenticação da Evolution API. Gerada durante a configuração da sua instância." />
+                    </label>
+                    <div className="relative">
+                      <input
+                        id="evoApiKey"
+                        type={showEvoApiKey ? "text" : "password"}
+                        value={formData.evoApiKey}
+                        onChange={handleChange}
+                        placeholder="sua-api-key-aqui"
+                        className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 pr-12 text-white focus:ring-1 focus:ring-primary/50 outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowEvoApiKey(!showEvoApiKey)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-xl hover:scale-110 transition-transform focus:outline-none"
+                        title={showEvoApiKey ? "Ocultar chave" : "Ver chave"}
+                      >
+                        {showEvoApiKey ? "🐵" : "🙈"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label htmlFor="evoInstanceName" className="block text-sm font-medium text-slate-300 mb-2">
+                      Nome da Instância <InfoTooltip text="Nome da instância configurada na Evolution API. Ex: gestaoferias" />
+                    </label>
+                    <input
+                      id="evoInstanceName"
+                      type="text"
+                      value={formData.evoInstanceName}
+                      onChange={handleChange}
+                      placeholder="gestaoferias"
+                      className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:ring-1 focus:ring-primary/50 outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Testar Conexão */}
+                <div className="flex items-center gap-4">
+                  <button
+                    type="button"
+                    onClick={testWhatsappConnection}
+                    disabled={whatsappStatus.loading || !formData.evoApiUrl || !formData.evoApiKey || !formData.evoInstanceName}
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl font-medium transition-all active:scale-95 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {whatsappStatus.loading ? (
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : whatsappStatus.connected ? (
+                      <Wifi className="w-4 h-4" />
+                    ) : (
+                      <WifiOff className="w-4 h-4" />
+                    )}
+                    Testar Conexão
+                  </button>
+                  {whatsappStatus.state && !whatsappStatus.loading && (
+                    <span className={`text-sm ${whatsappStatus.connected ? 'text-emerald-400' : 'text-red-400'}`}>
+                      Estado: {whatsappStatus.state}
+                      {whatsappStatus.error && ` — ${whatsappStatus.error}`}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>

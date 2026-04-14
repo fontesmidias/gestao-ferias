@@ -33,6 +33,11 @@ model Tenant {
   llmModel     String?  @map("llm_model")
   groqKey      String?  @map("groq_key")
 
+  evoApiUrl       String?  @map("evo_api_url")
+  evoApiKey       String?  @map("evo_api_key")
+  evoInstanceName String?  @map("evo_instance_name")
+  whatsappEnabled Boolean  @default(false) @map("whatsapp_enabled")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   
@@ -87,6 +92,7 @@ model Employee {
   workplaceId   String?  @map("workplace_id") @db.Uuid
   shift         String?  // Jornada / Escala
 
+  phone         String?
   salary        Decimal? @default(0) @db.Decimal(10, 2)
   hireDate      DateTime @map("hire_date")
   balanceOffset Int     @default(0) @map("balance_offset")

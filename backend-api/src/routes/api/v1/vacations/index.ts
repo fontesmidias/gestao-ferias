@@ -1,7 +1,8 @@
 import { FastifyPluginAsync } from 'fastify'
 import { VacationEngine } from '../../../../modules/vacations/vacation-engine'
 import { AuditService } from '../../../../modules/shared/audit-service'
-import { differenceInDays, parseISO } from 'date-fns'
+import { WhatsAppService } from '../../../../modules/notifications/whatsapp-service'
+import { differenceInDays, parseISO, format } from 'date-fns'
 
 const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   // Criar solicitação de férias (Story 3.2)
@@ -136,6 +137,34 @@ const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       ip: request.ip,
       userAgent: request.headers['user-agent']
     })
+
+    // Notificação WhatsApp ao aprovar ou rejeitar
+    if (updated.status === 'APPROVED' || updated.status === 'REJECTED') {
+      try {
+        const employee = await fastify.prisma.employee.findUnique({
+          where: { id: existing.employeeId },
+          select: { phone: true, name: true },
+        })
+
+        if (employee?.phone) {
+          let message: string
+          if (updated.status === 'APPROVED') {
+            const startFormatted = format(updated.startDate, 'dd/MM/yyyy')
+            const endFormatted = format(updated.endDate, 'dd/MM/yyyy')
+            message = `Suas férias de ${startFormatted} a ${endFormatted} (${updated.days} dias) foram APROVADAS pelo RH.`
+          } else {
+            const motivo = updated.dispatchNote || 'Não informado'
+            message = `Sua solicitação de férias foi REPROVADA. Motivo: ${motivo}`
+          }
+
+          // Envio assíncrono — não bloqueia a resposta da API
+          WhatsAppService.sendMessage(tenantId, employee.phone, message, fastify.prisma as any)
+            .catch((err: any) => fastify.log.error(`[WhatsApp] Falha ao notificar ${employee.name}: ${err.message}`))
+        }
+      } catch (whatsappErr: any) {
+        fastify.log.error(`[WhatsApp] Erro ao preparar notificação: ${whatsappErr.message}`)
+      }
+    }
 
     return updated
   })

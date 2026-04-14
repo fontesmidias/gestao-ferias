@@ -1,4 +1,5 @@
 import { FastifyPluginAsync } from 'fastify'
+import { WhatsAppService } from '../../../../modules/notifications/whatsapp-service'
 
 // Helper: mascarar valores sensíveis (ex: "sk-abc123xyz" → "sk-...xyz")
 function maskSecret(value: string | null | undefined): string | null {
@@ -89,7 +90,7 @@ const tenants: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     const user = request.user as any
     const payload = request.body as any
 
-    const { openaiKey, anthropicKey, geminiKey, groqKey, llmProvider, llmModel, smtpHost, smtpPort, smtpUser, smtpPass, smtpFrom } = payload
+    const { openaiKey, anthropicKey, geminiKey, groqKey, llmProvider, llmModel, smtpHost, smtpPort, smtpUser, smtpPass, smtpFrom, evoApiUrl, evoApiKey, evoInstanceName, whatsappEnabled } = payload
 
     await fastify.prisma.tenant.update({
       where: { id: user.tenantId },
@@ -105,6 +106,10 @@ const tenants: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         smtpUser: smtpUser !== undefined ? smtpUser : undefined,
         smtpPass: smtpPass !== undefined ? smtpPass : undefined,
         smtpFrom: smtpFrom !== undefined ? smtpFrom : undefined,
+        evoApiUrl: evoApiUrl !== undefined ? evoApiUrl : undefined,
+        evoApiKey: evoApiKey !== undefined ? evoApiKey : undefined,
+        evoInstanceName: evoInstanceName !== undefined ? evoInstanceName : undefined,
+        whatsappEnabled: whatsappEnabled !== undefined ? Boolean(whatsappEnabled) : undefined,
       }
     })
 
@@ -140,7 +145,20 @@ const tenants: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       groqKey: maskSecret(tenant.groqKey),
       llmProvider: tenant.llmProvider,
       llmModel: tenant.llmModel,
+      evoApiUrl: tenant.evoApiUrl,
+      evoApiKey: maskSecret(tenant.evoApiKey),
+      evoInstanceName: tenant.evoInstanceName,
+      whatsappEnabled: tenant.whatsappEnabled,
     }
+  })
+
+  // Testar conexão WhatsApp via Evolution API
+  fastify.get('/whatsapp/status', {
+    onRequest: [fastify.requireAuth, fastify.requireAdmin]
+  }, async (request, reply) => {
+    const user = request.user as any
+    const result = await WhatsAppService.checkConnection(user.tenantId, fastify.prisma as any)
+    return result
   })
 }
 

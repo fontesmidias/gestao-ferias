@@ -102,15 +102,15 @@ export default fp(async (fastify) => {
     const { type, data } = job.data
     
     if (type === 'SEND_SIGNATURE_OTP') {
-      const { phone, code } = data
+      const { phone, code, tenantId: notifTenantId } = data
       fastify.log.info(`[NOTIF-WORKER] Enviando OTP para ${phone}`)
-      const success = await WhatsAppService.sendOTP(phone, code)
+      const success = await WhatsAppService.sendOTP(notifTenantId, phone, code, fastify.prisma as any)
       if (!success) {
-        fastify.broadcast(data.tenantId || 'default', { type: 'NOTIFICATION_FAILED', data: { phone } })
+        fastify.broadcast(notifTenantId || 'default', { type: 'NOTIFICATION_FAILED', data: { phone } })
         throw new Error('Falha ao enviar WhatsApp')
       }
-      
-      fastify.broadcast(data.tenantId || 'default', { type: 'NOTIFICATION_SENT', data: { phone } })
+
+      fastify.broadcast(notifTenantId || 'default', { type: 'NOTIFICATION_SENT', data: { phone } })
     }
 
     return { status: 'sent' }
