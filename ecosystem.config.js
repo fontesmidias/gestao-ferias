@@ -1,8 +1,11 @@
+const path = require('path');
+const root = path.resolve(__dirname);
+
 module.exports = {
   apps: [
     {
       name: 'backend-api',
-      cwd: './backend-api',
+      cwd: path.join(root, 'backend-api'),
       script: './node_modules/fastify-cli/cli.js',
       args: 'start -l info dist/app.js',
       watch: ['dist'],
@@ -14,7 +17,7 @@ module.exports = {
     },
     {
       name: 'frontend-web',
-      cwd: './frontend-web',
+      cwd: path.join(root, 'frontend-web'),
       script: './node_modules/next/dist/bin/next',
       args: 'dev -p 3002',
       env: {
