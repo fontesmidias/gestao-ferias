@@ -111,7 +111,7 @@ export default function EmployeeDashboard() {
     if (!employee || !startDate || !balance) return
 
     if (selectedDays > balance.availableBalance) {
-      toast.error(`Saldo insuficiente. Voc\u00ea tem ${balance.availableBalance} dias dispon\u00edveis.`)
+      toast.error(`Saldo insuficiente. Voc\ê tem ${balance.availableBalance} dias dispon\íveis.`)
       return
     }
 
@@ -130,7 +130,7 @@ export default function EmployeeDashboard() {
         endDate: endDateStr,
       })
 
-      toast.success('Solicita\u00e7\u00e3o enviada com sucesso! O RH ser\u00e1 notificado.')
+      toast.success('Solicita\ç\ão enviada com sucesso! O RH ser\á notificado.')
       setRequestMode(false)
       setStartDate('')
       setSelectedDays(15)
@@ -138,7 +138,7 @@ export default function EmployeeDashboard() {
       // Refresh data
       await fetchData()
     } catch (err: any) {
-      toast.error(err.message || 'Erro ao enviar solicita\u00e7\u00e3o. Tente novamente.')
+      toast.error(err.message || 'Erro ao enviar solicita\ç\ão. Tente novamente.')
     } finally {
       setSubmitting(false)
     }
@@ -172,7 +172,7 @@ export default function EmployeeDashboard() {
             {user.name.charAt(0)}
           </div>
           <div className="text-left">
-            <p className="text-sm font-bold text-white leading-tight">Ol\u00e1, {user.name.split(' ')[0]}!</p>
+            <p className="text-sm font-bold text-white leading-tight">Ol\á, {user.name.split(' ')[0]}!</p>
             <p className="text-xs text-slate-400">{roleLabel}</p>
           </div>
         </div>
@@ -214,15 +214,15 @@ export default function EmployeeDashboard() {
           {/* Main Content */}
           {!loadingData && !error && balance && (
             <>
-              <h2 className="text-xl font-bold mb-4 px-2">Seu Saldo de F\u00e9rias <InfoTooltip text="Resumo do seu saldo atual de f\u00e9rias, calculado automaticamente com base na CLT e sua data de admiss\u00e3o." /></h2>
+              <h2 className="text-xl font-bold mb-4 px-2">Seu Saldo de F\érias <InfoTooltip text="Resumo do seu saldo atual de f\érias, calculado automaticamente com base na CLT e sua data de admiss\ão." /></h2>
 
               {/* Workplace Badge */}
               {employee?.workplace && (
                 <div className="flex items-center gap-2 bg-slate-900/60 border border-white/5 rounded-xl px-4 py-2 mb-4 mx-2">
                   <Building2 className="w-4 h-4 text-indigo-400" />
-                  <span className="text-xs text-slate-400">Posto de Servi\u00e7o:</span>
+                  <span className="text-xs text-slate-400">Posto de Servi\ço:</span>
                   <span className="text-xs font-bold text-white">{employee.workplace}</span>
-                  <InfoTooltip text="Local onde voc\u00ea est\u00e1 alocado atualmente. Informado pelo RH." />
+                  <InfoTooltip text="Local onde voc\ê est\á alocado atualmente. Informado pelo RH." />
                 </div>
               )}
 
@@ -232,7 +232,7 @@ export default function EmployeeDashboard() {
                 <div className="absolute -bottom-12 -left-12 w-40 h-40 bg-purple-500/20 blur-3xl rounded-full"></div>
 
                 <div className="flex flex-col items-center justify-center relative z-10">
-                  <span className="text-sm font-medium text-indigo-300 tracking-wider uppercase mb-2">Dias Dispon\u00edveis <InfoTooltip text="Total de dias de f\u00e9rias que voc\u00ea tem direito e ainda n\u00e3o utilizou. Calculado com base na sua data de admiss\u00e3o conforme a CLT." /></span>
+                  <span className="text-sm font-medium text-indigo-300 tracking-wider uppercase mb-2">Dias Dispon\íveis <InfoTooltip text="Total de dias de f\érias que voc\ê tem direito e ainda n\ão utilizou. Calculado com base na sua data de admiss\ão conforme a CLT." /></span>
                   <div className="flex items-baseline gap-2">
                     <span className="text-7xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-slate-400">
                       {balance.availableBalance}
@@ -240,8 +240,8 @@ export default function EmployeeDashboard() {
                     <span className="text-xl font-bold text-slate-500">dias</span>
                   </div>
                   <div className="flex gap-6 mt-4 text-xs text-slate-500">
-                    <span>Direito: <strong className="text-slate-300">{balance.totalDaysOfRight}d</strong> <InfoTooltip text="Total de dias de f\u00e9rias adquiridos desde sua admiss\u00e3o." /></span>
-                    <span>Usados: <strong className="text-slate-300">{balance.totalDaysUsed}d</strong> <InfoTooltip text="Total de dias j\u00e1 gozados ou aprovados em per\u00edodos anteriores." /></span>
+                    <span>Direito: <strong className="text-slate-300">{balance.totalDaysOfRight}d</strong> <InfoTooltip text="Total de dias de f\érias adquiridos desde sua admiss\ão." /></span>
+                    <span>Usados: <strong className="text-slate-300">{balance.totalDaysUsed}d</strong> <InfoTooltip text="Total de dias j\á gozados ou aprovados em per\íodos anteriores." /></span>
                   </div>
                 </div>
 
@@ -250,7 +250,7 @@ export default function EmployeeDashboard() {
                     <div className="flex items-center gap-3">
                       <Calendar className="w-5 h-5 text-rose-400" />
                       <div className="text-left">
-                        <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Vence em <InfoTooltip text="Data limite para usufruir das f\u00e9rias. Ap\u00f3s esta data, a empresa pode ser multada e voc\u00ea perde o per\u00edodo concessivo." /></p>
+                        <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Vence em <InfoTooltip text="Data limite para usufruir das f\érias. Ap\ós esta data, a empresa pode ser multada e voc\ê perde o per\íodo concessivo." /></p>
                         <p className="text-sm font-bold text-rose-300">{new Date(nextExpiration).toLocaleDateString('pt-BR')}</p>
                       </div>
                     </div>
@@ -266,12 +266,12 @@ export default function EmployeeDashboard() {
                     className="w-full bg-white text-slate-950 font-black py-4 rounded-2xl flex items-center justify-center gap-3 active:scale-[0.98] transition-transform shadow-xl shadow-white/10"
                   >
                     <Plane className="w-6 h-6" />
-                    Solicitar F\u00e9rias Agora <InfoTooltip text="Abre o formul\u00e1rio para solicitar suas f\u00e9rias. A solicita\u00e7\u00e3o ser\u00e1 enviada ao RH para aprova\u00e7\u00e3o." />
+                    Solicitar F\érias Agora <InfoTooltip text="Abre o formul\ário para solicitar suas f\érias. A solicita\ç\ão ser\á enviada ao RH para aprova\ç\ão." />
                   </button>
                 </div>
               ) : (
                 <div className="bg-slate-900 rounded-[2rem] p-6 border border-white/5 shadow-2xl animate-in slide-in-from-bottom-8 fade-in duration-300">
-                  <h3 className="font-bold text-lg mb-4 text-white">Quantos dias deseja tirar? <InfoTooltip text="Escolha a dura\u00e7\u00e3o das f\u00e9rias. Pela CLT, o m\u00ednimo \u00e9 10 dias corridos. Pode dividir em at\u00e9 3 per\u00edodos." /></h3>
+                  <h3 className="font-bold text-lg mb-4 text-white">Quantos dias deseja tirar? <InfoTooltip text="Escolha a dura\ç\ão das f\érias. Pela CLT, o m\ínimo \é 10 dias corridos. Pode dividir em at\é 3 per\íodos." /></h3>
 
                   <div className="flex bg-slate-950 p-2 rounded-xl mb-6">
                      {[10, 15, 20, 30].map(d => (
@@ -287,7 +287,7 @@ export default function EmployeeDashboard() {
 
                   <div className="space-y-4 mb-8 text-left">
                     <div>
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider pl-4 mb-2 block">Data de In\u00edcio (A partir de) <InfoTooltip text="Primeiro dia das suas f\u00e9rias. N\u00e3o pode iniciar em sexta-feira, s\u00e1bado, domingo ou v\u00e9spera de feriado (CLT Art. 134 \u00a73)." /></label>
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider pl-4 mb-2 block">Data de In\ício (A partir de) <InfoTooltip text="Primeiro dia das suas f\érias. N\ão pode iniciar em sexta-feira, s\ábado, domingo ou v\éspera de feriado (CLT Art. 134 \§3)." /></label>
                       <input
                         type="date"
                         value={startDate}
@@ -297,7 +297,7 @@ export default function EmployeeDashboard() {
                     </div>
                     {startDate && (
                       <div className="bg-slate-950/50 rounded-xl p-3 border border-white/5">
-                        <p className="text-xs text-slate-500">Per\u00edodo calculado:</p>
+                        <p className="text-xs text-slate-500">Per\íodo calculado:</p>
                         <p className="text-sm font-bold text-white">
                           {new Date(startDate + 'T00:00:00').toLocaleDateString('pt-BR')} a{' '}
                           {(() => {
@@ -327,7 +327,7 @@ export default function EmployeeDashboard() {
                       ) : (
                         <CheckCircle2 className="w-5 h-5" />
                       )}
-                      {submitting ? 'Enviando...' : 'Enviar RH'} <InfoTooltip text="Envia a solicita\u00e7\u00e3o para o RH avaliar. Voc\u00ea ser\u00e1 notificado quando houver uma decis\u00e3o." />
+                      {submitting ? 'Enviando...' : 'Enviar RH'} <InfoTooltip text="Envia a solicita\ç\ão para o RH avaliar. Voc\ê ser\á notificado quando houver uma decis\ão." />
                     </button>
                   </div>
                 </div>
@@ -336,7 +336,7 @@ export default function EmployeeDashboard() {
               {/* Vacation History */}
               {vacations.length > 0 && (
                 <div className="mt-10">
-                  <h3 className="text-lg font-bold mb-4 px-2">Hist\u00f3rico de Solicita\u00e7\u00f5es <InfoTooltip text="Todas as suas solicita\u00e7\u00f5es de f\u00e9rias, com status atualizado em tempo real." /></h3>
+                  <h3 className="text-lg font-bold mb-4 px-2">Hist\órico de Solicita\ç\ões <InfoTooltip text="Todas as suas solicita\ç\ões de f\érias, com status atualizado em tempo real." /></h3>
                   <div className="space-y-3">
                     {vacations.map((v) => {
                       const statusInfo = STATUS_MAP[v.status] || { label: v.status, color: 'bg-slate-500/20 text-slate-400 border-slate-500/30' }
@@ -370,11 +370,11 @@ export default function EmployeeDashboard() {
       <div className="md:hidden fixed bottom-0 left-0 w-full glass border-t border-white/5 pb-safe pt-2 px-6 flex justify-between items-center z-50">
         <button className="flex flex-col items-center p-2 text-indigo-400">
           <Navigation className="w-6 h-6 mb-1" />
-          <span className="text-[10px] font-bold">In\u00edcio</span>
+          <span className="text-[10px] font-bold">In\ício</span>
         </button>
         <button className="flex flex-col items-center p-2 text-slate-500">
           <Calendar className="w-6 h-6 mb-1" />
-          <span className="text-[10px] font-bold">Calend\u00e1rio</span>
+          <span className="text-[10px] font-bold">Calend\ário</span>
         </button>
         <button className="flex flex-col items-center p-2 text-slate-500">
           <AlertCircle className="w-6 h-6 mb-1" />
