@@ -56,6 +56,10 @@ jobs:
         working-directory: backend-api
         run: npm run build
 
+      - name: Run unit tests
+        working-directory: backend-api
+        run: npx tsx --test test/modules/*.test.ts
+
   frontend-build:
     name: Frontend - Build & Lint
     runs-on: ubuntu-latest
@@ -79,6 +83,10 @@ jobs:
       - name: Lint
         working-directory: frontend-web
         run: npm run lint || true
+
+      - name: Run tests
+        working-directory: frontend-web
+        run: npx vitest run
 
       - name: Build
         working-directory: frontend-web
