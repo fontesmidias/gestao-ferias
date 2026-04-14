@@ -124,6 +124,45 @@ const employees: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     }
   })
 
+  // Saldo de férias calculado (CLT)
+  fastify.get('/:id/balance', {
+    onRequest: [fastify.requireAuth],
+    schema: {
+      params: {
+        type: 'object',
+        properties: { id: { type: 'string', format: 'uuid' } }
+      }
+    }
+  }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const { tenantId } = request.user as any
+
+    const employee = await fastify.prisma.employee.findFirst({ where: { id, tenantId } })
+    if (!employee) {
+      return reply.code(404).send({ error: 'Not Found', message: 'Funcionário não encontrado.' })
+    }
+
+    const periods = VacationEngine.calculatePeriods(employee.hireDate, 0, employee.balanceOffset)
+    const usedDays = await fastify.prisma.vacationRequest.aggregate({
+      where: { employeeId: id, tenantId, status: { in: ['APPROVED', 'SIGNED', 'COMPLETED'] } },
+      _sum: { days: true }
+    })
+
+    const totalRight = periods.reduce((acc, p) => acc + p.daysOfRight, 0)
+    const totalUsed = usedDays._sum.days || 0
+
+    return {
+      employeeId: id,
+      employeeName: employee.name,
+      hireDate: employee.hireDate,
+      balanceOffset: employee.balanceOffset,
+      totalDaysOfRight: totalRight,
+      totalDaysUsed: totalUsed,
+      availableBalance: totalRight - totalUsed,
+      periods
+    }
+  })
+
   // Ajuste manual de saldo de férias (RH Override)
   fastify.patch('/:id/balance', {
     onRequest: [fastify.requireAuth, fastify.requireAdmin],

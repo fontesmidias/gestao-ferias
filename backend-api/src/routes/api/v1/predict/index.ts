@@ -1,0 +1,249 @@
+import { FastifyPluginAsync } from 'fastify'
+import { VacationEngine } from '../../../../modules/vacations/vacation-engine'
+import { ROIEngine } from '../../../../modules/finance/roi-engine'
+import { addMonths, startOfMonth, endOfMonth, format } from 'date-fns'
+
+const predict: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
+  // Riscos reais: colaboradores com férias vencidas ou prestes a vencer
+  fastify.get('/risks', {
+    onRequest: [fastify.requireAuth]
+  }, async (request) => {
+    const { tenantId } = request.user as any
+
+    const employees = await fastify.prisma.employee.findMany({
+      where: { tenantId, status: 'ATIVO' },
+      select: { id: true, name: true, hireDate: true, salary: true, balanceOffset: true, position: true }
+    })
+
+    const risks = employees.map(emp => {
+      const periods = VacationEngine.calculatePeriods(emp.hireDate, 0, emp.balanceOffset)
+      const vencidos = periods.filter(p => p.status === 'VENCIDO')
+      const concessivos = periods.filter(p => p.status === 'CONCESSIVO')
+
+      if (vencidos.length === 0 && concessivos.length === 0) return null
+
+      // CLT Art. 137: multa = salário + 1/3 por período vencido
+      const multaEstimada = vencidos.length > 0 && emp.salary
+        ? Number(emp.salary) * (1 + 1/3) * vencidos.length
+        : 0
+
+      const savingsEstimado = emp.salary
+        ? ROIEngine.calculateImpact(emp.salary, 30).totalContingency
+        : 0
+
+      return {
+        employeeId: emp.id,
+        name: emp.name,
+        position: emp.position,
+        risk: vencidos.length > 0 ? 'HIGH' : 'MEDIUM',
+        vencidoCount: vencidos.length,
+        concessivoCount: concessivos.length,
+        multaEstimada: Math.round(multaEstimada * 100) / 100,
+        savingsEstimado: Math.round(savingsEstimado * 100) / 100,
+        deadline: concessivos[0]?.concessiveEndDate || vencidos[0]?.concessiveEndDate || null,
+        action: vencidos.length > 0 ? 'Agendar Férias Urgente' : 'Planejar Férias'
+      }
+    }).filter(Boolean).sort((a: any, b: any) => {
+      if (a.risk === 'HIGH' && b.risk !== 'HIGH') return -1
+      if (a.risk !== 'HIGH' && b.risk === 'HIGH') return 1
+      return (b.multaEstimada || 0) - (a.multaEstimada || 0)
+    })
+
+    const totalMulta = risks.reduce((sum, r: any) => sum + r.multaEstimada, 0)
+    const totalSavings = risks.reduce((sum, r: any) => sum + r.savingsEstimado, 0)
+
+    return {
+      summary: {
+        totalRisks: risks.length,
+        highRisks: risks.filter((r: any) => r.risk === 'HIGH').length,
+        totalMultaEstimada: Math.round(totalMulta * 100) / 100,
+        totalSavingsEstimado: Math.round(totalSavings * 100) / 100,
+      },
+      risks
+    }
+  })
+
+  // Previsão de demanda de cobertura por mês
+  fastify.get('/coverage-forecast', {
+    onRequest: [fastify.requireAuth]
+  }, async (request) => {
+    const { tenantId } = request.user as any
+    const today = new Date()
+    const months: any[] = []
+
+    for (let i = 0; i < 6; i++) {
+      const monthStart = startOfMonth(addMonths(today, i))
+      const monthEnd = endOfMonth(addMonths(today, i))
+
+      const vacations = await fastify.prisma.vacationRequest.findMany({
+        where: {
+          tenantId,
+          status: { in: ['APPROVED', 'SIGNED'] },
+          startDate: { lte: monthEnd },
+          endDate: { gte: monthStart }
+        },
+        include: {
+          employee: {
+            select: {
+              id: true, name: true,
+              allocations: {
+                where: { status: 'ACTIVE' },
+                include: { workplacePosition: { include: { workplace: { select: { id: true, name: true } } } } }
+              }
+            }
+          },
+          coverages: true
+        }
+      })
+
+      const uncovered = vacations.filter(v => v.coverages.length === 0)
+      const affectedWorkplaces = new Set<string>()
+      uncovered.forEach(v => {
+        const alloc = v.employee.allocations[0]
+        if (alloc) affectedWorkplaces.add(alloc.workplacePosition.workplace.name)
+      })
+
+      months.push({
+        month: format(monthStart, 'yyyy-MM'),
+        totalVacations: vacations.length,
+        uncoveredVacations: uncovered.length,
+        affectedWorkplaces: Array.from(affectedWorkplaces),
+        intermitentesNeeded: uncovered.length,
+      })
+    }
+
+    return { forecast: months }
+  })
+
+  // Chat com LLM — pergunta em linguagem natural
+  fastify.post('/ask', {
+    onRequest: [fastify.requireAuth],
+    schema: {
+      body: {
+        type: 'object',
+        required: ['question'],
+        properties: {
+          question: { type: 'string', minLength: 5 }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const { tenantId } = request.user as any
+    const { question } = request.body as { question: string }
+
+    // Buscar configuração LLM do tenant
+    const tenant = await fastify.prisma.tenant.findUnique({ where: { id: tenantId } })
+    if (!tenant) {
+      return reply.code(404).send({ error: 'Tenant não encontrado.' })
+    }
+
+    // Montar contexto com dados reais do banco
+    const [totalEmployees, pendingRequests, approvedRequests, workplaces, coverageGaps] = await Promise.all([
+      fastify.prisma.employee.count({ where: { tenantId, status: 'ATIVO' } }),
+      fastify.prisma.vacationRequest.count({ where: { tenantId, status: 'PENDING' } }),
+      fastify.prisma.vacationRequest.count({ where: { tenantId, status: { in: ['APPROVED', 'SIGNED'] } } }),
+      fastify.prisma.workplace.findMany({
+        where: { tenantId },
+        select: { name: true, minStaff: true, _count: { select: { employees: true } } }
+      }),
+      fastify.prisma.coverageAssignment.count({ where: { tenantId, status: 'PLANNED' } })
+    ])
+
+    const context = `
+Dados atuais da empresa "${tenant.name}":
+- Total de colaboradores ativos: ${totalEmployees}
+- Solicitações de férias pendentes: ${pendingRequests}
+- Férias aprovadas/em andamento: ${approvedRequests}
+- Coberturas planejadas: ${coverageGaps}
+- Postos de trabalho: ${workplaces.map(w => `${w.name} (mín: ${w.minStaff}, atual: ${(w as any)._count.employees})`).join(', ')}
+`
+
+    const systemPrompt = `Você é o Oráculo AI da plataforma GestãoFérias, especialista em gestão de férias para empresas de terceirização de mão de obra no Brasil.
+Responda sempre em português, de forma objetiva e profissional.
+Use os dados reais fornecidos para embasar suas respostas.
+Quando não tiver dados suficientes, diga claramente.
+Cite artigos da CLT quando relevante (Art. 130, 134, 137).
+
+${context}`
+
+    // Tentar OpenAI primeiro, depois Anthropic, depois Gemini
+    if (tenant.openaiKey) {
+      try {
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${tenant.openaiKey}`
+          },
+          body: JSON.stringify({
+            model: 'gpt-4o-mini',
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: question }
+            ],
+            max_tokens: 1000
+          })
+        })
+        const data = await response.json() as any
+        if (data.choices?.[0]?.message?.content) {
+          return { answer: data.choices[0].message.content, provider: 'openai' }
+        }
+      } catch (err) {
+        fastify.log.error(`[PREDICT] OpenAI error: ${err}`)
+      }
+    }
+
+    if (tenant.anthropicKey) {
+      try {
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': tenant.anthropicKey,
+            'anthropic-version': '2023-06-01'
+          },
+          body: JSON.stringify({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 1000,
+            system: systemPrompt,
+            messages: [{ role: 'user', content: question }]
+          })
+        })
+        const data = await response.json() as any
+        if (data.content?.[0]?.text) {
+          return { answer: data.content[0].text, provider: 'anthropic' }
+        }
+      } catch (err) {
+        fastify.log.error(`[PREDICT] Anthropic error: ${err}`)
+      }
+    }
+
+    if (tenant.geminiKey) {
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${tenant.geminiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: `${systemPrompt}\n\nPergunta: ${question}` }] }]
+            })
+          }
+        )
+        const data = await response.json() as any
+        if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
+          return { answer: data.candidates[0].content.parts[0].text, provider: 'gemini' }
+        }
+      } catch (err) {
+        fastify.log.error(`[PREDICT] Gemini error: ${err}`)
+      }
+    }
+
+    return reply.code(503).send({
+      error: 'Nenhuma LLM configurada',
+      message: 'Configure uma chave de API (OpenAI, Anthropic ou Gemini) nas Configurações do Tenant para ativar o Oráculo AI.'
+    })
+  })
+}
+
+export default predict
