@@ -28,7 +28,7 @@ export class CoverageEngine {
     const feristas = await prisma.employee.findMany({
       where: {
         tenantId,
-        employeeType: 'FERISTA',
+        isFerista: true,
         status: 'ATIVO',
         coveragesAsReplacement: {
           none: {

@@ -159,7 +159,7 @@ const workplaces: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
           include: {
             allocations: {
               where: { status: 'ACTIVE' },
-              include: { employee: { select: { id: true, name: true, cpf: true, employeeType: true } } }
+              include: { employee: { select: { id: true, name: true, cpf: true, employeeType: true, isFerista: true } } }
             }
           }
         }

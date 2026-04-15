@@ -270,13 +270,12 @@ const coverages: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       return reply.code(404).send({ error: 'Not Found', message: 'Solicitação de férias não encontrada.' })
     }
 
-    // 2. Buscar feristas disponíveis (sem férias nem cobertura no período)
+    // 2. Buscar feristas disponíveis (isFerista=true, sem cobertura no período)
     const feristas = await fastify.prisma.employee.findMany({
       where: {
         tenantId,
-        employeeType: 'FERISTA',
+        isFerista: true,
         status: 'ATIVO',
-        // Excluir feristas que já estão cobrindo alguém no período
         coveragesAsReplacement: {
           none: {
             startDate: { lte: vacation.endDate },
@@ -285,14 +284,15 @@ const coverages: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
           }
         }
       },
-      select: { id: true, name: true, cpf: true, salary: true, employeeType: true }
+      select: { id: true, name: true, cpf: true, salary: true, employeeType: true, isFerista: true }
     })
 
-    // 3. Buscar intermitentes disponíveis
+    // 3. Buscar intermitentes disponíveis (não-feristas intermitentes)
     const intermitentes = await fastify.prisma.employee.findMany({
       where: {
         tenantId,
         employeeType: 'INTERMITENTE',
+        isFerista: false,
         status: 'ATIVO',
         coveragesAsReplacement: {
           none: {
@@ -302,7 +302,7 @@ const coverages: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
           }
         }
       },
-      select: { id: true, name: true, cpf: true, salary: true, employeeType: true }
+      select: { id: true, name: true, cpf: true, salary: true, employeeType: true, isFerista: true }
     })
 
     const allocation = vacation.employee.allocations[0]

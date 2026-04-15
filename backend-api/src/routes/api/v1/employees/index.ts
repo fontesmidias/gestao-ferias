@@ -102,6 +102,7 @@ const employees: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
           hireDate: new Date(data.hireDate),
           phone: data.phone || null,
           employeeType: data.employeeType || 'EFETIVO',
+          isFerista: data.isFerista || false,
         }
       })
       return reply.code(201).send(emp)
@@ -123,6 +124,7 @@ const employees: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
           phone: { type: 'string' },
           position: { type: 'string' },
           employeeType: { type: 'string' },
+          isFerista: { type: 'boolean' },
           status: { type: 'string' },
           branch: { type: 'string' },
           department: { type: 'string' },
@@ -149,6 +151,7 @@ const employees: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         phone: data.phone !== undefined ? data.phone : undefined,
         position: data.position !== undefined ? data.position : undefined,
         employeeType: data.employeeType !== undefined ? data.employeeType : undefined,
+        isFerista: data.isFerista !== undefined ? data.isFerista : undefined,
         status: data.status !== undefined ? data.status : undefined,
         branch: data.branch !== undefined ? data.branch : undefined,
         department: data.department !== undefined ? data.department : undefined,

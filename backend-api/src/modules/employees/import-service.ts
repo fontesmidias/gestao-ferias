@@ -117,7 +117,7 @@ export class ImportService {
       ['Nome Completo', 'CPF', 'Data Admissao', 'Telefone', 'Cargo', 'Tipo Colaborador', 'Empresa', 'Departamento', 'Posto', 'Escala', 'Salario', 'Matricula'],
       ['Carlos Silva', '111.222.333-44', '15/03/2022', '(61) 99999-9999', 'Agente de Portaria', 'EFETIVO', 'Green House', 'Operacional', 'INEP - Sede', '12x36', '2200', 'GH-001'],
       ['Ana Santos', '555.666.777-88', '01/07/2021', '(61) 98888-8888', 'Recepcionista', 'EFETIVO', 'Green House', 'Administrativo', 'TRF', '8h', '1800', 'GH-002'],
-      ['Roberto Dias', '999.888.777-66', '15/01/2024', '(61) 97777-7777', 'Ferista Geral', 'FERISTA', 'Green House', 'Operacional', '', '', '2200', 'GH-003'],
+      ['Roberto Dias', '999.888.777-66', '15/01/2024', '(61) 97777-7777', 'Ferista Geral', 'EFETIVO', 'Green House', 'Operacional', '', '', '2200', 'GH-003'],
     ]
     const ws = XLSX.utils.aoa_to_sheet(data)
     ws['!cols'] = data[0].map(() => ({ wch: 20 }))
@@ -129,7 +129,7 @@ export class ImportService {
       ['Data Admissao', 'Formato DD/MM/AAAA (obrigatorio)'],
       ['Telefone', 'Telefone com DDD para WhatsApp (opcional)'],
       ['Cargo', 'Funcao exercida (opcional, padrao: Colaborador)'],
-      ['Tipo Colaborador', 'EFETIVO, INTERMITENTE ou FERISTA (padrao: EFETIVO)'],
+      ['Tipo Colaborador', 'EFETIVO ou INTERMITENTE (padrao: EFETIVO). Para marcar como ferista, use o painel.'],
       ['Empresa', 'Nome da empresa/filial (opcional)'],
       ['Departamento', 'Centro de custo ou contrato (opcional)'],
       ['Posto', 'Nome do posto de servico (opcional)'],

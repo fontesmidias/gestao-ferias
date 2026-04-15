@@ -12,7 +12,7 @@ interface Position {
   shiftPattern: string | null
   requiredCount: number
   _count: { allocations: number }
-  allocations: { employee: { id: string; name: string; employeeType: string } }[]
+  allocations: { employee: { id: string; name: string; employeeType: string; isFerista?: boolean } }[]
 }
 
 interface Workplace {
@@ -256,7 +256,7 @@ export default function WorkplacesPage() {
                             <span key={alloc.employee.id} className="flex items-center gap-1.5 text-xs bg-slate-800 text-slate-300 px-2.5 py-1 rounded-full">
                               <Users className="w-3 h-3" />
                               {alloc.employee.name}
-                              <span className="text-slate-500">({alloc.employee.employeeType})</span>
+                              <span className="text-slate-500">({alloc.employee.employeeType}{alloc.employee.isFerista ? ' · Ferista' : ''})</span>
                             </span>
                           ))}
                         </div>

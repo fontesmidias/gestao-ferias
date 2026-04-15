@@ -85,7 +85,8 @@ model Employee {
   registration  String?  @map("registration")
   birthDate     DateTime? @map("birth_date")
   position      String?  @default("Colaborador")
-  employeeType  String   @default("EFETIVO") @map("employee_type") // EFETIVO, INTERMITENTE, FERISTA
+  employeeType  String   @default("EFETIVO") @map("employee_type") // EFETIVO, INTERMITENTE
+  isFerista     Boolean  @default(false) @map("is_ferista")
 
   status        String   @default("ATIVO") // ATIVO, FERIAS, AFASTADO, INATIVO
   branch        String?  // Empresa/Filial

@@ -91,9 +91,9 @@ async function main() {
     { name: 'Ricardo Souza', cpf: '88888888808', position: 'Maqueiro', employeeType: 'EFETIVO', hireDate: '2022-09-01', salary: 1900, positionRef: pos3a },
     { name: 'Camila Rodrigues', cpf: '99999999909', position: 'Maqueiro', employeeType: 'EFETIVO', hireDate: '2021-12-10', salary: 1900, positionRef: pos3a },
     { name: 'Bruno Almeida', cpf: '10101010110', position: 'Auxiliar de Limpeza', employeeType: 'EFETIVO', hireDate: '2023-03-20', salary: 1600, positionRef: pos3b },
-    // Feristas
-    { name: 'Roberto Dias (Ferista)', cpf: '20202020220', position: 'Ferista Geral', employeeType: 'FERISTA', hireDate: '2024-01-15', salary: 2200, positionRef: null },
-    { name: 'Sandra Mendes (Ferista)', cpf: '30303030330', position: 'Ferista Geral', employeeType: 'FERISTA', hireDate: '2024-03-01', salary: 2000, positionRef: null },
+    // Feristas (efetivos com isFerista=true)
+    { name: 'Roberto Dias (Ferista)', cpf: '20202020220', position: 'Ferista Geral', employeeType: 'EFETIVO', isFerista: true, hireDate: '2024-01-15', salary: 2200, positionRef: null },
+    { name: 'Sandra Mendes (Ferista)', cpf: '30303030330', position: 'Ferista Geral', employeeType: 'EFETIVO', isFerista: true, hireDate: '2024-03-01', salary: 2000, positionRef: null },
   ]
 
   const createdEmployees = []
@@ -104,6 +104,7 @@ async function main() {
         cpf: emp.cpf,
         position: emp.position,
         employeeType: emp.employeeType,
+        isFerista: (emp as any).isFerista || false,
         hireDate: new Date(emp.hireDate),
         salary: emp.salary,
         workplaceId: emp.positionRef ? (await prisma.workplacePosition.findUnique({ where: { id: emp.positionRef.id } }))?.workplaceId : undefined,

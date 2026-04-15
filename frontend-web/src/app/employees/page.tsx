@@ -21,6 +21,7 @@ interface Employee {
   birthDate?: string
   position?: string
   employeeType?: string
+  isFerista?: boolean
   salary?: number
   status: string
   branch?: string
@@ -43,7 +44,7 @@ export default function EmployeesPage() {
   // Edit modal state
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null)
   const [editForm, setEditForm] = useState({
-    name: '', cpf: '', phone: '', position: '', employeeType: '', status: '',
+    name: '', cpf: '', phone: '', position: '', employeeType: '', isFerista: false, status: '',
     branch: '', department: '', workplace: '', shift: '', salary: '', registration: ''
   })
   const [saving, setSaving] = useState(false)
@@ -131,6 +132,7 @@ export default function EmployeesPage() {
       phone: emp.phone || '',
       position: emp.position || '',
       employeeType: emp.employeeType || '',
+      isFerista: emp.isFerista || false,
       status: emp.status || '',
       branch: emp.branch || '',
       department: emp.department || '',
@@ -452,13 +454,19 @@ export default function EmployeesPage() {
                 <input type="text" value={editForm.position} onChange={e => setEditForm({...editForm, position: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary/50" />
               </div>
               <div>
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1">Tipo de Vínculo <InfoTooltip text="Tipo de contrato: Efetivo (CLT fixo), Intermitente (sob demanda) ou Ferista (cobertura de férias)." /></label>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1">Tipo de Vínculo <InfoTooltip text="Tipo de contrato: Efetivo (CLT fixo) ou Intermitente (sob demanda)." /></label>
                 <select value={editForm.employeeType} onChange={e => setEditForm({...editForm, employeeType: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary/50">
                   <option value="">Selecione...</option>
                   <option value="EFETIVO">EFETIVO</option>
                   <option value="INTERMITENTE">INTERMITENTE</option>
-                  <option value="FERISTA">FERISTA</option>
                 </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1">Ferista <InfoTooltip text="Marque se o colaborador é elegível para cobrir postos durante férias de outros colaboradores." /></label>
+                <label className="flex items-center gap-2 cursor-pointer mt-1">
+                  <input type="checkbox" checked={editForm.isFerista} onChange={e => setEditForm({...editForm, isFerista: e.target.checked})} className="w-4 h-4 rounded border-slate-700 bg-slate-950 text-primary focus:ring-primary/50" />
+                  <span className="text-sm text-slate-300">Elegível para cobertura de postos</span>
+                </label>
               </div>
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1">Status <InfoTooltip text="Situação atual do colaborador na empresa." /></label>
