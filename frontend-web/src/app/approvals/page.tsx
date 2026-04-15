@@ -1,12 +1,33 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Check, X, Clock, Filter, Search, RotateCcw, Edit3, Trash2, ShieldAlert, FileSignature, ExternalLink, FileSpreadsheet, Upload } from 'lucide-react'
+import { Check, X, Clock, Filter, Search, RotateCcw, Edit3, Trash2, ShieldAlert, FileSignature, ExternalLink, FileSpreadsheet, Upload, Plus, Send, Loader2, Table2 } from 'lucide-react'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { HttpClient } from '@/lib/api-client'
-import { format, parseISO } from 'date-fns'
+import { format, parseISO, differenceInDays } from 'date-fns'
 import { toast } from 'sonner'
+
+// --- Bulk Create Types ---
+interface BulkRow {
+  employeeSearch: string
+  employeeId: string | null
+  employeeName: string | null
+  startDate: string
+  endDate: string
+  days: number | null
+  result: { status: 'created' | 'error'; message?: string } | null
+}
+
+const emptyRow = (): BulkRow => ({
+  employeeSearch: '',
+  employeeId: null,
+  employeeName: null,
+  startDate: '',
+  endDate: '',
+  days: null,
+  result: null,
+})
 
 export default function ApprovalsPage() {
   const [requests, setRequests] = useState<any[]>([])
@@ -28,9 +49,27 @@ export default function ApprovalsPage() {
   const [coverageLoading, setCoverageLoading] = useState(false)
   const [selectedCoverageId, setSelectedCoverageId] = useState<string | null>(null)
 
+  // --- Bulk Create State (Story 3.4) ---
+  const [bulkMode, setBulkMode] = useState(false)
+  const [bulkRows, setBulkRows] = useState<BulkRow[]>(() => Array.from({ length: 5 }, emptyRow))
+  const [bulkSubmitting, setBulkSubmitting] = useState(false)
+  const [allEmployees, setAllEmployees] = useState<{ id: string; name: string }[]>([])
+  const [bulkSearchResults, setBulkSearchResults] = useState<Record<number, { id: string; name: string }[]>>({})
+  const [bulkFocusIdx, setBulkFocusIdx] = useState<number | null>(null)
+
   useEffect(() => {
     fetchRequests()
   }, [])
+
+  // Fetch employees list for bulk create search
+  useEffect(() => {
+    if (bulkMode && allEmployees.length === 0) {
+      HttpClient.get('/employees').then((data: any) => {
+        const list = Array.isArray(data) ? data : data.data || []
+        setAllEmployees(list.map((e: any) => ({ id: e.id, name: e.name })))
+      }).catch(() => {})
+    }
+  }, [bulkMode])
 
   const fetchRequests = async () => {
     try {
@@ -139,7 +178,81 @@ export default function ApprovalsPage() {
     }
   }
 
-  const filtered = requests.filter(r => 
+  // --- Bulk Create Helpers (Story 3.4) ---
+  const updateBulkRow = (idx: number, patch: Partial<BulkRow>) => {
+    setBulkRows(prev => prev.map((r, i) => {
+      if (i !== idx) return r
+      const updated = { ...r, ...patch }
+      // Auto-calculate days
+      if (updated.startDate && updated.endDate) {
+        try {
+          const d = differenceInDays(parseISO(updated.endDate), parseISO(updated.startDate)) + 1
+          updated.days = d > 0 ? d : null
+        } catch { updated.days = null }
+      } else {
+        updated.days = null
+      }
+      return updated
+    }))
+  }
+
+  const handleBulkEmployeeSearch = (idx: number, value: string) => {
+    updateBulkRow(idx, { employeeSearch: value, employeeId: null, employeeName: null, result: null })
+    setBulkFocusIdx(idx)
+    if (value.length >= 2) {
+      const matches = allEmployees.filter(e => e.name.toLowerCase().includes(value.toLowerCase())).slice(0, 8)
+      setBulkSearchResults(prev => ({ ...prev, [idx]: matches }))
+    } else {
+      setBulkSearchResults(prev => ({ ...prev, [idx]: [] }))
+    }
+  }
+
+  const selectBulkEmployee = (idx: number, emp: { id: string; name: string }) => {
+    updateBulkRow(idx, { employeeSearch: emp.name, employeeId: emp.id, employeeName: emp.name, result: null })
+    setBulkSearchResults(prev => ({ ...prev, [idx]: [] }))
+    setBulkFocusIdx(null)
+  }
+
+  const handleBulkSubmit = async () => {
+    const validRows = bulkRows.filter(r => r.employeeId && r.startDate && r.endDate)
+    if (validRows.length === 0) {
+      toast.error('Preencha ao menos uma linha completa (colaborador + datas).')
+      return
+    }
+    setBulkSubmitting(true)
+    try {
+      const payload = {
+        items: validRows.map(r => ({
+          employeeId: r.employeeId!,
+          startDate: r.startDate,
+          endDate: r.endDate,
+        }))
+      }
+      const res = await HttpClient.post('/vacations/bulk-create', payload)
+      // Map results back to rows
+      setBulkRows(prev => {
+        const resultMap = new Map<string, { status: 'created' | 'error'; message?: string }>()
+        if (res.results) {
+          for (const r of res.results) {
+            resultMap.set(r.employeeId, { status: r.status, message: r.message })
+          }
+        }
+        return prev.map(row => {
+          if (!row.employeeId) return row
+          const match = resultMap.get(row.employeeId)
+          return match ? { ...row, result: match } : row
+        })
+      })
+      toast.success(`${res.created} criada(s), ${res.errors} erro(s).`)
+      fetchRequests()
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao enviar cadastro em massa.')
+    } finally {
+      setBulkSubmitting(false)
+    }
+  }
+
+  const filtered = requests.filter(r =>
     r.employee?.name.toLowerCase().includes(search.toLowerCase()) ||
     r.status.toLowerCase().includes(search.toLowerCase())
   )
@@ -163,6 +276,17 @@ export default function ApprovalsPage() {
             <div className="p-6 border-b border-white/5 flex flex-col md:flex-row items-center justify-between gap-4">
               <h3 className="font-bold text-lg">Solicitações Registradas ({filtered.length})</h3>
               <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { setBulkMode(prev => !prev); setBulkRows(Array.from({ length: 5 }, emptyRow)) }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-bold cursor-pointer transition-colors ${
+                    bulkMode
+                      ? 'border-amber-500/50 text-amber-400 bg-amber-500/10'
+                      : 'border-slate-700 text-amber-400 hover:bg-slate-800'
+                  }`}
+                  title="Abrir tabela para cadastro de férias em massa"
+                >
+                  <Table2 className="w-3.5 h-3.5" /> Cadastro em Massa
+                </button>
                 <button
                   onClick={async () => {
                     try {
@@ -356,7 +480,131 @@ export default function ApprovalsPage() {
             )}
           </div>
         </ErrorBoundary>
-        
+
+        {/* Bulk Create Table (Story 3.4) */}
+        {bulkMode && (
+          <div className="glass-card rounded-2xl overflow-hidden border border-amber-500/20 mt-6">
+            <div className="p-4 border-b border-white/5 flex items-center justify-between bg-amber-500/5">
+              <h3 className="font-bold text-white flex items-center gap-2">
+                <Table2 className="w-5 h-5 text-amber-400" />
+                Cadastro em Massa
+                <InfoTooltip text="Preencha as linhas com colaborador e datas para criar múltiplas solicitações de férias de uma vez. Máximo 50 itens." />
+              </h3>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setBulkRows(prev => [...prev, emptyRow()])}
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-700 text-slate-300 rounded-lg hover:bg-slate-800 text-xs font-bold"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Adicionar Linha
+                </button>
+                <button
+                  onClick={handleBulkSubmit}
+                  disabled={bulkSubmitting}
+                  className="flex items-center gap-1.5 px-4 py-1.5 bg-primary text-white rounded-lg hover:bg-primary/80 text-xs font-bold disabled:opacity-50"
+                >
+                  {bulkSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                  Enviar Todas
+                </button>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="bg-slate-900/30 text-slate-400 uppercase text-xs tracking-wider">
+                    <th className="px-4 py-3 font-medium w-8">#</th>
+                    <th className="px-4 py-3 font-medium min-w-[250px]">Colaborador</th>
+                    <th className="px-4 py-3 font-medium w-40">Inicio</th>
+                    <th className="px-4 py-3 font-medium w-40">Fim</th>
+                    <th className="px-4 py-3 font-medium w-20 text-center">Dias</th>
+                    <th className="px-4 py-3 font-medium w-36 text-center">Resultado</th>
+                    <th className="px-4 py-3 font-medium w-12"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {bulkRows.map((row, idx) => (
+                    <tr key={idx} className="hover:bg-white/[0.02] transition-colors">
+                      <td className="px-4 py-2 text-slate-500 text-xs font-mono">{idx + 1}</td>
+                      <td className="px-4 py-2 relative">
+                        <input
+                          type="text"
+                          value={row.employeeSearch}
+                          onChange={(e) => handleBulkEmployeeSearch(idx, e.target.value)}
+                          onFocus={() => setBulkFocusIdx(idx)}
+                          placeholder="Buscar colaborador..."
+                          className={`w-full bg-slate-900/50 border rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary/50 ${
+                            row.employeeId ? 'border-emerald-500/30 text-emerald-300' : 'border-slate-800 text-white'
+                          }`}
+                        />
+                        {bulkFocusIdx === idx && bulkSearchResults[idx]?.length > 0 && (
+                          <div className="absolute z-30 left-4 right-4 top-full mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                            {bulkSearchResults[idx].map((emp) => (
+                              <button
+                                key={emp.id}
+                                type="button"
+                                onClick={() => selectBulkEmployee(idx, emp)}
+                                className="w-full text-left px-3 py-2 text-sm text-slate-200 hover:bg-slate-700 transition-colors"
+                              >
+                                {emp.name}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-2">
+                        <input
+                          type="date"
+                          value={row.startDate}
+                          onChange={(e) => updateBulkRow(idx, { startDate: e.target.value, result: null })}
+                          className="w-full bg-slate-900/50 border border-slate-800 rounded-lg px-3 py-1.5 text-sm text-white outline-none focus:ring-1 focus:ring-primary/50"
+                        />
+                      </td>
+                      <td className="px-4 py-2">
+                        <input
+                          type="date"
+                          value={row.endDate}
+                          onChange={(e) => updateBulkRow(idx, { endDate: e.target.value, result: null })}
+                          className="w-full bg-slate-900/50 border border-slate-800 rounded-lg px-3 py-1.5 text-sm text-white outline-none focus:ring-1 focus:ring-primary/50"
+                        />
+                      </td>
+                      <td className="px-4 py-2 text-center">
+                        <span className="font-mono text-white text-sm">
+                          {row.days != null ? `${row.days}d` : '-'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 text-center">
+                        {row.result ? (
+                          row.result.status === 'created' ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-500/15 text-emerald-400 text-xs font-bold rounded-full">
+                              <Check className="w-3 h-3" /> Criada
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-rose-500/15 text-rose-400 text-xs font-bold rounded-full" title={row.result.message}>
+                              <X className="w-3 h-3" /> {row.result.message?.slice(0, 30) || 'Erro'}
+                            </span>
+                          )
+                        ) : (
+                          <span className="text-slate-600 text-xs">-</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2">
+                        {bulkRows.length > 1 && (
+                          <button
+                            onClick={() => setBulkRows(prev => prev.filter((_, i) => i !== idx))}
+                            className="p-1 text-slate-500 hover:text-rose-400 rounded"
+                            title="Remover linha"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         {/* Bulk Action Toolbar */}
         {selectedIds.length > 0 && (
           <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-800 border border-slate-700 shadow-2xl shadow-black rounded-full px-6 py-3 flex items-center gap-4 z-40 animate-in slide-in-from-bottom-5 fade-in">

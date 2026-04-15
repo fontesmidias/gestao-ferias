@@ -37,6 +37,10 @@ export default function SettingsPage() {
     evoInstanceName: '',
     whatsappEnabled: false,
     zapSignToken: '',
+    brandName: '',
+    brandPrimaryColor: '',
+    brandSecondaryColor: '',
+    brandLogoUrl: '',
   })
 
   const providerModels: Record<string, { label: string; models: { value: string; label: string }[]; tooltip: string }> = {
@@ -100,6 +104,10 @@ export default function SettingsPage() {
         evoInstanceName: data.evoInstanceName || '',
         whatsappEnabled: data.whatsappEnabled || false,
         zapSignToken: data.zapSignToken || '',
+        brandName: data.brandName || '',
+        brandPrimaryColor: data.brandPrimaryColor || '',
+        brandSecondaryColor: data.brandSecondaryColor || '',
+        brandLogoUrl: data.brandLogoUrl || '',
       })
     } catch (err) {
       console.error(err)
@@ -563,6 +571,78 @@ export default function SettingsPage() {
                     <ExternalLink className="w-3 h-3" />
                     Não tem conta? Crie em zapsign.com.br
                   </a>
+                </div>
+              </div>
+            </div>
+
+            {/* Identidade Visual (Story 7.2) */}
+            <div className="glass-card rounded-xl overflow-hidden border border-white/5">
+              <div className="p-4 bg-pink-500/5 border-b border-white/5">
+                <div className="flex items-center gap-3">
+                  <h3 className="text-lg font-bold text-white">Identidade Visual</h3>
+                  <p className="text-sm text-slate-400">Personalize a aparência da plataforma com as cores e logo da sua empresa.</p>
+                </div>
+              </div>
+              <div className="p-6 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Nome exibido</label>
+                    <input
+                      type="text"
+                      value={formData.brandName}
+                      onChange={(e) => setFormData({ ...formData, brandName: e.target.value })}
+                      placeholder="Nome da empresa no sistema"
+                      className="w-full bg-slate-900/50 border border-slate-800 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">URL do Logo</label>
+                    <input
+                      type="url"
+                      value={formData.brandLogoUrl}
+                      onChange={(e) => setFormData({ ...formData, brandLogoUrl: e.target.value })}
+                      placeholder="https://exemplo.com/logo.png"
+                      className="w-full bg-slate-900/50 border border-slate-800 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/50"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Cor Primária</label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="color"
+                        value={formData.brandPrimaryColor || '#2563EB'}
+                        onChange={(e) => setFormData({ ...formData, brandPrimaryColor: e.target.value })}
+                        className="w-10 h-10 rounded border border-slate-700 cursor-pointer"
+                      />
+                      <input
+                        type="text"
+                        value={formData.brandPrimaryColor}
+                        onChange={(e) => setFormData({ ...formData, brandPrimaryColor: e.target.value })}
+                        placeholder="#2563EB"
+                        className="flex-1 bg-slate-900/50 border border-slate-800 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/50 font-mono"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Cor Secundária</label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="color"
+                        value={formData.brandSecondaryColor || '#7C3AED'}
+                        onChange={(e) => setFormData({ ...formData, brandSecondaryColor: e.target.value })}
+                        className="w-10 h-10 rounded border border-slate-700 cursor-pointer"
+                      />
+                      <input
+                        type="text"
+                        value={formData.brandSecondaryColor}
+                        onChange={(e) => setFormData({ ...formData, brandSecondaryColor: e.target.value })}
+                        placeholder="#7C3AED"
+                        className="flex-1 bg-slate-900/50 border border-slate-800 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/50 font-mono"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

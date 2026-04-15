@@ -40,6 +40,12 @@ model Tenant {
 
   zapSignToken    String?  @map("zapsign_token")
 
+  // Story 7.2: Theming por tenant
+  brandName          String?  @map("brand_name")
+  brandPrimaryColor  String?  @map("brand_primary_color")
+  brandSecondaryColor String? @map("brand_secondary_color")
+  brandLogoUrl       String?  @map("brand_logo_url")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   

@@ -6,6 +6,8 @@ import { Sidebar } from '@/components/Sidebar'
 import { AuthProvider } from '@/components/AuthContext'
 import { TourProvider } from '@/components/TourProvider'
 import { ImpersonationBanner } from '@/components/ImpersonationBanner'
+import { ServiceWorkerRegistration } from '@/components/ServiceWorkerRegistration'
+import { TenantBrandWrapper } from '@/components/TenantBrandWrapper'
 
 const inter = Inter({
   variable: "--font-inter",
@@ -34,6 +36,8 @@ export default function RootLayout({
           <Toaster richColors theme="dark" position="top-right" />
           <TourProvider />
           <ImpersonationBanner />
+          <ServiceWorkerRegistration />
+          <TenantBrandWrapper />
           <Sidebar />
           <div className="flex-1 h-full overflow-y-auto">
             {children}

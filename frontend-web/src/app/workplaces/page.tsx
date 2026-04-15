@@ -6,13 +6,18 @@ import { Building2, MapPin, Users, Plus, ChevronDown, ChevronRight, X, FileSprea
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { toast } from 'sonner'
 
+interface Allocation {
+  id: string
+  employee: { id: string; name: string; employeeType: string; isFerista?: boolean }
+}
+
 interface Position {
   id: string
   role: string
   shiftPattern: string | null
   requiredCount: number
   _count: { allocations: number }
-  allocations: { employee: { id: string; name: string; employeeType: string; isFerista?: boolean } }[]
+  allocations: Allocation[]
 }
 
 interface Workplace {
@@ -33,8 +38,25 @@ export default function WorkplacesPage() {
   const [editingWorkplace, setEditingWorkplace] = useState<Workplace | null>(null)
   const [form, setForm] = useState({ name: '', address: '', client: '', minStaff: 1 })
 
+  // Allocation management state (Story 1.5)
+  const [detailedWorkplaces, setDetailedWorkplaces] = useState<Record<string, Workplace>>({})
+  const [allocFormVisible, setAllocFormVisible] = useState<string | null>(null) // positionId
+  const [allocSearch, setAllocSearch] = useState('')
+  const [allocSearchResults, setAllocSearchResults] = useState<{ id: string; name: string }[]>([])
+  const [allocSelectedEmployee, setAllocSelectedEmployee] = useState<{ id: string; name: string } | null>(null)
+  const [allocLoading, setAllocLoading] = useState(false)
+  const [allEmployees, setAllEmployees] = useState<{ id: string; name: string }[]>([])
+
   useEffect(() => {
     fetchWorkplaces()
+  }, [])
+
+  // Fetch employees list once for allocation search
+  useEffect(() => {
+    HttpClient.get('/employees').then((data: any) => {
+      const list = Array.isArray(data) ? data : data.data || []
+      setAllEmployees(list.map((e: any) => ({ id: e.id, name: e.name })))
+    }).catch(() => {})
   }, [])
 
   const fetchWorkplaces = async () => {
@@ -46,6 +68,78 @@ export default function WorkplacesPage() {
       console.error(err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Fetch detailed workplace with allocation IDs (Story 1.5)
+  const fetchWorkplaceDetail = async (wpId: string) => {
+    try {
+      const detail = await HttpClient.get(`/workplaces/${wpId}`)
+      setDetailedWorkplaces(prev => ({ ...prev, [wpId]: detail }))
+    } catch (err) {
+      console.error('Error fetching workplace detail', err)
+    }
+  }
+
+  const handleExpand = async (wpId: string) => {
+    if (expandedId === wpId) {
+      setExpandedId(null)
+    } else {
+      setExpandedId(wpId)
+      await fetchWorkplaceDetail(wpId)
+    }
+    // Reset alloc form
+    setAllocFormVisible(null)
+    setAllocSearch('')
+    setAllocSelectedEmployee(null)
+    setAllocSearchResults([])
+  }
+
+  const handleAllocSearch = (value: string) => {
+    setAllocSearch(value)
+    setAllocSelectedEmployee(null)
+    if (value.length >= 2) {
+      setAllocSearchResults(allEmployees.filter(e => e.name.toLowerCase().includes(value.toLowerCase())).slice(0, 8))
+    } else {
+      setAllocSearchResults([])
+    }
+  }
+
+  const handleAllocate = async (positionId: string) => {
+    if (!allocSelectedEmployee) return
+    setAllocLoading(true)
+    try {
+      await HttpClient.post('/allocations', {
+        employeeId: allocSelectedEmployee.id,
+        workplacePositionId: positionId,
+        startDate: new Date().toISOString(),
+      })
+      toast.success('Colaborador alocado com sucesso!')
+      setAllocFormVisible(null)
+      setAllocSearch('')
+      setAllocSelectedEmployee(null)
+      setAllocSearchResults([])
+      // Refresh data
+      await fetchWorkplaces()
+      if (expandedId) await fetchWorkplaceDetail(expandedId)
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao alocar colaborador.')
+    } finally {
+      setAllocLoading(false)
+    }
+  }
+
+  const handleDeallocate = async (allocationId: string) => {
+    setAllocLoading(true)
+    try {
+      await HttpClient.delete(`/allocations/${allocationId}`)
+      toast.success('Colaborador desalocado com sucesso!')
+      await fetchWorkplaces()
+      if (expandedId) await fetchWorkplaceDetail(expandedId)
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao desalocar colaborador.')
+    } finally {
+      setAllocLoading(false)
     }
   }
 
@@ -185,7 +279,7 @@ export default function WorkplacesPage() {
               {/* Workplace Header */}
               <div
                 className="flex items-center justify-between p-5 cursor-pointer hover:bg-white/5 transition-colors"
-                onClick={() => setExpandedId(isExpanded ? null : wp.id)}
+                onClick={() => handleExpand(wp.id)}
               >
                 <div className="flex items-center gap-4">
                   {isExpanded ? <ChevronDown className="w-5 h-5 text-slate-400" /> : <ChevronRight className="w-5 h-5 text-slate-400" />}
@@ -232,44 +326,119 @@ export default function WorkplacesPage() {
                 </div>
               </div>
 
-              {/* Expanded: Positions + Allocations */}
-              {isExpanded && (
-                <div className="border-t border-white/5 p-5 space-y-3">
-                  {wp.positions.map((pos) => (
-                    <div key={pos.id} className="bg-slate-900/50 rounded-xl p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <div>
-                          <span className="font-bold text-white">{pos.role}</span>
-                          {pos.shiftPattern && (
-                            <span className="ml-2 text-xs text-slate-500 bg-slate-800 px-2 py-0.5 rounded-full">
-                              {pos.shiftPattern}
-                            </span>
-                          )}
+              {/* Expanded: Positions + Allocations (with add/remove - Story 1.5) */}
+              {isExpanded && (() => {
+                const detailedWp = detailedWorkplaces[wp.id]
+                const positions = detailedWp?.positions || wp.positions
+                return (
+                  <div className="border-t border-white/5 p-5 space-y-3">
+                    {positions.map((pos) => (
+                      <div key={pos.id} className="bg-slate-900/50 rounded-xl p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-white">{pos.role}</span>
+                            {pos.shiftPattern && (
+                              <span className="text-xs text-slate-500 bg-slate-800 px-2 py-0.5 rounded-full">
+                                {pos.shiftPattern}
+                              </span>
+                            )}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setAllocFormVisible(allocFormVisible === pos.id ? null : pos.id)
+                                setAllocSearch('')
+                                setAllocSelectedEmployee(null)
+                                setAllocSearchResults([])
+                              }}
+                              className="p-1 text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                              title="Alocar colaborador nesta posição"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          <span className={`text-sm font-bold ${(pos._count?.allocations ?? pos.allocations?.length ?? 0) < pos.requiredCount ? 'text-rose-400' : 'text-emerald-400'}`}>
+                            {pos._count?.allocations ?? pos.allocations?.length ?? 0}/{pos.requiredCount}
+                          </span>
                         </div>
-                        <span className={`text-sm font-bold ${pos._count.allocations < pos.requiredCount ? 'text-rose-400' : 'text-emerald-400'}`}>
-                          {pos._count.allocations}/{pos.requiredCount}
-                        </span>
+
+                        {/* Allocation add form (Story 1.5) */}
+                        {allocFormVisible === pos.id && (
+                          <div className="mb-3 flex items-center gap-2 bg-slate-800/50 rounded-lg p-2 border border-white/5 relative">
+                            <div className="relative flex-1">
+                              <input
+                                type="text"
+                                value={allocSearch}
+                                onChange={(e) => handleAllocSearch(e.target.value)}
+                                placeholder="Buscar colaborador por nome..."
+                                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white outline-none focus:ring-1 focus:ring-primary/50"
+                                autoFocus
+                              />
+                              {allocSearchResults.length > 0 && (
+                                <div className="absolute z-30 left-0 right-0 top-full mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                                  {allocSearchResults.map((emp) => (
+                                    <button
+                                      key={emp.id}
+                                      type="button"
+                                      onClick={() => {
+                                        setAllocSelectedEmployee(emp)
+                                        setAllocSearch(emp.name)
+                                        setAllocSearchResults([])
+                                      }}
+                                      className="w-full text-left px-3 py-2 text-sm text-slate-200 hover:bg-slate-700 transition-colors"
+                                    >
+                                      {emp.name}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                            <button
+                              onClick={() => handleAllocate(pos.id)}
+                              disabled={!allocSelectedEmployee || allocLoading}
+                              className="px-3 py-1.5 bg-primary text-white rounded-lg text-xs font-bold hover:bg-primary/80 disabled:opacity-50 whitespace-nowrap"
+                            >
+                              {allocLoading ? 'Alocando...' : 'Alocar'}
+                            </button>
+                            <button
+                              onClick={() => { setAllocFormVisible(null); setAllocSearch(''); setAllocSelectedEmployee(null) }}
+                              className="p-1.5 text-slate-500 hover:text-white rounded"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
+
+                        {pos.allocations?.length > 0 ? (
+                          <div className="flex flex-wrap gap-2">
+                            {pos.allocations.map((alloc) => (
+                              <span key={alloc.id || alloc.employee.id} className="flex items-center gap-1.5 text-xs bg-slate-800 text-slate-300 px-2.5 py-1 rounded-full group/alloc">
+                                <Users className="w-3 h-3" />
+                                {alloc.employee.name}
+                                <span className="text-slate-500">({alloc.employee.employeeType}{alloc.employee.isFerista ? ' · Ferista' : ''})</span>
+                                {alloc.id && (
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleDeallocate(alloc.id) }}
+                                    className="ml-0.5 p-0.5 text-slate-600 hover:text-rose-400 rounded transition-colors opacity-0 group-hover/alloc:opacity-100"
+                                    title="Remover alocação"
+                                    disabled={allocLoading}
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                )}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-slate-500 italic">Nenhum colaborador alocado</p>
+                        )}
                       </div>
-                      {pos.allocations.length > 0 ? (
-                        <div className="flex flex-wrap gap-2">
-                          {pos.allocations.map((alloc) => (
-                            <span key={alloc.employee.id} className="flex items-center gap-1.5 text-xs bg-slate-800 text-slate-300 px-2.5 py-1 rounded-full">
-                              <Users className="w-3 h-3" />
-                              {alloc.employee.name}
-                              <span className="text-slate-500">({alloc.employee.employeeType}{alloc.employee.isFerista ? ' · Ferista' : ''})</span>
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-xs text-slate-500 italic">Nenhum colaborador alocado</p>
-                      )}
-                    </div>
-                  ))}
-                  {wp.positions.length === 0 && (
-                    <p className="text-sm text-slate-500 text-center py-4">Nenhuma posição cadastrada neste posto.</p>
-                  )}
-                </div>
-              )}
+                    ))}
+                    {positions.length === 0 && (
+                      <p className="text-sm text-slate-500 text-center py-4">Nenhuma posição cadastrada neste posto.</p>
+                    )}
+                  </div>
+                )
+              })()}
             </div>
           )
         })}

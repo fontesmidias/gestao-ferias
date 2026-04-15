@@ -181,7 +181,18 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   fastify.get('/me', {
     onRequest: [fastify.requireAuth]
   }, async (request) => {
-    return request.user
+    const user = request.user as any
+    // Story 7.2: Incluir branding do tenant na resposta
+    if (user.tenantId) {
+      const tenant = await fastify.prisma.tenant.findUnique({
+        where: { id: user.tenantId },
+        select: { brandName: true, brandPrimaryColor: true, brandSecondaryColor: true, brandLogoUrl: true }
+      })
+      if (tenant) {
+        return { ...user, branding: tenant }
+      }
+    }
+    return user
   })
 }
 

@@ -358,6 +358,83 @@ export default function CoveragePage() {
                 </div>
               </div>
 
+              {/* Gantt Timeline (Story 2.4) */}
+              {(gaps?.gaps?.length ?? 0) > 0 && (
+                <div className="glass-card rounded-2xl border border-white/5 overflow-hidden mb-8">
+                  <div className="p-4 border-b border-white/5">
+                    <h3 className="font-bold text-sm text-white uppercase tracking-wider flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-primary" />
+                      Timeline de Cobertura
+                      <InfoTooltip text="Visualização do mês com barras coloridas: vermelho = gap sem cobertura, verde = coberto. Clique em um gap para atribuir cobertura." />
+                    </h3>
+                  </div>
+                  <div className="p-4 overflow-x-auto">
+                    {(() => {
+                      const monthStart = startOfMonth(selectedMonth)
+                      const monthEnd = endOfMonth(selectedMonth)
+                      const daysInMonth = monthEnd.getDate()
+                      const allGaps = gaps?.gaps ?? []
+                      // Group by workplace
+                      const byWorkplace = new Map<string, Gap[]>()
+                      allGaps.forEach(g => {
+                        const key = g.workplace?.name || 'Sem Posto'
+                        if (!byWorkplace.has(key)) byWorkplace.set(key, [])
+                        byWorkplace.get(key)!.push(g)
+                      })
+
+                      return (
+                        <div className="min-w-[700px]">
+                          {/* Day headers */}
+                          <div className="flex items-center mb-2">
+                            <div className="w-36 shrink-0 text-xs text-slate-500 font-bold">Posto</div>
+                            <div className="flex-1 flex">
+                              {Array.from({ length: daysInMonth }, (_, i) => (
+                                <div key={i} className="flex-1 text-center text-[9px] text-slate-600 font-mono">
+                                  {i + 1}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                          {/* Workplace rows */}
+                          {Array.from(byWorkplace.entries()).map(([name, wpGaps]) => (
+                            <div key={name} className="flex items-center mb-1">
+                              <div className="w-36 shrink-0 text-xs text-slate-300 font-bold truncate pr-2" title={name}>{name}</div>
+                              <div className="flex-1 flex h-7 bg-slate-800/30 rounded overflow-hidden relative">
+                                {/* Green background (covered) */}
+                                <div className="absolute inset-0 bg-emerald-500/10 rounded" />
+                                {/* Gap bars (red) */}
+                                {wpGaps.map(g => {
+                                  const gStart = Math.max(1, parseISO(g.vacationStart).getDate())
+                                  const gEnd = Math.min(daysInMonth, parseISO(g.vacationEnd).getDate())
+                                  const left = ((gStart - 1) / daysInMonth) * 100
+                                  const width = ((gEnd - gStart + 1) / daysInMonth) * 100
+                                  return (
+                                    <button
+                                      key={g.vacationRequestId}
+                                      onClick={() => openAssignModal(g)}
+                                      className={`absolute top-0.5 bottom-0.5 rounded-sm cursor-pointer transition-colors hover:brightness-125 ${
+                                        g.hasCoverage ? 'bg-emerald-500/60' : 'bg-red-500/70'
+                                      }`}
+                                      style={{ left: `${left}%`, width: `${width}%` }}
+                                      title={`${g.employeeName}: ${format(parseISO(g.vacationStart), 'dd/MM')} - ${format(parseISO(g.vacationEnd), 'dd/MM')} (${g.days}d)${g.hasCoverage ? ' ✓ Coberto' : ' ⚠ Gap'}`}
+                                    />
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          ))}
+                          {/* Legend */}
+                          <div className="flex items-center gap-4 mt-3 text-[10px] text-slate-500">
+                            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-red-500/70 inline-block" /> Gap (sem cobertura)</span>
+                            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-emerald-500/60 inline-block" /> Coberto</span>
+                          </div>
+                        </div>
+                      )
+                    })()}
+                  </div>
+                </div>
+              )}
+
               {/* Gaps List */}
               <div className="glass-card rounded-2xl border border-white/5 overflow-hidden">
                 <div className="p-6 border-b border-white/5 flex items-center justify-between">

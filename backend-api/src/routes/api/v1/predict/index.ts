@@ -1,6 +1,7 @@
 import { FastifyPluginAsync } from 'fastify'
 import { VacationEngine } from '../../../../modules/vacations/vacation-engine'
 import { ROIEngine } from '../../../../modules/finance/roi-engine'
+import { PromptBuilder } from '../../../../modules/ai/prompt-builder'
 import { addMonths, startOfMonth, endOfMonth, format } from 'date-fns'
 
 const predict: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
@@ -137,34 +138,10 @@ const predict: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       return reply.code(404).send({ error: 'Tenant não encontrado.' })
     }
 
-    // Montar contexto com dados reais do banco
-    const [totalEmployees, pendingRequests, approvedRequests, workplaces, coverageGaps] = await Promise.all([
-      fastify.prisma.employee.count({ where: { tenantId, status: 'ATIVO' } }),
-      fastify.prisma.vacationRequest.count({ where: { tenantId, status: 'PENDING' } }),
-      fastify.prisma.vacationRequest.count({ where: { tenantId, status: { in: ['APPROVED', 'SIGNED'] } } }),
-      fastify.prisma.workplace.findMany({
-        where: { tenantId },
-        select: { name: true, minStaff: true, _count: { select: { employees: true } } }
-      }),
-      fastify.prisma.coverageAssignment.count({ where: { tenantId, status: 'PLANNED' } })
-    ])
-
-    const context = `
-Dados atuais da empresa "${tenant.name}":
-- Total de colaboradores ativos: ${totalEmployees}
-- Solicitações de férias pendentes: ${pendingRequests}
-- Férias aprovadas/em andamento: ${approvedRequests}
-- Coberturas planejadas: ${coverageGaps}
-- Postos de trabalho: ${workplaces.map(w => `${w.name} (mín: ${w.minStaff}, atual: ${(w as any)._count.employees})`).join(', ')}
-`
-
-    const systemPrompt = `Você é o Oráculo AI da plataforma GestãoFérias, especialista em gestão de férias para empresas de terceirização de mão de obra no Brasil.
-Responda sempre em português, de forma objetiva e profissional.
-Use os dados reais fornecidos para embasar suas respostas.
-Quando não tiver dados suficientes, diga claramente.
-Cite artigos da CLT quando relevante (Art. 130, 134, 137).
-
-${context}`
+    // Story 4.1: PromptBuilder centralizado com dados reais do tenant
+    const tenantContext = await PromptBuilder.buildContext(fastify.prisma, tenantId)
+    const systemPrompt = PromptBuilder.buildSystemPrompt(tenantContext)
+    const sourceAttribution = PromptBuilder.buildSourceAttribution(tenantContext)
 
     // 30-second timeout for LLM calls
     const LLM_TIMEOUT_MS = 30_000
@@ -323,7 +300,7 @@ ${context}`
           break
       }
 
-      if (result) return result
+      if (result) return { ...result, source: sourceAttribution }
 
       return reply.code(503).send({
         error: 'Falha no provedor selecionado',
@@ -334,22 +311,22 @@ ${context}`
     // Fallback chain: OpenAI -> Anthropic -> Gemini -> Groq
     if (tenant.openaiKey) {
       const result = await callOpenAI(tenant.openaiKey, 'gpt-4o-mini')
-      if (result) return result
+      if (result) return { ...result, source: sourceAttribution }
     }
 
     if (tenant.anthropicKey) {
       const result = await callAnthropic(tenant.anthropicKey, 'claude-sonnet-4-20250514')
-      if (result) return result
+      if (result) return { ...result, source: sourceAttribution }
     }
 
     if (tenant.geminiKey) {
       const result = await callGemini(tenant.geminiKey, 'gemini-1.5-flash')
-      if (result) return result
+      if (result) return { ...result, source: sourceAttribution }
     }
 
     if (tenant.groqKey) {
       const result = await callGroq(tenant.groqKey, 'llama-3.3-70b-versatile')
-      if (result) return result
+      if (result) return { ...result, source: sourceAttribution }
     }
 
     return reply.code(503).send({
