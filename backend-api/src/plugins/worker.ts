@@ -139,10 +139,10 @@ export default fp(async (fastify) => {
     }
   })
 
-  // Worker para Webhooks (Story 6.1)
+  // Worker para Webhooks (Story 6.2 — retry com backoff exponencial FR-WHK-004)
   const webhookWorker = new Worker('webhook-queue', async (job) => {
     const { event, tenantId, data } = job.data
-    
+
     // 1. Buscar webhooks ativos para este evento e tenant
     const webhooks = await fastify.prisma.webhook.findMany({
       where: {
@@ -152,7 +152,7 @@ export default fp(async (fastify) => {
       }
     })
 
-    fastify.log.info(`[WEBHOOK-WORKER] Disparando ${event} para ${webhooks.length} destinos.`)
+    fastify.log.info(`[WEBHOOK-WORKER] Disparando ${event} para ${webhooks.length} destinos (tentativa ${job.attemptsMade + 1}/3).`)
 
     const payload = {
       event,
@@ -162,19 +162,34 @@ export default fp(async (fastify) => {
     }
 
     // 2. Disparar cada webhook
+    let failures = 0
     for (const hook of webhooks) {
-      try {
-        await WebhookService.trigger(hook.url, hook.secret, payload)
-      } catch (err: any) {
-        fastify.log.error(`[WEBHOOK-WORKER] Falha ao disparar para ${hook.url}: ${err.message}`)
+      const success = await WebhookService.trigger(hook.url, hook.secret, payload)
+      if (!success) {
+        failures++
+        fastify.log.error(`[WEBHOOK-WORKER] Falha ao disparar para ${hook.url}`)
       }
     }
 
-    return { status: 'processed', hooksTrigged: webhooks.length }
+    // Se houve falhas e ainda tem tentativas, lançar erro para retry
+    if (failures > 0 && job.attemptsMade < 2) {
+      throw new Error(`${failures}/${webhooks.length} webhooks falharam para ${event}`)
+    }
+
+    // Se todas as tentativas falharam, registrar no log
+    if (failures > 0) {
+      fastify.log.error(`[WEBHOOK-WORKER] FALHA DEFINITIVA: ${failures}/${webhooks.length} webhooks falharam para ${event} após ${job.attemptsMade + 1} tentativas (tenant ${tenantId})`)
+    }
+
+    return { status: 'processed', hooksTriggered: webhooks.length, failures }
   }, {
     connection: redisConfig,
     settings: {
-      backoffStrategy: (attempts: number) => Math.pow(2, attempts) * 1000
+      backoffStrategy: (attempts: number) => {
+        // FR-WHK-004: 30s, 5min, 30min
+        const delays = [30000, 300000, 1800000]
+        return delays[Math.min(attempts, delays.length - 1)]
+      }
     }
   })
 

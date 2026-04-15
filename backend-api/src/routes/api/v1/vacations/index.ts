@@ -2,11 +2,53 @@ import { FastifyPluginAsync } from 'fastify'
 import { VacationEngine } from '../../../../modules/vacations/vacation-engine'
 import { AuditService } from '../../../../modules/shared/audit-service'
 import { WhatsAppService } from '../../../../modules/notifications/whatsapp-service'
+import { WebhookService } from '../../../../modules/integrations/webhook-service'
+import { EmailService } from '../../../../modules/notifications/email-service'
 import { ZapSignService } from '../../../../modules/integrations/zapsign-service'
 import { SignatureService } from '../../../../modules/signatures/signature-service'
 import { ImportService } from '../../../../modules/employees/import-service'
 import { SanitizationService } from '../../../../modules/employees/sanitization-service'
 import { differenceInDays, parseISO, format } from 'date-fns'
+
+/**
+ * Dispara webhooks via BullMQ queue com retry automático (Story 6.2).
+ * Se Redis indisponível, fallback para disparo direto.
+ */
+async function triggerWebhooks(fastify: any, tenantId: string, event: string, data: any) {
+  try {
+    // Tentar usar a fila BullMQ (com retry automático)
+    if (fastify.queues?.webhook?.add) {
+      await fastify.queues.webhook.add(`webhook-${event}`, { event, tenantId, data }, {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 30000 } // 30s, 60s, 120s
+      })
+      return
+    }
+  } catch (err: any) {
+    console.warn(`[WEBHOOK] Fila indisponível, fallback direto: ${err.message}`)
+  }
+  // Fallback: disparo direto sem retry
+  const webhooks = await fastify.prisma.webhook.findMany({
+    where: { tenantId, isActive: true, events: { has: event } }
+  })
+  for (const wh of webhooks) {
+    WebhookService.trigger(wh.url, wh.secret, {
+      event,
+      timestamp: new Date().toISOString(),
+      tenantId,
+      data
+    }).catch((err: any) => console.error(`[WEBHOOK] Falha ${event} para ${wh.url}:`, err))
+  }
+}
+
+/**
+ * Envia email de notificacao para o colaborador via SMTP do tenant.
+ */
+async function sendNotificationEmail(prisma: any, tenantId: string, employeeEmail: string | null, subject: string, html: string) {
+  if (!employeeEmail) return
+  EmailService.sendMail(tenantId, employeeEmail, subject, html, prisma)
+    .catch((err: any) => console.error(`[EMAIL] Falha ao enviar para ${employeeEmail}:`, err))
+}
 
 const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   // Download template de programacao de ferias
@@ -127,16 +169,26 @@ const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     return vacationRequest
   })
 
-  // Listar solicitações do Tenant
+  // Listar solicitações do Tenant (com hasCoverage)
   fastify.get('/', {
     onRequest: [fastify.requireAuth]
   }, async (request) => {
     const { tenantId } = request.user as any
-    return await fastify.prisma.vacationRequest.findMany({
+    const results = await fastify.prisma.vacationRequest.findMany({
       where: { tenantId },
-      include: { employee: true, signature: { select: { id: true, signUrl: true, signedAt: true, zapSignDocToken: true } } },
+      include: {
+        employee: true,
+        signature: { select: { id: true, signUrl: true, signedAt: true, zapSignDocToken: true } },
+        coverages: { select: { id: true } }
+      },
       orderBy: { createdAt: 'desc' }
     })
+    // Adicionar campo hasCoverage (FR-APR-004)
+    return results.map((r: any) => ({
+      ...r,
+      hasCoverage: r.coverages && r.coverages.length > 0,
+      coverages: undefined // Não expor detalhes de coverage nesta listagem
+    }))
   })
 
   // Bulk Status Update (Ação em Massa)
@@ -158,13 +210,13 @@ const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     return reply.send({ message: `Atualizados ${count} registros para ${status}.` })
   })
 
-  // Edit / Approve Single Request
+  // Edit / Approve Single Request (Story 3.2 — com cobertura integrada)
   fastify.patch('/:id', {
     onRequest: [fastify.requireAuth, fastify.requireAdmin]
   }, async (request, reply) => {
     const { tenantId } = request.user as any
     const { id } = request.params as any
-    const { status, dispatchNote, startDate, endDate } = request.body as any
+    const { status, dispatchNote, startDate, endDate, coverageEmployeeId } = request.body as any
 
     const existing = await fastify.prisma.vacationRequest.findFirst({ where: { id, tenantId } })
     if (!existing) return reply.code(404).send({ error: 'Not Found' })
@@ -186,6 +238,47 @@ const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       data: updateData
     })
 
+    // Story 3.2 — Criar CoverageAssignment ao aprovar com cobertura
+    let coverageCreated = null
+    if (updated.status === 'APPROVED' && coverageEmployeeId) {
+      // Buscar alocação ativa do colaborador que sai de férias
+      const allocation = await fastify.prisma.workplaceAllocation.findFirst({
+        where: { employeeId: existing.employeeId, status: 'ACTIVE' },
+        select: { workplacePositionId: true }
+      })
+      // Buscar dados do substituto
+      const replacement = await fastify.prisma.employee.findFirst({
+        where: { id: coverageEmployeeId, tenantId },
+        select: { id: true, name: true, salary: true, isFerista: true, employeeType: true }
+      })
+
+      if (replacement && allocation) {
+        const days = differenceInDays(updated.endDate, updated.startDate) + 1
+        const cost = replacement.salary ? Number(replacement.salary) / 30 * days : null
+        coverageCreated = await fastify.prisma.coverageAssignment.create({
+          data: {
+            vacationRequestId: existing.id,
+            replacementEmployeeId: replacement.id,
+            workplacePositionId: allocation.workplacePositionId,
+            startDate: updated.startDate,
+            endDate: updated.endDate,
+            type: replacement.isFerista ? 'FERISTA' : 'INTERMITENTE',
+            cost,
+            status: 'ACTIVE',
+            tenantId
+          }
+        })
+        // Webhook: coverage.assigned
+        triggerWebhooks(fastify, tenantId, 'coverage.assigned', {
+          coverageId: coverageCreated.id,
+          vacationRequestId: existing.id,
+          replacementEmployeeName: replacement.name,
+          startDate: updated.startDate,
+          endDate: updated.endDate
+        })
+      }
+    }
+
     // Audit log
     const { userId } = request.user as any
     await AuditService.log(fastify.prisma as any, {
@@ -194,19 +287,62 @@ const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       resourceId: existing.id,
       resourceType: 'VACATION_REQUEST',
       previousData: { status: existing.status },
-      newData: { status: updated.status },
+      newData: { status: updated.status, coverageEmployeeId: coverageEmployeeId || null },
       reason: dispatchNote || undefined,
       ip: request.ip,
       userAgent: request.headers['user-agent']
     })
 
-    // Notificação WhatsApp ao aprovar ou rejeitar
+    // Notificação WhatsApp + Email + Webhooks ao aprovar ou rejeitar
     if (updated.status === 'APPROVED' || updated.status === 'REJECTED') {
+      // Disparar webhooks (FR-WHK-002)
+      const webhookEvent = updated.status === 'APPROVED' ? 'vacation.approved' : 'vacation.rejected'
+      triggerWebhooks(fastify, tenantId, webhookEvent, {
+        vacationRequestId: existing.id,
+        employeeId: existing.employeeId,
+        status: updated.status,
+        startDate: updated.startDate,
+        endDate: updated.endDate,
+        days: updated.days,
+        hasCoverage: !!coverageCreated
+      })
+
       try {
         const employee = await fastify.prisma.employee.findUnique({
           where: { id: existing.employeeId },
-          select: { phone: true, name: true, cpf: true },
+          select: { phone: true, name: true, cpf: true, userId: true },
         })
+
+        // Buscar email do User vinculado ao Employee (FR-NOT-001)
+        let employeeEmail: string | null = null
+        if (employee?.userId) {
+          const user = await fastify.prisma.user.findUnique({
+            where: { id: employee.userId },
+            select: { email: true }
+          })
+          employeeEmail = user?.email || null
+        }
+
+        // Email de notificação
+        if (employee) {
+          const startFormatted = format(updated.startDate, 'dd/MM/yyyy')
+          const endFormatted = format(updated.endDate, 'dd/MM/yyyy')
+          if (updated.status === 'APPROVED') {
+            const coverageInfo = coverageCreated ? '<br><strong>Cobertura definida</strong> para o seu posto.' : ''
+            sendNotificationEmail(
+              fastify.prisma, tenantId, employeeEmail,
+              'Férias Aprovadas',
+              `<p>Olá ${employee.name},</p><p>Suas férias de <strong>${startFormatted}</strong> a <strong>${endFormatted}</strong> (${updated.days} dias) foram <strong style="color:green">APROVADAS</strong>.${coverageInfo}</p>`
+            )
+          } else {
+            const motivo = updated.dispatchNote || 'Não informado'
+            sendNotificationEmail(
+              fastify.prisma, tenantId, employeeEmail,
+              'Férias Reprovadas',
+              `<p>Olá ${employee.name},</p><p>Sua solicitação de férias foi <strong style="color:red">REPROVADA</strong>.</p><p>Motivo: ${motivo}</p>`
+            )
+          }
+        }
 
         if (employee?.phone) {
           let message: string
@@ -325,6 +461,82 @@ const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     }
 
     return updated
+  })
+
+  // Bulk Create de Férias (Story 3.4 / FR-APR-005)
+  fastify.post('/bulk-create', {
+    onRequest: [fastify.requireAuth, fastify.requireAdmin],
+    schema: {
+      body: {
+        type: 'object',
+        required: ['items'],
+        properties: {
+          items: {
+            type: 'array',
+            maxItems: 50,
+            items: {
+              type: 'object',
+              required: ['employeeId', 'startDate', 'endDate'],
+              properties: {
+                employeeId: { type: 'string', format: 'uuid' },
+                startDate: { type: 'string' },
+                endDate: { type: 'string' }
+              }
+            }
+          }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const { tenantId } = request.user as any
+    const { items } = request.body as { items: { employeeId: string; startDate: string; endDate: string }[] }
+
+    if (items.length > 50) {
+      return reply.code(422).send({ error: 'Validation Error', message: 'Máximo 50 itens por requisição.' })
+    }
+
+    const results: { employeeId: string; status: 'created' | 'error'; message?: string }[] = []
+    let created = 0
+    let errors = 0
+
+    for (const item of items) {
+      try {
+        const employee = await fastify.prisma.employee.findFirst({
+          where: { id: item.employeeId, tenantId }
+        })
+        if (!employee) {
+          errors++
+          results.push({ employeeId: item.employeeId, status: 'error', message: 'Funcionário não encontrado.' })
+          continue
+        }
+
+        const start = parseISO(item.startDate)
+        const end = parseISO(item.endDate)
+        const days = differenceInDays(end, start) + 1
+
+        // Validar CLT
+        const periods = VacationEngine.calculatePeriods(employee.hireDate, 0, employee.balanceOffset)
+        const totalBalance = periods.reduce((acc: number, p: any) => acc + p.daysOfRight, 0)
+        const validation = VacationEngine.validateRequest(start, end, totalBalance)
+
+        if (!validation.isValid) {
+          errors++
+          results.push({ employeeId: item.employeeId, status: 'error', message: validation.errors.join('; ') })
+          continue
+        }
+
+        await fastify.prisma.vacationRequest.create({
+          data: { tenantId, employeeId: item.employeeId, startDate: start, endDate: end, days, status: 'PENDING' }
+        })
+        created++
+        results.push({ employeeId: item.employeeId, status: 'created' })
+      } catch (err: any) {
+        errors++
+        results.push({ employeeId: item.employeeId, status: 'error', message: err.message })
+      }
+    }
+
+    return { created, errors, results }
   })
 }
 

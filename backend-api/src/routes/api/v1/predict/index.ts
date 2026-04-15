@@ -166,6 +166,16 @@ Cite artigos da CLT quando relevante (Art. 130, 134, 137).
 
 ${context}`
 
+    // 30-second timeout for LLM calls
+    const LLM_TIMEOUT_MS = 30_000
+    const TIMEOUT_RESPONSE = { error: 'Timeout', message: 'Consulta demorou mais que o esperado. Tente novamente.' }
+
+    function createTimeoutSignal(): AbortSignal {
+      const controller = new AbortController()
+      setTimeout(() => controller.abort(), LLM_TIMEOUT_MS)
+      return controller.signal
+    }
+
     // Helper functions for each provider
     async function callOpenAI(apiKey: string, model: string): Promise<{ answer: string; provider: string } | null> {
       try {
@@ -182,13 +192,17 @@ ${context}`
               { role: 'user', content: question }
             ],
             max_tokens: 1000
-          })
+          }),
+          signal: createTimeoutSignal()
         })
         const data = await response.json() as any
         if (data.choices?.[0]?.message?.content) {
           return { answer: data.choices[0].message.content, provider: 'openai' }
         }
-      } catch (err) {
+      } catch (err: any) {
+        if (err?.name === 'AbortError') {
+          return reply.code(504).send(TIMEOUT_RESPONSE) as any
+        }
         fastify.log.error(`[PREDICT] OpenAI error: ${err}`)
       }
       return null
@@ -208,13 +222,17 @@ ${context}`
             max_tokens: 1000,
             system: systemPrompt,
             messages: [{ role: 'user', content: question }]
-          })
+          }),
+          signal: createTimeoutSignal()
         })
         const data = await response.json() as any
         if (data.content?.[0]?.text) {
           return { answer: data.content[0].text, provider: 'anthropic' }
         }
-      } catch (err) {
+      } catch (err: any) {
+        if (err?.name === 'AbortError') {
+          return reply.code(504).send(TIMEOUT_RESPONSE) as any
+        }
         fastify.log.error(`[PREDICT] Anthropic error: ${err}`)
       }
       return null
@@ -229,14 +247,18 @@ ${context}`
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               contents: [{ parts: [{ text: `${systemPrompt}\n\nPergunta: ${question}` }] }]
-            })
+            }),
+            signal: createTimeoutSignal()
           }
         )
         const data = await response.json() as any
         if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
           return { answer: data.candidates[0].content.parts[0].text, provider: 'gemini' }
         }
-      } catch (err) {
+      } catch (err: any) {
+        if (err?.name === 'AbortError') {
+          return reply.code(504).send(TIMEOUT_RESPONSE) as any
+        }
         fastify.log.error(`[PREDICT] Gemini error: ${err}`)
       }
       return null
@@ -257,13 +279,17 @@ ${context}`
               { role: 'user', content: question }
             ],
             max_tokens: 1000
-          })
+          }),
+          signal: createTimeoutSignal()
         })
         const data = await response.json() as any
         if (data.choices?.[0]?.message?.content) {
           return { answer: data.choices[0].message.content, provider: 'groq' }
         }
-      } catch (err) {
+      } catch (err: any) {
+        if (err?.name === 'AbortError') {
+          return reply.code(504).send(TIMEOUT_RESPONSE) as any
+        }
         fastify.log.error(`[PREDICT] Groq error: ${err}`)
       }
       return null

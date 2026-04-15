@@ -115,6 +115,19 @@ export default function EmployeeDashboard() {
       return
     }
 
+    // Validação CLT Art. 134 — não iniciar em quinta ou sexta (Story 5.2)
+    const startDay = new Date(startDate + 'T00:00:00').getDay()
+    if (startDay === 4 || startDay === 5) {
+      toast.error('Início em quinta ou sexta-feira não é permitido (CLT Art. 134 §3).')
+      return
+    }
+
+    // Validação CLT — período mínimo de 14 dias
+    if (selectedDays < 14) {
+      toast.error('Período mínimo de um trecho é 14 dias corridos (CLT Art. 134 §1).')
+      return
+    }
+
     setSubmitting(true)
     try {
       // Calculate endDate: startDate + selectedDays - 1

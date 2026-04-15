@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Toaster } from 'sonner'
@@ -13,8 +13,13 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "GestãoFérias | SaaS de Gestão Estratégica",
-  description: "A plataforma definitiva para gestão de férias com conformidade CLT e ROI em tempo real.",
+  title: "GestaoFerias | SaaS de Gestao Estrategica",
+  description: "A plataforma definitiva para gestao de ferias com conformidade CLT e ROI em tempo real.",
+  manifest: "/manifest.json",
+};
+
+export const viewport: Viewport = {
+  themeColor: "#2563EB",
 };
 
 export default function RootLayout({

@@ -13,15 +13,20 @@ export default function ApprovalsPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [selectedIds, setSelectedIds] = useState<string[]>([])
-  
+
   // Modal State
   const [modalOpen, setModalOpen] = useState(false)
   const [modalMode, setModalMode] = useState<'APPROVE' | 'REJECT' | 'RETURN' | 'EDIT' | 'DELETE' | null>(null)
   const [dispatchNote, setDispatchNote] = useState('')
   const [editDates, setEditDates] = useState({ startDate: '', endDate: '' })
-  
+
   // Single or Bulk context
   const [actionTarget, setActionTarget] = useState<string | 'BULK' | null>(null)
+
+  // Coverage suggestion state (Story 3.5)
+  const [coverageSuggestions, setCoverageSuggestions] = useState<any>(null)
+  const [coverageLoading, setCoverageLoading] = useState(false)
+  const [selectedCoverageId, setSelectedCoverageId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchRequests()
@@ -56,20 +61,34 @@ export default function ApprovalsPage() {
     }
   }
 
-  const openModal = (target: string | 'BULK', mode: 'APPROVE' | 'REJECT' | 'RETURN' | 'EDIT' | 'DELETE') => {
+  const openModal = async (target: string | 'BULK', mode: 'APPROVE' | 'REJECT' | 'RETURN' | 'EDIT' | 'DELETE') => {
     setActionTarget(target)
     setModalMode(mode)
     setDispatchNote('')
+    setSelectedCoverageId(null)
+    setCoverageSuggestions(null)
     if (mode === 'EDIT' && target !== 'BULK') {
       const req = requests.find(r => r.id === target)
       if (req) {
-        setEditDates({ 
-          startDate: req.startDate.split('T')[0], 
-          endDate: req.endDate.split('T')[0] 
+        setEditDates({
+          startDate: req.startDate.split('T')[0],
+          endDate: req.endDate.split('T')[0]
         })
       }
     }
     setModalOpen(true)
+    // Story 3.5: Buscar sugestões de cobertura ao abrir modal de aprovação
+    if (mode === 'APPROVE' && target !== 'BULK') {
+      setCoverageLoading(true)
+      try {
+        const data = await HttpClient.get(`/coverages/suggestions?vacationRequestId=${target}`)
+        setCoverageSuggestions(data)
+      } catch {
+        setCoverageSuggestions(null)
+      } finally {
+        setCoverageLoading(false)
+      }
+    }
   }
 
   const confirmAction = async () => {
@@ -98,7 +117,11 @@ export default function ApprovalsPage() {
       else {
         // APPROVE, REJECT, RETURN
         payload.status = modalMode === 'RETURN' ? 'RETURNED' : modalMode === 'APPROVE' ? 'APPROVED' : 'REJECTED'
-        
+        // Story 3.5: Incluir coverageEmployeeId ao aprovar com cobertura
+        if (modalMode === 'APPROVE' && selectedCoverageId) {
+          payload.coverageEmployeeId = selectedCoverageId
+        }
+
         if (isBulk) {
           payload.requestIds = selectedIds
           await HttpClient.patch('/vacations/bulk', payload)
@@ -259,6 +282,16 @@ export default function ApprovalsPage() {
                                 {req.status === 'RETURNED' && <span className="text-indigo-400">Devolvido (Corrigir)</span>}
                                 {req.status === 'SIGNED' && <span className="text-emerald-400">Assinado</span>}
                               </p>
+                              {/* Badge hasCoverage (Story 3.3) */}
+                              {req.status === 'APPROVED' && (
+                                <span className={`inline-flex items-center gap-1 mt-0.5 px-1.5 py-0.5 text-[9px] font-bold rounded-full uppercase ${
+                                  req.hasCoverage
+                                    ? 'bg-emerald-500/15 text-emerald-400'
+                                    : 'bg-red-500/15 text-red-400'
+                                }`}>
+                                  {req.hasCoverage ? 'Com Cobertura' : 'Sem Cobertura'}
+                                </span>
+                              )}
                             </div>
                             {/* Badges de assinatura digital */}
                             {req.status === 'APPROVED' && req.signature?.signUrl && !req.signature?.signedAt && (
@@ -386,9 +419,89 @@ export default function ApprovalsPage() {
                 </div>
               )}
 
+              {/* Story 3.5: Seção de Cobertura no modal de aprovação */}
+              {modalMode === 'APPROVE' && actionTarget !== 'BULK' && (
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase mb-2 flex items-center gap-1">
+                    Quem cobre este posto?
+                    <InfoTooltip text="Selecione um ferista disponível para cobrir o posto durante as férias, ou aprove sem cobertura (gap permanece para resolução posterior)." />
+                  </label>
+                  {coverageLoading ? (
+                    <div className="bg-slate-950 border border-slate-800 rounded-lg p-4 text-center text-slate-500 text-sm">
+                      Buscando feristas disponíveis...
+                    </div>
+                  ) : coverageSuggestions ? (
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                      {coverageSuggestions.suggestions?.feristas?.length > 0 || coverageSuggestions.suggestions?.intermitentes?.length > 0 ? (
+                        <>
+                          {[...(coverageSuggestions.suggestions?.feristas || []), ...(coverageSuggestions.suggestions?.intermitentes || [])].map((s: any) => (
+                            <label
+                              key={s.id}
+                              className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                                selectedCoverageId === s.id
+                                  ? 'border-emerald-500/50 bg-emerald-500/10'
+                                  : 'border-slate-800 bg-slate-950 hover:border-slate-700'
+                              }`}
+                            >
+                              <input
+                                type="radio"
+                                name="coverageEmployee"
+                                value={s.id}
+                                checked={selectedCoverageId === s.id}
+                                onChange={() => setSelectedCoverageId(s.id)}
+                                className="accent-emerald-500"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-bold text-white truncate">{s.name}</p>
+                                <p className="text-[10px] text-slate-500">
+                                  {s.type === 'FERISTA'
+                                    ? (s.employeeType === 'EFETIVO' ? 'GHS Ferista' : 'Ferista Intermitente')
+                                    : 'Intermitente'
+                                  }
+                                </p>
+                              </div>
+                              {s.estimatedCost != null && (
+                                <span className="text-xs font-mono text-amber-400">
+                                  R$ {Number(s.estimatedCost).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                </span>
+                              )}
+                            </label>
+                          ))}
+                          <label
+                            className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                              selectedCoverageId === null
+                                ? 'border-amber-500/50 bg-amber-500/10'
+                                : 'border-slate-800 bg-slate-950 hover:border-slate-700'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="coverageEmployee"
+                              value=""
+                              checked={selectedCoverageId === null}
+                              onChange={() => setSelectedCoverageId(null)}
+                              className="accent-amber-500"
+                            />
+                            <div>
+                              <p className="text-sm font-bold text-amber-400">Aprovar sem cobertura</p>
+                              <p className="text-[10px] text-slate-500">Gap permanece — definir depois</p>
+                            </div>
+                          </label>
+                        </>
+                      ) : (
+                        <div className="bg-slate-950 border border-slate-800 rounded-lg p-4 text-center text-sm">
+                          <p className="text-amber-400 font-bold">Nenhum ferista disponível no período</p>
+                          <p className="text-slate-500 text-xs mt-1">A aprovação criará um gap de cobertura.</p>
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              )}
+
               <div>
                 <label className="text-xs font-bold text-slate-500 uppercase mb-2 flex items-center gap-1">Despacho / Motivo <InfoTooltip text="Justificativa do RH para a decisão tomada. Este texto será visível para o colaborador. Obrigatório para reprovações e devoluções." /></label>
-                <textarea 
+                <textarea
                   value={dispatchNote}
                   onChange={(e) => setDispatchNote(e.target.value)}
                   placeholder="Justificativa do RH (visível ao colaborador)..."
@@ -405,12 +518,16 @@ export default function ApprovalsPage() {
               >
                 Cancelar
               </button>
-              <button 
+              <button
                 onClick={confirmAction}
                 disabled={((modalMode === 'RETURN' || modalMode === 'REJECT') && dispatchNote.length < 5) || (modalMode === 'EDIT' && (!editDates.startDate || !editDates.endDate))}
                 className="px-6 py-2 rounded-lg text-sm font-bold text-white bg-primary hover:bg-primary/90 disabled:opacity-50"
               >
-                Confirmar Ação
+                {modalMode === 'APPROVE' && selectedCoverageId
+                  ? 'Aprovar com Cobertura'
+                  : modalMode === 'APPROVE'
+                    ? 'Aprovar sem Cobertura'
+                    : 'Confirmar Ação'}
               </button>
             </div>
           </div>

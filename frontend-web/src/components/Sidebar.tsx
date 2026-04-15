@@ -3,7 +3,7 @@
 import React, { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, CheckSquare, Users, Settings, BrainCircuit, LogOut, PanelLeftOpen, PanelLeftClose, Building2, Shield, Crown } from 'lucide-react'
+import { LayoutDashboard, CheckSquare, Users, Settings, BrainCircuit, LogOut, PanelLeftOpen, PanelLeftClose, Building2, Shield, Crown, Calendar, Link2 } from 'lucide-react'
 import { useAuth } from '@/components/AuthContext'
 
 export function Sidebar() {
@@ -25,23 +25,38 @@ export function Sidebar() {
 
   const isSuperAdmin = user?.role === 'SUPERADMIN'
 
-  const adminLinks = [
-    { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { href: '/predict', label: 'Oráculo AI', icon: BrainCircuit },
-    { href: '/approvals', label: 'Aprovações', icon: CheckSquare },
-    { href: '/employees', label: 'Colaboradores', icon: Users },
-    { href: '/workplaces', label: 'Postos', icon: Building2 },
-    { href: '/coverage', label: 'Cobertura', icon: Shield },
+  const adminSections = [
+    {
+      label: 'Operacional',
+      items: [
+        { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+        { href: '/employees', label: 'Colaboradores', icon: Users },
+        { href: '/approvals', label: 'Férias', icon: Calendar },
+        { href: '/workplaces', label: 'Postos', icon: Building2 },
+        { href: '/coverage', label: 'Cobertura', icon: Shield },
+        { href: '/approvals', label: 'Aprovações', icon: CheckSquare, matchPath: '/approvals' },
+      ],
+    },
+    {
+      label: 'Inteligência',
+      items: [
+        { href: '/predict', label: 'AI Oráculo', icon: BrainCircuit },
+      ],
+    },
+    {
+      label: 'Configurações',
+      items: [
+        { href: '/settings', label: 'Webhooks', icon: Link2, matchPath: '/settings' },
+        { href: '/settings', label: 'Configurações', icon: Settings, matchPath: '/settings' },
+      ],
+    },
   ]
 
-  const links = isSuperAdmin && !isImpersonating
-    ? [
-        { href: '/admin', label: 'Painel Admin', icon: Crown },
-        { href: '/dashboard', label: 'Dashboard Global', icon: LayoutDashboard },
-      ]
-    : isImpersonating
-      ? adminLinks
-      : adminLinks
+  const isSuperAdminView = isSuperAdmin && !isImpersonating
+  const superAdminLinks = [
+    { href: '/admin', label: 'Painel Admin', icon: Crown },
+    { href: '/dashboard', label: 'Dashboard Global', icon: LayoutDashboard },
+  ]
 
   return (
     <aside
@@ -73,33 +88,57 @@ export function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 py-3 px-2 space-y-1 overflow-hidden">
-        {links.map((link) => {
-          const isActive = pathname.startsWith(link.href)
-          const Icon = link.icon
-
-          return (
-            <Link
-              key={link.href}
-              href={link.href}
-              className={`group relative flex items-center gap-3 py-2.5 rounded-xl transition-all ${expanded ? 'px-3' : 'px-0 justify-center'} ${
-                isActive
-                  ? 'bg-primary/10 text-primary font-bold'
-                  : 'text-slate-400 hover:text-white hover:bg-white/5'
-              }`}
-              title={!expanded ? link.label : undefined}
-            >
-              <Icon className="w-5 h-5 shrink-0" />
-              {expanded && <span className="whitespace-nowrap text-sm">{link.label}</span>}
-              {/* Tooltip quando retraído */}
-              {!expanded && (
-                <span className="absolute left-full ml-3 px-2.5 py-1 bg-slate-800 text-white text-xs font-bold rounded-lg shadow-xl border border-white/10 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
-                  {link.label}
-                </span>
+      <nav className="flex-1 py-3 px-2 overflow-hidden overflow-y-auto">
+        {isSuperAdminView ? (
+          <div className="space-y-1">
+            {superAdminLinks.map((link) => {
+              const isActive = pathname.startsWith(link.href)
+              const Icon = link.icon
+              return (
+                <Link key={link.href} href={link.href}
+                  className={`group relative flex items-center gap-3 py-2.5 rounded-xl transition-all ${expanded ? 'px-3' : 'px-0 justify-center'} ${isActive ? 'bg-primary/10 text-primary font-bold' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                  title={!expanded ? link.label : undefined}>
+                  <Icon className="w-5 h-5 shrink-0" />
+                  {expanded && <span className="whitespace-nowrap text-sm">{link.label}</span>}
+                  {!expanded && (
+                    <span className="absolute left-full ml-3 px-2.5 py-1 bg-slate-800 text-white text-xs font-bold rounded-lg shadow-xl border border-white/10 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
+                      {link.label}
+                    </span>
+                  )}
+                </Link>
+              )
+            })}
+          </div>
+        ) : (
+          adminSections.map((section) => (
+            <div key={section.label} className="mb-3">
+              {expanded && (
+                <p className="px-3 pt-3 pb-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                  {section.label}
+                </p>
               )}
-            </Link>
-          )
-        })}
+              <div className="space-y-0.5">
+                {section.items.map((link, idx) => {
+                  const isActive = pathname.startsWith(link.href)
+                  const Icon = link.icon
+                  return (
+                    <Link key={`${link.href}-${idx}`} href={link.href}
+                      className={`group relative flex items-center gap-3 py-2.5 rounded-xl transition-all ${expanded ? 'px-3' : 'px-0 justify-center'} ${isActive ? 'bg-primary/10 text-primary font-bold' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                      title={!expanded ? link.label : undefined}>
+                      <Icon className="w-5 h-5 shrink-0" />
+                      {expanded && <span className="whitespace-nowrap text-sm">{link.label}</span>}
+                      {!expanded && (
+                        <span className="absolute left-full ml-3 px-2.5 py-1 bg-slate-800 text-white text-xs font-bold rounded-lg shadow-xl border border-white/10 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
+                          {link.label}
+                        </span>
+                      )}
+                    </Link>
+                  )
+                })}
+              </div>
+            </div>
+          ))
+        )}
       </nav>
 
       {/* User Section */}

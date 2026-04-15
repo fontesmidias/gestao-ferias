@@ -66,6 +66,14 @@ interface ChatMessage {
   provider?: string
 }
 
+// ── Constants ───────────────────────────────────────────────────────
+const SUGGESTION_CHIPS = [
+  'Quantos intermitentes preciso no próximo trimestre?',
+  'Qual posto fica descoberto semana que vem?',
+  'Quanto vai custar a cobertura do próximo mês?',
+  'Quais colaboradores têm férias vencendo?',
+]
+
 // ── Helpers ──────────────────────────────────────────────────────────
 const RISK_ORDER: Record<string, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 }
 
@@ -309,6 +317,53 @@ export default function AIPredictDashboard() {
               <div className="mb-4 flex items-center gap-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-300 text-sm">
                 <AlertCircle className="w-5 h-5 flex-shrink-0" />
                 <span>Nenhum provedor de IA configurado. Vá em <strong>Configurações</strong> para adicionar sua chave de API.</span>
+              </div>
+            )}
+            {chatMessages.length === 0 && !chatLoading && (
+              <div className="mb-4 flex flex-wrap gap-2">
+                {SUGGESTION_CHIPS.map((chip) => (
+                  <button
+                    key={chip}
+                    type="button"
+                    onClick={() => {
+                      setChatInput(chip)
+                      // Auto-submit after setting input
+                      setTimeout(() => {
+                        setChatMessages((prev) => [...prev, { role: 'user', content: chip }])
+                        setChatLoading(true)
+                        setLlmUnavailable(false)
+                        HttpClient.post('/predict/ask', { question: chip })
+                          .then((data) => {
+                            setChatMessages((prev) => [
+                              ...prev,
+                              { role: 'assistant', content: data.answer, provider: data.provider },
+                            ])
+                          })
+                          .catch((err: any) => {
+                            const msg = err.message || ''
+                            if (msg.toLowerCase().includes('llm') || msg.toLowerCase().includes('provider') || msg.toLowerCase().includes('key')) {
+                              setLlmUnavailable(true)
+                              setChatMessages((prev) => [
+                                ...prev,
+                                { role: 'assistant', content: 'Nenhum provedor de IA configurado. Acesse as configurações e adicione sua chave de API (OpenAI, Anthropic, etc.) para usar o chat.' },
+                              ])
+                            } else {
+                              toast.error(msg || 'Erro ao consultar a IA')
+                              setChatMessages((prev) => [
+                                ...prev,
+                                { role: 'assistant', content: 'Desculpe, ocorreu um erro ao processar sua pergunta. Tente novamente.' },
+                              ])
+                            }
+                          })
+                          .finally(() => setChatLoading(false))
+                        setChatInput('')
+                      }, 0)
+                    }}
+                    className="px-3 py-2 text-xs font-medium bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 rounded-xl hover:bg-indigo-500/20 hover:border-indigo-500/40 transition-all"
+                  >
+                    {chip}
+                  </button>
+                ))}
               </div>
             )}
             <form onSubmit={(e) => { e.preventDefault(); handleAskQuestion() }} className="flex items-center gap-3">
