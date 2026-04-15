@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback, useRef } from 'react'
 import {
   BrainCircuit,
   TrendingDown,
@@ -106,6 +106,36 @@ export default function AIPredictDashboard() {
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
   const [llmUnavailable, setLlmUnavailable] = useState(false)
+  const [typingText, setTypingText] = useState('')
+  const [isTyping, setIsTyping] = useState(false)
+  const typingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // ── Typing animation helper ────────────────────────────────────────
+  const animateTyping = useCallback((fullText: string, provider?: string) => {
+    setIsTyping(true)
+    setTypingText('')
+    let index = 0
+    typingIntervalRef.current = setInterval(() => {
+      index++
+      setTypingText(fullText.slice(0, index))
+      if (index >= fullText.length) {
+        if (typingIntervalRef.current) clearInterval(typingIntervalRef.current)
+        typingIntervalRef.current = null
+        setIsTyping(false)
+        setTypingText('')
+        setChatMessages((prev) => [
+          ...prev,
+          { role: 'assistant', content: fullText, provider },
+        ])
+      }
+    }, 30)
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (typingIntervalRef.current) clearInterval(typingIntervalRef.current)
+    }
+  }, [])
 
   // ── Data fetching ──────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
@@ -145,10 +175,7 @@ export default function AIPredictDashboard() {
 
     try {
       const data = await HttpClient.post('/predict/ask', { question })
-      setChatMessages((prev) => [
-        ...prev,
-        { role: 'assistant', content: data.answer, provider: data.provider },
-      ])
+      animateTyping(data.answer, data.provider)
     } catch (err: any) {
       const msg = err.message || ''
       if (msg.toLowerCase().includes('llm') || msg.toLowerCase().includes('provider') || msg.toLowerCase().includes('key')) {
@@ -304,7 +331,22 @@ export default function AIPredictDashboard() {
                     </div>
                   </div>
                 ))}
-                {chatLoading && (
+                {isTyping && typingText && (
+                  <div className="flex justify-start">
+                    <div className="max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed bg-slate-800 text-slate-200 border border-white/5">
+                      <div className="whitespace-pre-wrap" dangerouslySetInnerHTML={{
+                        __html: typingText
+                          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                          .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                          .replace(/^- /gm, '&bull; ')
+                          .replace(/^(\d+)\. /gm, '<strong>$1.</strong> ')
+                          .replace(/\n/g, '<br/>')
+                      }} />
+                      <span className="inline-block w-0.5 h-4 bg-indigo-400 animate-pulse ml-0.5 align-middle" />
+                    </div>
+                  </div>
+                )}
+                {chatLoading && !isTyping && (
                   <div className="flex justify-start">
                     <div className="bg-slate-800 border border-white/5 rounded-2xl px-4 py-3 flex items-center gap-2 text-sm text-slate-400">
                       <Loader2 className="w-4 h-4 animate-spin" /> Pensando...
@@ -334,10 +376,7 @@ export default function AIPredictDashboard() {
                         setLlmUnavailable(false)
                         HttpClient.post('/predict/ask', { question: chip })
                           .then((data) => {
-                            setChatMessages((prev) => [
-                              ...prev,
-                              { role: 'assistant', content: data.answer, provider: data.provider },
-                            ])
+                            animateTyping(data.answer, data.provider)
                           })
                           .catch((err: any) => {
                             const msg = err.message || ''

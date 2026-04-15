@@ -63,12 +63,41 @@ export default function DashboardPage() {
 
         <ErrorBoundary>
           {loading ? (
-             <div className="h-[500px] flex items-center justify-center border border-white/5 glass-card rounded-3xl">
-               <div className="flex flex-col items-center gap-4">
-                 <div className="w-10 h-10 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
-                 <p className="text-slate-400 font-bold tracking-widest text-sm uppercase">Carregando Oráculo...</p>
-               </div>
-             </div>
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+              {/* Skeleton KPI cards */}
+              <div className="md:col-span-12 grid grid-cols-1 md:grid-cols-4 gap-6">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="animate-pulse glass-card p-6 rounded-2xl border border-white/5">
+                    <div className="h-3 bg-slate-800/50 rounded w-24 mb-4" />
+                    <div className="h-10 bg-slate-800/50 rounded w-20 mb-4" />
+                    <div className="h-2 bg-slate-800/50 rounded w-32" />
+                  </div>
+                ))}
+              </div>
+              {/* Skeleton chart */}
+              <div className="md:col-span-8 animate-pulse glass-card p-6 rounded-2xl border border-white/5">
+                <div className="h-5 bg-slate-800/50 rounded w-48 mb-4" />
+                <div className="h-3 bg-slate-800/50 rounded w-64 mb-8" />
+                <div className="h-[300px] bg-slate-800/30 rounded-xl" />
+              </div>
+              {/* Skeleton activity */}
+              <div className="md:col-span-4 animate-pulse glass-card rounded-2xl border border-white/5">
+                <div className="p-6 border-b border-white/5">
+                  <div className="h-5 bg-slate-800/50 rounded w-32" />
+                </div>
+                <div className="p-6 space-y-6">
+                  {[1, 2, 3, 4].map((i) => (
+                    <div key={i} className="flex items-start gap-3">
+                      <div className="w-6 h-6 rounded-full bg-slate-800/50 shrink-0" />
+                      <div className="flex-1 space-y-2">
+                        <div className="h-3 bg-slate-800/50 rounded w-28" />
+                        <div className="h-2 bg-slate-800/50 rounded w-20" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
               

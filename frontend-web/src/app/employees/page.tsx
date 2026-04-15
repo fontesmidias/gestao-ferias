@@ -351,11 +351,27 @@ export default function EmployeesPage() {
                 </thead>
                 <tbody className="divide-y divide-white/[0.03]">
                   {loading ? (
-                    <tr>
-                      <td colSpan={10} className="px-6 py-12 text-center text-slate-500">
-                        Sincronizando banco de dados de colaboradores...
-                      </td>
-                    </tr>
+                    <>
+                      {[1, 2, 3, 4, 5].map((i) => (
+                        <tr key={i} className="animate-pulse">
+                          <td className="px-6 py-3"><div className="h-4 bg-slate-800/50 rounded w-12" /></td>
+                          <td className="px-6 py-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-slate-800/50 shrink-0" />
+                              <div className="h-4 bg-slate-800/50 rounded w-32" />
+                            </div>
+                          </td>
+                          <td className="px-6 py-3"><div className="h-4 bg-slate-800/50 rounded w-16" /></td>
+                          <td className="px-6 py-3"><div className="h-4 bg-slate-800/50 rounded w-28" /></td>
+                          <td className="px-6 py-3"><div className="h-4 bg-slate-800/50 rounded w-24" /></td>
+                          <td className="px-6 py-3"><div className="h-4 bg-slate-800/50 rounded w-20" /></td>
+                          <td className="px-6 py-3"><div className="h-4 bg-slate-800/50 rounded w-16" /></td>
+                          <td className="px-6 py-3"><div className="h-4 bg-slate-800/50 rounded w-24" /></td>
+                          <td className="px-6 py-3"><div className="h-4 bg-slate-800/50 rounded w-20 ml-auto" /></td>
+                          <td className="px-4 py-3" />
+                        </tr>
+                      ))}
+                    </>
                   ) : filtered.length === 0 ? (
                     <tr>
                       <td colSpan={10} className="px-6 py-12 text-center text-slate-500">

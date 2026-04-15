@@ -1,10 +1,11 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { LayoutDashboard, CheckSquare, Users, Settings, BrainCircuit, LogOut, PanelLeftOpen, PanelLeftClose, Building2, Shield, Crown, Calendar, Link2 } from 'lucide-react'
 import { useAuth } from '@/components/AuthContext'
+import { HttpClient } from '@/lib/api-client'
 
 export function Sidebar() {
   const pathname = usePathname()
@@ -12,6 +13,29 @@ export function Sidebar() {
   const [pinned, setPinned] = useState(false)
   const [hovered, setHovered] = useState(false)
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
+  const [badges, setBadges] = useState<Record<string, number>>({})
+
+  // Buscar contagens para badges (pendentes, gaps)
+  const fetchBadges = useCallback(async () => {
+    if (!user || user.role === 'SUPERADMIN') return
+    try {
+      const [vacations, gaps] = await Promise.all([
+        HttpClient.get('/vacations').catch(() => []),
+        HttpClient.get('/coverages/gaps?from=' + new Date().toISOString().split('T')[0] + '&to=' + new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0]).catch(() => ({ totalGaps: 0 })),
+      ])
+      const pending = Array.isArray(vacations) ? vacations.filter((v: any) => v.status === 'PENDING').length : 0
+      setBadges({
+        '/approvals': pending,
+        '/coverage': gaps?.totalGaps || 0,
+      })
+    } catch { /* non-critical */ }
+  }, [user])
+
+  useEffect(() => {
+    fetchBadges()
+    const interval = setInterval(fetchBadges, 60000) // refresh every minute
+    return () => clearInterval(interval)
+  }, [fetchBadges])
 
   // Se estiver na PWA ou não estiver logado (e já carregou), não mostra sidebar
   if (pathname.startsWith('/employee') || pathname.startsWith('/auth')) {
@@ -126,11 +150,27 @@ export function Sidebar() {
                       className={`group relative flex items-center gap-3 py-2.5 rounded-xl transition-all ${expanded ? 'px-3' : 'px-0 justify-center'} ${isActive ? 'bg-primary/10 text-primary font-bold' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
                       title={!expanded ? link.label : undefined}>
                       <Icon className="w-5 h-5 shrink-0" />
-                      {expanded && <span className="whitespace-nowrap text-sm">{link.label}</span>}
-                      {!expanded && (
-                        <span className="absolute left-full ml-3 px-2.5 py-1 bg-slate-800 text-white text-xs font-bold rounded-lg shadow-xl border border-white/10 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
-                          {link.label}
+                      {expanded && (
+                        <span className="flex-1 flex items-center justify-between">
+                          <span className="whitespace-nowrap text-sm">{link.label}</span>
+                          {badges[link.href] > 0 && (
+                            <span className={`min-w-[20px] h-5 px-1.5 flex items-center justify-center rounded-full text-[10px] font-bold text-white ${
+                              link.href === '/coverage' ? 'bg-red-500' : 'bg-amber-500'
+                            }`}>
+                              {badges[link.href]}
+                            </span>
+                          )}
                         </span>
+                      )}
+                      {!expanded && (
+                        <>
+                          {badges[link.href] > 0 && (
+                            <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500" />
+                          )}
+                          <span className="absolute left-full ml-3 px-2.5 py-1 bg-slate-800 text-white text-xs font-bold rounded-lg shadow-xl border border-white/10 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
+                            {link.label}{badges[link.href] > 0 ? ` (${badges[link.href]})` : ''}
+                          </span>
+                        </>
                       )}
                     </Link>
                   )

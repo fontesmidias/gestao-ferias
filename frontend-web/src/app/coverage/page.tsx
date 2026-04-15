@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { Shield, AlertTriangle, Users, Calendar, ChevronLeft, ChevronRight, UserCheck, X, FileSpreadsheet, Upload } from 'lucide-react'
+import { Shield, AlertTriangle, Users, Calendar, ChevronLeft, ChevronRight, UserCheck, FileSpreadsheet, Upload, ArrowLeft } from 'lucide-react'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { HttpClient } from '@/lib/api-client'
@@ -85,8 +85,9 @@ export default function CoveragePage() {
   const [coverages, setCoverages] = useState<Coverage[]>([])
   const [loading, setLoading] = useState(true)
 
-  // Modal state
+  // Sheet (slide-in panel) state
   const [modalOpen, setModalOpen] = useState(false)
+  const [sheetVisible, setSheetVisible] = useState(false)
   const [modalGap, setModalGap] = useState<Gap | null>(null)
   const [suggestions, setSuggestions] = useState<SuggestionsResponse | null>(null)
   const [suggestionsLoading, setSuggestionsLoading] = useState(false)
@@ -147,6 +148,14 @@ export default function CoveragePage() {
 
   // ---------- Modal logic ----------
 
+  const closeSheet = useCallback(() => {
+    setSheetVisible(false)
+    setTimeout(() => {
+      setModalOpen(false)
+      setModalGap(null)
+    }, 300)
+  }, [])
+
   const openAssignModal = async (gap: Gap) => {
     setModalGap(gap)
     setSelectedReplacement(null)
@@ -154,6 +163,12 @@ export default function CoveragePage() {
     setSelectedCost(0)
     setSuggestions(null)
     setModalOpen(true)
+    // Trigger slide-in on next frame so the transition plays
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setSheetVisible(true)
+      })
+    })
 
     try {
       setSuggestionsLoading(true)
@@ -179,7 +194,7 @@ export default function CoveragePage() {
     if (!modalGap) return
     if (selectedReplacement === 'NONE') {
       toast('Nenhuma cobertura atribuida por agora.')
-      setModalOpen(false)
+      closeSheet()
       return
     }
     if (!selectedReplacement) return
@@ -196,7 +211,7 @@ export default function CoveragePage() {
         cost: selectedCost,
       })
       toast.success('Cobertura atribuida com sucesso!')
-      setModalOpen(false)
+      closeSheet()
       fetchData()
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Erro ao criar cobertura'
@@ -302,12 +317,39 @@ export default function CoveragePage() {
 
         <ErrorBoundary>
           {loading ? (
-            <div className="h-[500px] flex items-center justify-center border border-white/5 glass-card rounded-3xl">
-              <div className="flex flex-col items-center gap-4">
-                <div className="w-10 h-10 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
-                <p className="text-slate-400 font-bold tracking-widest text-sm uppercase">Carregando coberturas...</p>
+            <>
+              {/* Skeleton KPI Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="animate-pulse glass-card p-6 rounded-2xl border border-white/5">
+                    <div className="h-3 bg-slate-800/50 rounded w-28 mb-4" />
+                    <div className="h-10 bg-slate-800/50 rounded w-16 mb-4" />
+                    <div className="h-2 bg-slate-800/50 rounded w-40" />
+                  </div>
+                ))}
               </div>
-            </div>
+              {/* Skeleton gap list */}
+              <div className="animate-pulse glass-card rounded-2xl border border-white/5 overflow-hidden">
+                <div className="p-6 border-b border-white/5">
+                  <div className="h-5 bg-slate-800/50 rounded w-48" />
+                </div>
+                <div className="divide-y divide-white/5">
+                  {[1, 2, 3, 4].map((i) => (
+                    <div key={i} className="p-6 flex items-center justify-between gap-4">
+                      <div className="flex items-start gap-4">
+                        <div className="w-10 h-10 rounded-full bg-slate-800/50 shrink-0" />
+                        <div className="space-y-2">
+                          <div className="h-4 bg-slate-800/50 rounded w-36" />
+                          <div className="h-3 bg-slate-800/50 rounded w-52" />
+                          <div className="h-2 bg-slate-800/50 rounded w-28" />
+                        </div>
+                      </div>
+                      <div className="h-10 bg-slate-800/50 rounded-lg w-40" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
           ) : (
             <>
               {/* KPI Cards */}
@@ -507,31 +549,45 @@ export default function CoveragePage() {
         </ErrorBoundary>
       </main>
 
-      {/* Assignment Modal */}
+      {/* Assignment Sheet (slide-in panel) */}
       {modalOpen && modalGap && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl max-h-[90vh] flex flex-col">
-            {/* Modal Header */}
-            <div className="p-4 border-b border-white/5 bg-primary/10 flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-3">
-                <Shield className="w-6 h-6 text-primary" />
-                <div>
+        <>
+          {/* Backdrop */}
+          <div
+            className={`fixed inset-0 z-50 bg-black/40 transition-opacity duration-300 ${
+              sheetVisible ? 'opacity-100' : 'opacity-0'
+            }`}
+            onClick={closeSheet}
+          />
+
+          {/* Sheet Panel */}
+          <div
+            className={`fixed top-0 right-0 h-full w-full max-w-lg bg-slate-900 border-l border-slate-800 shadow-2xl z-50 transform transition-transform duration-300 ease-in-out flex flex-col ${
+              sheetVisible ? 'translate-x-0' : 'translate-x-full'
+            }`}
+          >
+            {/* Sheet Header */}
+            <div className="p-4 border-b border-white/5 bg-primary/10 flex items-center gap-3 shrink-0">
+              <button
+                onClick={closeSheet}
+                className="p-1.5 hover:bg-slate-800 rounded-lg transition-colors"
+                title="Fechar painel"
+              >
+                <ArrowLeft className="w-5 h-5 text-slate-400" />
+              </button>
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <Shield className="w-6 h-6 text-primary shrink-0" />
+                <div className="min-w-0">
                   <h3 className="font-bold text-white">Atribuir Cobertura</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
+                  <p className="text-xs text-slate-400 mt-0.5 truncate">
                     {modalGap.employeeName} &mdash; {format(parseISO(modalGap.vacationStart), 'dd/MM')} a {format(parseISO(modalGap.vacationEnd), 'dd/MM')}
                     <InfoTooltip text="Periodo de ferias do colaborador para o qual voce esta atribuindo cobertura." />
                   </p>
                 </div>
               </div>
-              <button
-                onClick={() => setModalOpen(false)}
-                className="p-1.5 hover:bg-slate-800 rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5 text-slate-400" />
-              </button>
             </div>
 
-            {/* Modal Body */}
+            {/* Sheet Body (scrollable) */}
             <div className="p-6 overflow-y-auto flex-1 space-y-6">
               {suggestionsLoading ? (
                 <div className="flex flex-col items-center justify-center py-12 gap-4">
@@ -649,10 +705,10 @@ export default function CoveragePage() {
               )}
             </div>
 
-            {/* Modal Footer */}
-            <div className="p-4 border-t border-white/5 flex justify-end gap-3 bg-slate-900/50 shrink-0">
+            {/* Sheet Footer (sticky at bottom) */}
+            <div className="p-4 border-t border-white/5 flex justify-end gap-3 bg-slate-900 shrink-0">
               <button
-                onClick={() => setModalOpen(false)}
+                onClick={closeSheet}
                 className="px-4 py-2 rounded-lg text-sm font-bold text-slate-400 hover:text-white transition-colors"
               >
                 Cancelar
@@ -666,7 +722,7 @@ export default function CoveragePage() {
               </button>
             </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   )
