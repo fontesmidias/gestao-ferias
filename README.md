@@ -28,7 +28,7 @@
 | Backend | Fastify 5, TypeScript, Prisma 7 |
 | Banco | PostgreSQL 15 |
 | Cache/Filas | Redis 7 + BullMQ |
-| AI | OpenAI / Anthropic / Google Gemini |
+| AI | OpenAI / Anthropic / Gemini / Groq |
 | Deploy | Docker Swarm, Portainer, Traefik |
 | CI | GitHub Actions |
 
@@ -103,18 +103,24 @@ Variaveis obrigatorias em producao:
 | GET /predict/risks | Riscos de multa CLT Art. 137 |
 | POST /predict/ask | Chat com AI |
 | GET /audit-logs | Logs de auditoria |
+| PATCH /vacations/:id | Aprovar/rejeitar com cobertura integrada |
+| POST /vacations/bulk-create | Cadastro em massa (max 50, CLT) |
+| GET /webhooks | Listar webhooks configurados |
+| POST /webhooks/:id/test | Testar webhook |
 
 ---
 
 ## Testes
 
 ```bash
-# Backend (30 testes)
-cd backend-api && npx tsx --test test/modules/*.test.ts
+# Backend — testes unitarios (modules)
+cd backend-api && npm test
 
-# Frontend (6 testes)
+# Frontend
 cd frontend-web && npx vitest run
 ```
+
+Cobertura: `c8` gera relatorio automaticamente ao rodar `npm test`.
 
 ---
 

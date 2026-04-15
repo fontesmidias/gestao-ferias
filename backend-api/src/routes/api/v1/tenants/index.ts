@@ -90,7 +90,7 @@ const tenants: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     const user = request.user as any
     const payload = request.body as any
 
-    const { openaiKey, anthropicKey, geminiKey, groqKey, llmProvider, llmModel, smtpHost, smtpPort, smtpUser, smtpPass, smtpFrom, evoApiUrl, evoApiKey, evoInstanceName, whatsappEnabled, zapSignToken } = payload
+    const { openaiKey, anthropicKey, geminiKey, groqKey, llmProvider, llmModel, smtpHost, smtpPort, smtpUser, smtpPass, smtpFrom, evoApiUrl, evoApiKey, evoInstanceName, whatsappEnabled, zapSignToken, brandName, brandPrimaryColor, brandSecondaryColor, brandLogoUrl } = payload
 
     await fastify.prisma.tenant.update({
       where: { id: user.tenantId },
@@ -111,6 +111,10 @@ const tenants: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         evoInstanceName: evoInstanceName !== undefined ? evoInstanceName : undefined,
         whatsappEnabled: whatsappEnabled !== undefined ? Boolean(whatsappEnabled) : undefined,
         zapSignToken: zapSignToken !== undefined ? zapSignToken : undefined,
+        brandName: brandName !== undefined ? brandName : undefined,
+        brandPrimaryColor: brandPrimaryColor !== undefined ? brandPrimaryColor : undefined,
+        brandSecondaryColor: brandSecondaryColor !== undefined ? brandSecondaryColor : undefined,
+        brandLogoUrl: brandLogoUrl !== undefined ? brandLogoUrl : undefined,
       }
     })
 
@@ -151,6 +155,10 @@ const tenants: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       evoInstanceName: tenant.evoInstanceName,
       whatsappEnabled: tenant.whatsappEnabled,
       zapSignToken: maskSecret(tenant.zapSignToken),
+      brandName: tenant.brandName,
+      brandPrimaryColor: tenant.brandPrimaryColor,
+      brandSecondaryColor: tenant.brandSecondaryColor,
+      brandLogoUrl: tenant.brandLogoUrl,
     }
   })
 

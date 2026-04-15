@@ -37,7 +37,7 @@ COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
 # Expõe a porta que sua API usa
-EXPOSE 2000
+EXPOSE 3000
 
 ENV NODE_ENV=production
 
