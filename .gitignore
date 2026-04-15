@@ -18,7 +18,9 @@ out/
 .agent/
 .agents/
 .augment/
-.claude/
+.claude/*
+!.claude/skills/
+.claude/settings.local.json
 .cline/
 .codebuddy/
 .crush/
@@ -34,7 +36,8 @@ out/
 .trae/
 .windsurf/
 _evo/
-_evo-output/
+# _evo-output/ tracked — contains planning artifacts (PRD, Architecture, UX, Epics)
+# Do NOT ignore: these are project deliverables, not tooling
 
 # OS / Editor
 .DS_Store

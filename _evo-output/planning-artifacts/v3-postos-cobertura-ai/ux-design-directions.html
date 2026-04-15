@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GestãoFérias V3 — Design Directions</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: #0F172A; color: #E2E8F0; }
+
+  /* Navigation */
+  .nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: #1E293B; border-bottom: 1px solid #334155; display: flex; align-items: center; padding: 0 24px; height: 56px; gap: 8px; }
+  .nav-title { font-size: 14px; font-weight: 600; color: #94A3B8; margin-right: 16px; }
+  .nav-btn { padding: 8px 20px; border-radius: 6px; border: 1px solid #334155; background: transparent; color: #CBD5E1; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+  .nav-btn:hover { background: #334155; }
+  .nav-btn.active { background: #2563EB; color: #fff; border-color: #2563EB; }
+  .nav-hint { margin-left: auto; font-size: 12px; color: #64748B; }
+
+  /* Sections */
+  .direction { display: none; padding-top: 56px; min-height: 100vh; }
+  .direction.active { display: block; }
+
+  /* ==================== DIRECTION 1: COMPACT ==================== */
+  .d1 { background: #FFFFFF; }
+  .d1 .sidebar { position: fixed; top: 56px; left: 0; width: 220px; bottom: 0; background: #0F172A; padding: 12px 0; overflow-y: auto; }
+  .d1 .sidebar .logo { padding: 8px 16px 16px; font-size: 14px; font-weight: 700; color: #fff; border-bottom: 1px solid #1E293B; margin-bottom: 8px; }
+  .d1 .sidebar .logo span { color: #3B82F6; }
+  .d1 .sidebar a { display: flex; align-items: center; gap: 8px; padding: 6px 16px; font-size: 13px; color: #94A3B8; text-decoration: none; transition: all 0.15s; }
+  .d1 .sidebar a:hover { background: #1E293B; color: #E2E8F0; }
+  .d1 .sidebar a.active { background: #1E293B; color: #3B82F6; border-left: 3px solid #3B82F6; }
+  .d1 .sidebar .badge { background: #EF4444; color: #fff; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 10px; margin-left: auto; }
+  .d1 .main { margin-left: 220px; padding: 16px 20px; }
+  .d1 .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .d1 .header h1 { font-size: 18px; font-weight: 600; color: #0F172A; }
+  .d1 .header .breadcrumb { font-size: 12px; color: #94A3B8; }
+  .d1 .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+  .d1 .kpi { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 10px 12px; }
+  .d1 .kpi .label { font-size: 11px; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px; }
+  .d1 .kpi .value { font-size: 24px; font-weight: 700; color: #0F172A; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .d1 .kpi .value.red { color: #EF4444; }
+  .d1 .kpi .value.green { color: #22C55E; }
+  .d1 .kpi .value.orange { color: #F97316; }
+  .d1 .kpi .sub { font-size: 11px; color: #94A3B8; margin-top: 2px; }
+
+  /* Gantt Compact */
+  .d1 .gantt { background: #fff; border: 1px solid #E2E8F0; border-radius: 6px; overflow: hidden; margin-bottom: 16px; }
+  .d1 .gantt-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid #E2E8F0; background: #F8FAFC; }
+  .d1 .gantt-header h2 { font-size: 13px; font-weight: 600; color: #0F172A; }
+  .d1 .gantt-filters { display: flex; gap: 6px; }
+  .d1 .gantt-filters select, .d1 .gantt-filters button { font-size: 11px; padding: 4px 8px; border: 1px solid #E2E8F0; border-radius: 4px; background: #fff; color: #475569; cursor: pointer; }
+  .d1 .gantt-grid { display: grid; grid-template-columns: 160px repeat(15, 1fr); font-size: 11px; }
+  .d1 .gantt-grid .gh { background: #F8FAFC; padding: 4px 6px; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #F1F5F9; color: #64748B; font-weight: 500; text-align: center; }
+  .d1 .gantt-grid .gl { padding: 4px 8px; border-bottom: 1px solid #F1F5F9; border-right: 1px solid #F1F5F9; color: #0F172A; font-weight: 500; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .d1 .gantt-grid .gc { padding: 2px; border-bottom: 1px solid #F1F5F9; border-right: 1px solid #F1F5F9; min-height: 28px; }
+  .d1 .gantt-grid .gc .bar { height: 100%; border-radius: 3px; min-height: 24px; cursor: pointer; transition: opacity 0.15s; }
+  .d1 .gantt-grid .gc .bar:hover { opacity: 0.8; }
+  .d1 .gantt-grid .gc .bar.gap { background: #FEE2E2; border: 1px solid #FECACA; }
+  .d1 .gantt-grid .gc .bar.covered { background: #DCFCE7; border: 1px solid #BBF7D0; }
+  .d1 .gantt-grid .gc .bar.planned { background: #FEF9C3; border: 1px solid #FDE68A; }
+  .d1 .gantt-grid .gc .bar.vacation { background: #DBEAFE; border: 1px solid #BFDBFE; }
+
+  /* Table Compact */
+  .d1 .table-section { background: #fff; border: 1px solid #E2E8F0; border-radius: 6px; overflow: hidden; }
+  .d1 .table-section .th { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid #E2E8F0; background: #F8FAFC; }
+  .d1 .table-section .th h2 { font-size: 13px; font-weight: 600; color: #0F172A; }
+  .d1 table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .d1 table th { text-align: left; padding: 6px 10px; font-size: 11px; font-weight: 500; color: #64748B; text-transform: uppercase; letter-spacing: 0.3px; border-bottom: 1px solid #E2E8F0; background: #FAFBFC; }
+  .d1 table td { padding: 6px 10px; border-bottom: 1px solid #F1F5F9; color: #1E293B; }
+  .d1 table tr:hover td { background: #F8FAFC; }
+  .d1 .badge-sm { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 10px; display: inline-block; }
+  .d1 .badge-pending { background: #DBEAFE; color: #1D4ED8; }
+  .d1 .badge-approved { background: #DCFCE7; color: #15803D; }
+  .d1 .badge-gap { background: #FEE2E2; color: #DC2626; }
+  .d1 .btn-sm { font-size: 11px; padding: 4px 10px; border-radius: 4px; border: none; cursor: pointer; font-weight: 500; }
+  .d1 .btn-primary { background: #2563EB; color: #fff; }
+  .d1 .btn-outline { background: transparent; border: 1px solid #E2E8F0; color: #475569; }
+
+  .d1-label { position: fixed; bottom: 16px; right: 16px; background: #1E293B; color: #E2E8F0; padding: 8px 16px; border-radius: 8px; font-size: 12px; font-weight: 500; z-index: 50; }
+
+  /* ==================== DIRECTION 2: BALANCED ==================== */
+  .d2 { background: #F8FAFC; }
+  .d2 .sidebar { position: fixed; top: 56px; left: 0; width: 256px; bottom: 0; background: #0F172A; padding: 16px 0; overflow-y: auto; }
+  .d2 .sidebar .logo { padding: 12px 20px 20px; font-size: 16px; font-weight: 700; color: #fff; border-bottom: 1px solid #1E293B; margin-bottom: 12px; }
+  .d2 .sidebar .logo span { color: #3B82F6; }
+  .d2 .sidebar a { display: flex; align-items: center; gap: 10px; padding: 10px 20px; font-size: 14px; color: #94A3B8; text-decoration: none; transition: all 0.15s; border-radius: 0; }
+  .d2 .sidebar a:hover { background: #1E293B; color: #E2E8F0; }
+  .d2 .sidebar a.active { background: #1E293B; color: #3B82F6; border-left: 3px solid #3B82F6; }
+  .d2 .sidebar .badge { background: #EF4444; color: #fff; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; margin-left: auto; }
+  .d2 .main { margin-left: 256px; padding: 24px 32px; }
+  .d2 .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+  .d2 .header h1 { font-size: 22px; font-weight: 600; color: #0F172A; }
+  .d2 .header .breadcrumb { font-size: 13px; color: #94A3B8; }
+  .d2 .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+  .d2 .kpi { background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px; padding: 16px 20px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+  .d2 .kpi .label { font-size: 12px; color: #64748B; font-weight: 500; }
+  .d2 .kpi .value { font-size: 28px; font-weight: 700; color: #0F172A; font-variant-numeric: tabular-nums; margin-top: 4px; }
+  .d2 .kpi .value.red { color: #EF4444; }
+  .d2 .kpi .value.green { color: #22C55E; }
+  .d2 .kpi .value.orange { color: #F97316; }
+  .d2 .kpi .sub { font-size: 12px; color: #94A3B8; margin-top: 4px; }
+
+  .d2 .gantt { background: #fff; border: 1px solid #E2E8F0; border-radius: 8px; overflow: hidden; margin-bottom: 24px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+  .d2 .gantt-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid #E2E8F0; }
+  .d2 .gantt-header h2 { font-size: 15px; font-weight: 600; color: #0F172A; }
+  .d2 .gantt-filters { display: flex; gap: 8px; }
+  .d2 .gantt-filters select, .d2 .gantt-filters button { font-size: 13px; padding: 6px 12px; border: 1px solid #E2E8F0; border-radius: 6px; background: #fff; color: #475569; cursor: pointer; }
+  .d2 .gantt-grid { display: grid; grid-template-columns: 180px repeat(15, 1fr); font-size: 12px; }
+  .d2 .gantt-grid .gh { background: #F8FAFC; padding: 8px; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #F1F5F9; color: #64748B; font-weight: 500; text-align: center; }
+  .d2 .gantt-grid .gl { padding: 8px 12px; border-bottom: 1px solid #F1F5F9; border-right: 1px solid #F1F5F9; color: #0F172A; font-weight: 500; font-size: 13px; display: flex; align-items: center; }
+  .d2 .gantt-grid .gc { padding: 4px; border-bottom: 1px solid #F1F5F9; border-right: 1px solid #F1F5F9; min-height: 36px; }
+  .d2 .gantt-grid .gc .bar { height: 100%; border-radius: 4px; min-height: 28px; cursor: pointer; transition: all 0.15s; }
+  .d2 .gantt-grid .gc .bar:hover { opacity: 0.8; transform: scale(1.02); }
+  .d2 .gantt-grid .gc .bar.gap { background: #FEE2E2; border: 1px solid #FECACA; }
+  .d2 .gantt-grid .gc .bar.covered { background: #DCFCE7; border: 1px solid #BBF7D0; }
+  .d2 .gantt-grid .gc .bar.planned { background: #FEF9C3; border: 1px solid #FDE68A; }
+  .d2 .gantt-grid .gc .bar.vacation { background: #DBEAFE; border: 1px solid #BFDBFE; }
+
+  .d2 .table-section { background: #fff; border: 1px solid #E2E8F0; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+  .d2 .table-section .th { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid #E2E8F0; }
+  .d2 .table-section .th h2 { font-size: 15px; font-weight: 600; color: #0F172A; }
+  .d2 table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .d2 table th { text-align: left; padding: 10px 16px; font-size: 12px; font-weight: 500; color: #64748B; text-transform: uppercase; letter-spacing: 0.3px; border-bottom: 1px solid #E2E8F0; }
+  .d2 table td { padding: 10px 16px; border-bottom: 1px solid #F1F5F9; color: #1E293B; }
+  .d2 table tr:hover td { background: #F8FAFC; }
+  .d2 .badge-sm { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 12px; display: inline-block; }
+  .d2 .badge-pending { background: #DBEAFE; color: #1D4ED8; }
+  .d2 .badge-approved { background: #DCFCE7; color: #15803D; }
+  .d2 .badge-gap { background: #FEE2E2; color: #DC2626; }
+  .d2 .btn-sm { font-size: 13px; padding: 6px 14px; border-radius: 6px; border: none; cursor: pointer; font-weight: 500; }
+  .d2 .btn-primary { background: #2563EB; color: #fff; }
+  .d2 .btn-outline { background: transparent; border: 1px solid #E2E8F0; color: #475569; }
+
+  .d2-label { position: fixed; bottom: 16px; right: 16px; background: #1E293B; color: #E2E8F0; padding: 8px 16px; border-radius: 8px; font-size: 12px; font-weight: 500; z-index: 50; }
+
+  /* ==================== DIRECTION 3: SPACIOUS ==================== */
+  .d3 { background: #FFFFFF; }
+  .d3 .sidebar { position: fixed; top: 56px; left: 0; width: 280px; bottom: 0; background: #0F172A; padding: 24px 0; overflow-y: auto; }
+  .d3 .sidebar .logo { padding: 16px 24px 24px; font-size: 18px; font-weight: 700; color: #fff; border-bottom: 1px solid #1E293B; margin-bottom: 16px; }
+  .d3 .sidebar .logo span { color: #3B82F6; }
+  .d3 .sidebar a { display: flex; align-items: center; gap: 12px; padding: 12px 24px; font-size: 15px; color: #94A3B8; text-decoration: none; transition: all 0.2s; }
+  .d3 .sidebar a:hover { background: #1E293B; color: #E2E8F0; }
+  .d3 .sidebar a.active { background: #1E293B; color: #3B82F6; border-left: 3px solid #3B82F6; }
+  .d3 .sidebar .badge { background: #EF4444; color: #fff; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; margin-left: auto; }
+  .d3 .main { margin-left: 280px; padding: 32px 40px; max-width: 1200px; }
+  .d3 .header { margin-bottom: 28px; }
+  .d3 .header .breadcrumb { font-size: 13px; color: #94A3B8; margin-bottom: 4px; }
+  .d3 .header h1 { font-size: 26px; font-weight: 600; color: #0F172A; }
+  .d3 .header p { font-size: 14px; color: #64748B; margin-top: 4px; }
+  .d3 .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 32px; }
+  .d3 .kpi { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 24px; }
+  .d3 .kpi .label { font-size: 13px; color: #64748B; font-weight: 500; }
+  .d3 .kpi .value { font-size: 36px; font-weight: 700; color: #0F172A; font-variant-numeric: tabular-nums; margin-top: 8px; }
+  .d3 .kpi .value.red { color: #EF4444; }
+  .d3 .kpi .value.green { color: #22C55E; }
+  .d3 .kpi .value.orange { color: #F97316; }
+  .d3 .kpi .sub { font-size: 13px; color: #94A3B8; margin-top: 6px; }
+
+  .d3 .gantt { background: #fff; border: 1px solid #E2E8F0; border-radius: 12px; overflow: hidden; margin-bottom: 32px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .d3 .gantt-header { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px; border-bottom: 1px solid #E2E8F0; }
+  .d3 .gantt-header h2 { font-size: 17px; font-weight: 600; color: #0F172A; }
+  .d3 .gantt-filters { display: flex; gap: 10px; }
+  .d3 .gantt-filters select, .d3 .gantt-filters button { font-size: 13px; padding: 8px 14px; border: 1px solid #E2E8F0; border-radius: 8px; background: #fff; color: #475569; cursor: pointer; }
+  .d3 .gantt-grid { display: grid; grid-template-columns: 200px repeat(15, 1fr); font-size: 13px; }
+  .d3 .gantt-grid .gh { background: #FAFBFC; padding: 10px; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #F1F5F9; color: #64748B; font-weight: 500; text-align: center; }
+  .d3 .gantt-grid .gl { padding: 12px 16px; border-bottom: 1px solid #F1F5F9; border-right: 1px solid #F1F5F9; color: #0F172A; font-weight: 500; font-size: 14px; display: flex; align-items: center; }
+  .d3 .gantt-grid .gc { padding: 6px; border-bottom: 1px solid #F1F5F9; border-right: 1px solid #F1F5F9; min-height: 44px; }
+  .d3 .gantt-grid .gc .bar { height: 100%; border-radius: 6px; min-height: 32px; cursor: pointer; transition: all 0.2s; }
+  .d3 .gantt-grid .gc .bar:hover { opacity: 0.85; transform: scale(1.03); box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+  .d3 .gantt-grid .gc .bar.gap { background: #FEE2E2; border: 1px solid #FECACA; }
+  .d3 .gantt-grid .gc .bar.covered { background: #DCFCE7; border: 1px solid #BBF7D0; }
+  .d3 .gantt-grid .gc .bar.planned { background: #FEF9C3; border: 1px solid #FDE68A; }
+  .d3 .gantt-grid .gc .bar.vacation { background: #DBEAFE; border: 1px solid #BFDBFE; }
+
+  .d3 .table-section { background: #fff; border: 1px solid #E2E8F0; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .d3 .table-section .th { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px; border-bottom: 1px solid #E2E8F0; }
+  .d3 .table-section .th h2 { font-size: 17px; font-weight: 600; color: #0F172A; }
+  .d3 table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .d3 table th { text-align: left; padding: 14px 20px; font-size: 12px; font-weight: 500; color: #64748B; text-transform: uppercase; letter-spacing: 0.3px; border-bottom: 1px solid #E2E8F0; }
+  .d3 table td { padding: 14px 20px; border-bottom: 1px solid #F1F5F9; color: #1E293B; }
+  .d3 table tr:hover td { background: #FAFBFC; }
+  .d3 .badge-sm { font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 14px; display: inline-block; }
+  .d3 .badge-pending { background: #DBEAFE; color: #1D4ED8; }
+  .d3 .badge-approved { background: #DCFCE7; color: #15803D; }
+  .d3 .badge-gap { background: #FEE2E2; color: #DC2626; }
+  .d3 .btn-sm { font-size: 14px; padding: 8px 18px; border-radius: 8px; border: none; cursor: pointer; font-weight: 500; }
+  .d3 .btn-primary { background: #2563EB; color: #fff; }
+  .d3 .btn-outline { background: transparent; border: 1px solid #E2E8F0; color: #475569; }
+
+  .d3-label { position: fixed; bottom: 16px; right: 16px; background: #1E293B; color: #E2E8F0; padding: 8px 16px; border-radius: 8px; font-size: 12px; font-weight: 500; z-index: 50; }
+
+  /* Legend shared */
+  .legend { display: flex; gap: 16px; padding: 8px 0; margin-bottom: 8px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #64748B; }
+  .legend-dot { width: 12px; height: 12px; border-radius: 3px; }
+  .legend-dot.gap { background: #FEE2E2; border: 1px solid #FECACA; }
+  .legend-dot.covered { background: #DCFCE7; border: 1px solid #BBF7D0; }
+  .legend-dot.planned { background: #FEF9C3; border: 1px solid #FDE68A; }
+  .legend-dot.vacation { background: #DBEAFE; border: 1px solid #BFDBFE; }
+</style>
+</head>
+<body>
+
+<!-- Top Navigation -->
+<div class="nav">
+  <span class="nav-title">GestãoFérias V3 — Design Directions</span>
+  <button class="nav-btn active" onclick="show('d1')">1. Compact</button>
+  <button class="nav-btn" onclick="show('d2')">2. Balanced</button>
+  <button class="nav-btn" onclick="show('d3')">3. Spacious</button>
+  <span class="nav-hint">Clique para alternar entre as direções</span>
+</div>
+
+<!-- ==================== DIRECTION 1: COMPACT ==================== -->
+<div id="d1" class="direction d1 active">
+  <div class="sidebar">
+    <div class="logo">Gestão<span>Férias</span></div>
+    <a href="#"><span>📊</span> Dashboard</a>
+    <a href="#"><span>👥</span> Colaboradores</a>
+    <a href="#"><span>🏖️</span> Férias</a>
+    <a href="#"><span>🏢</span> Postos</a>
+    <a class="active" href="#"><span>📋</span> Cobertura <span class="badge">3</span></a>
+    <a href="#"><span>✅</span> Aprovações <span class="badge">5</span></a>
+    <a href="#"><span>🤖</span> AI Oráculo</a>
+    <a href="#"><span>🔗</span> Webhooks</a>
+    <a href="#"><span>⚙️</span> Config</a>
+  </div>
+  <div class="main">
+    <div class="header">
+      <div>
+        <div class="breadcrumb">Dashboard / Cobertura</div>
+        <h1>Timeline de Cobertura</h1>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <button class="btn-sm btn-outline">Exportar</button>
+        <button class="btn-sm btn-primary">+ Nova Cobertura</button>
+      </div>
+    </div>
+
+    <div class="kpis">
+      <div class="kpi"><div class="label">Gaps Ativos</div><div class="value red">3</div><div class="sub">2 postos afetados</div></div>
+      <div class="kpi"><div class="label">Coberturas Ativas</div><div class="value green">12</div><div class="sub">8 feristas alocados</div></div>
+      <div class="kpi"><div class="label">Custo Mensal Est.</div><div class="value">R$ 14.800</div><div class="sub">4 intermitentes</div></div>
+      <div class="kpi"><div class="label">Risco de Dobra</div><div class="value orange">2</div><div class="sub">vencimento em 30 dias</div></div>
+    </div>
+
+    <div class="gantt">
+      <div class="gantt-header">
+        <h2>Julho 2026</h2>
+        <div class="gantt-filters">
+          <select><option>Todos os postos</option></select>
+          <select><option>Julho 2026</option></select>
+        </div>
+      </div>
+      <div class="legend" style="padding: 6px 12px;">
+        <div class="legend-item"><div class="legend-dot gap"></div>Gap</div>
+        <div class="legend-item"><div class="legend-dot covered"></div>Coberto</div>
+        <div class="legend-item"><div class="legend-dot planned"></div>Planejado</div>
+        <div class="legend-item"><div class="legend-dot vacation"></div>Férias</div>
+      </div>
+      <div class="gantt-grid">
+        <div class="gh">Posto</div>
+        <div class="gh">1</div><div class="gh">2</div><div class="gh">3</div><div class="gh">4</div><div class="gh">5</div>
+        <div class="gh">6</div><div class="gh">7</div><div class="gh">8</div><div class="gh">9</div><div class="gh">10</div>
+        <div class="gh">11</div><div class="gh">12</div><div class="gh">13</div><div class="gh">14</div><div class="gh">15</div>
+
+        <div class="gl">INEP — Sede</div>
+        <div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div>
+        <div class="gc"><div class="bar vacation"></div></div><div class="gc"><div class="bar vacation"></div></div><div class="gc"><div class="bar vacation"></div></div>
+        <div class="gc"><div class="bar vacation"></div></div><div class="gc"><div class="bar gap"></div></div><div class="gc"><div class="bar gap"></div></div>
+        <div class="gc"><div class="bar gap"></div></div><div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div>
+        <div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div>
+
+        <div class="gl">TRF 1ª Região</div>
+        <div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div>
+        <div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar planned"></div></div>
+        <div class="gc"><div class="bar planned"></div></div><div class="gc"><div class="bar planned"></div></div><div class="gc"><div class="bar covered"></div></div>
+        <div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div>
+        <div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div>
+
+        <div class="gl">MJ — Esplanada</div>
+        <div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar vacation"></div></div>
+        <div class="gc"><div class="bar vacation"></div></div><div class="gc"><div class="bar vacation"></div></div><div class="gc"><div class="bar vacation"></div></div>
+        <div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div>
+        <div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar gap"></div></div><div class="gc"><div class="bar gap"></div></div>
+        <div class="gc"><div class="bar planned"></div></div><div class="gc"><div class="bar planned"></div></div><div class="gc"><div class="bar covered"></div></div>
+      </div>
+    </div>
+
+    <div class="table-section">
+      <div class="th">
+        <h2>Férias Pendentes</h2>
+        <button class="btn-sm btn-primary">Cadastro em Massa</button>
+      </div>
+      <table>
+        <thead><tr><th>Colaborador</th><th>CPF</th><th>Período</th><th>Dias</th><th>Posto</th><th>Status</th><th>Cobertura</th><th></th></tr></thead>
+        <tbody>
+          <tr><td>Carlos Silva</td><td>111.222.333-44</td><td>01/07 — 30/07</td><td>30</td><td>INEP</td><td><span class="badge-sm badge-pending">Pendente</span></td><td><span class="badge-sm badge-gap">Sem cobertura</span></td><td><button class="btn-sm btn-primary">Aprovar</button></td></tr>
+          <tr><td>Ana Santos</td><td>555.666.777-88</td><td>15/07 — 29/07</td><td>15</td><td>TRF</td><td><span class="badge-sm badge-pending">Pendente</span></td><td><span class="badge-sm badge-approved">Coberto</span></td><td><button class="btn-sm btn-primary">Aprovar</button></td></tr>
+          <tr><td>Maria Oliveira</td><td>222.333.444-55</td><td>01/08 — 15/08</td><td>15</td><td>MJ</td><td><span class="badge-sm badge-approved">Aprovado</span></td><td><span class="badge-sm badge-approved">Coberto</span></td><td><button class="btn-sm btn-outline">Ver</button></td></tr>
+          <tr><td>José Ferreira</td><td>333.444.555-66</td><td>10/08 — 24/08</td><td>15</td><td>INEP</td><td><span class="badge-sm badge-pending">Pendente</span></td><td><span class="badge-sm badge-gap">Sem cobertura</span></td><td><button class="btn-sm btn-primary">Aprovar</button></td></tr>
+          <tr><td>Roberto Dias</td><td>999.888.777-66</td><td>01/09 — 30/09</td><td>30</td><td>TRF</td><td><span class="badge-sm badge-pending">Pendente</span></td><td><span class="badge-sm badge-pending">Planejado</span></td><td><button class="btn-sm btn-primary">Aprovar</button></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="d1-label">Direction 1: Compact — Sidebar 220px, rows 28px, padding mínimo</div>
+</div>
+
+<!-- ==================== DIRECTION 2: BALANCED ==================== -->
+<div id="d2" class="direction d2">
+  <div class="sidebar">
+    <div class="logo">Gestão<span>Férias</span></div>
+    <a href="#"><span>📊</span> Dashboard</a>
+    <a href="#"><span>👥</span> Colaboradores</a>
+    <a href="#"><span>🏖️</span> Férias</a>
+    <a href="#"><span>🏢</span> Postos</a>
+    <a class="active" href="#"><span>📋</span> Cobertura <span class="badge">3</span></a>
+    <a href="#"><span>✅</span> Aprovações <span class="badge">5</span></a>
+    <a href="#"><span>🤖</span> AI Oráculo</a>
+    <a href="#"><span>🔗</span> Webhooks</a>
+    <a href="#"><span>⚙️</span> Configurações</a>
+  </div>
+  <div class="main">
+    <div class="header">
+      <div>
+        <div class="breadcrumb">Dashboard / Cobertura</div>
+        <h1>Timeline de Cobertura</h1>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn-sm btn-outline">Exportar</button>
+        <button class="btn-sm btn-primary">+ Nova Cobertura</button>
+      </div>
+    </div>
+
+    <div class="kpis">
+      <div class="kpi"><div class="label">Gaps Ativos</div><div class="value red">3</div><div class="sub">2 postos afetados</div></div>
+      <div class="kpi"><div class="label">Coberturas Ativas</div><div class="value green">12</div><div class="sub">8 feristas alocados</div></div>
+      <div class="kpi"><div class="label">Custo Mensal Est.</div><div class="value">R$ 14.800</div><div class="sub">4 intermitentes</div></div>
+      <div class="kpi"><div class="label">Risco de Dobra</div><div class="value orange">2</div><div class="sub">vencimento em 30 dias</div></div>
+    </div>
+
+    <div class="gantt">
+      <div class="gantt-header">
+        <h2>Timeline — Julho 2026</h2>
+        <div class="gantt-filters">
+          <select><option>Todos os postos</option></select>
+          <select><option>Julho 2026</option></select>
+          <button class="btn-sm btn-outline">← Anterior</button>
+          <button class="btn-sm btn-outline">Próximo →</button>
+        </div>
+      </div>
+      <div class="legend" style="padding: 10px 20px;">
+        <div class="legend-item"><div class="legend-dot gap"></div>Gap (descoberto)</div>
+        <div class="legend-item"><div class="legend-dot covered"></div>Coberto</div>
+        <div class="legend-item"><div class="legend-dot planned"></div>Planejado</div>
+        <div class="legend-item"><div class="legend-dot vacation"></div>Férias</div>
+      </div>
+      <div class="gantt-grid">
+        <div class="gh">Posto</div>
+        <div class="gh">01</div><div class="gh">02</div><div class="gh">03</div><div class="gh">04</div><div class="gh">05</div>
+        <div class="gh">06</div><div class="gh">07</div><div class="gh">08</div><div class="gh">09</div><div class="gh">10</div>
+        <div class="gh">11</div><div class="gh">12</div><div class="gh">13</div><div class="gh">14</div><div class="gh">15</div>
+
+        <div class="gl">INEP — Sede</div>
+        <div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div>
+        <div class="gc"><div class="bar vacation"></div></div><div class="gc"><div class="bar vacation"></div></div><div class="gc"><div class="bar vacation"></div></div>
+        <div class="gc"><div class="bar vacation"></div></div><div class="gc"><div class="bar gap"></div></div><div class="gc"><div class="bar gap"></div></div>
+        <div class="gc"><div class="bar gap"></div></div><div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div>
+        <div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div>
+
+        <div class="gl">TRF 1ª Região</div>
+        <div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div>
+        <div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar planned"></div></div>
+        <div class="gc"><div class="bar planned"></div></div><div class="gc"><div class="bar planned"></div></div><div class="gc"><div class="bar covered"></div></div>
+        <div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div>
+        <div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div>
+
+        <div class="gl">MJ — Esplanada</div>
+        <div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar vacation"></div></div>
+        <div class="gc"><div class="bar vacation"></div></div><div class="gc"><div class="bar vacation"></div></div><div class="gc"><div class="bar vacation"></div></div>
+        <div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div>
+        <div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar gap"></div></div><div class="gc"><div class="bar gap"></div></div>
+        <div class="gc"><div class="bar planned"></div></div><div class="gc"><div class="bar planned"></div></div><div class="gc"><div class="bar covered"></div></div>
+      </div>
+    </div>
+
+    <div class="table-section">
+      <div class="th">
+        <h2>Férias Pendentes de Aprovação</h2>
+        <button class="btn-sm btn-primary">+ Cadastro em Massa</button>
+      </div>
+      <table>
+        <thead><tr><th>Colaborador</th><th>CPF</th><th>Período</th><th>Dias</th><th>Posto</th><th>Status</th><th>Cobertura</th><th>Ação</th></tr></thead>
+        <tbody>
+          <tr><td>Carlos Silva</td><td>111.222.333-44</td><td>01/07 — 30/07</td><td>30</td><td>INEP — Sede</td><td><span class="badge-sm badge-pending">Pendente</span></td><td><span class="badge-sm badge-gap">Sem cobertura</span></td><td><button class="btn-sm btn-primary">Aprovar</button></td></tr>
+          <tr><td>Ana Santos</td><td>555.666.777-88</td><td>15/07 — 29/07</td><td>15</td><td>TRF 1ª Região</td><td><span class="badge-sm badge-pending">Pendente</span></td><td><span class="badge-sm badge-approved">Coberto</span></td><td><button class="btn-sm btn-primary">Aprovar</button></td></tr>
+          <tr><td>Maria Oliveira</td><td>222.333.444-55</td><td>01/08 — 15/08</td><td>15</td><td>MJ — Esplanada</td><td><span class="badge-sm badge-approved">Aprovado</span></td><td><span class="badge-sm badge-approved">Coberto</span></td><td><button class="btn-sm btn-outline">Detalhes</button></td></tr>
+          <tr><td>José Ferreira</td><td>333.444.555-66</td><td>10/08 — 24/08</td><td>15</td><td>INEP — Sede</td><td><span class="badge-sm badge-pending">Pendente</span></td><td><span class="badge-sm badge-gap">Sem cobertura</span></td><td><button class="btn-sm btn-primary">Aprovar</button></td></tr>
+          <tr><td>Roberto Dias</td><td>999.888.777-66</td><td>01/09 — 30/09</td><td>30</td><td>TRF 1ª Região</td><td><span class="badge-sm badge-pending">Pendente</span></td><td><span class="badge-sm badge-pending">Planejado</span></td><td><button class="btn-sm btn-primary">Aprovar</button></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="d2-label">Direction 2: Balanced — Sidebar 256px, rows 36px, espaçamento confortável</div>
+</div>
+
+<!-- ==================== DIRECTION 3: SPACIOUS ==================== -->
+<div id="d3" class="direction d3">
+  <div class="sidebar">
+    <div class="logo">Gestão<span>Férias</span></div>
+    <a href="#"><span>📊</span> Dashboard</a>
+    <a href="#"><span>👥</span> Colaboradores</a>
+    <a href="#"><span>🏖️</span> Férias</a>
+    <a href="#"><span>🏢</span> Postos</a>
+    <a class="active" href="#"><span>📋</span> Cobertura <span class="badge">3</span></a>
+    <a href="#"><span>✅</span> Aprovações <span class="badge">5</span></a>
+    <a href="#"><span>🤖</span> AI Oráculo</a>
+    <a href="#"><span>🔗</span> Webhooks</a>
+    <a href="#"><span>⚙️</span> Configurações</a>
+  </div>
+  <div class="main">
+    <div class="header">
+      <div class="breadcrumb">Dashboard / Cobertura</div>
+      <h1>Timeline de Cobertura</h1>
+      <p>Visualize e gerencie a cobertura de postos para o período selecionado.</p>
+    </div>
+
+    <div class="kpis">
+      <div class="kpi"><div class="label">Gaps Ativos</div><div class="value red">3</div><div class="sub">2 postos afetados</div></div>
+      <div class="kpi"><div class="label">Coberturas Ativas</div><div class="value green">12</div><div class="sub">8 feristas alocados</div></div>
+      <div class="kpi"><div class="label">Custo Mensal Est.</div><div class="value">R$ 14.800</div><div class="sub">4 intermitentes</div></div>
+      <div class="kpi"><div class="label">Risco de Dobra</div><div class="value orange">2</div><div class="sub">vencimento em 30 dias</div></div>
+    </div>
+
+    <div class="gantt">
+      <div class="gantt-header">
+        <h2>Timeline — Julho 2026</h2>
+        <div class="gantt-filters">
+          <select><option>Todos os postos</option></select>
+          <select><option>Julho 2026</option></select>
+          <button>← Mês anterior</button>
+          <button>Próximo mês →</button>
+        </div>
+      </div>
+      <div class="legend" style="padding: 12px 24px;">
+        <div class="legend-item"><div class="legend-dot gap"></div>Gap (descoberto)</div>
+        <div class="legend-item"><div class="legend-dot covered"></div>Coberto</div>
+        <div class="legend-item"><div class="legend-dot planned"></div>Cobertura planejada</div>
+        <div class="legend-item"><div class="legend-dot vacation"></div>Colaborador em férias</div>
+      </div>
+      <div class="gantt-grid">
+        <div class="gh">Posto</div>
+        <div class="gh">01</div><div class="gh">02</div><div class="gh">03</div><div class="gh">04</div><div class="gh">05</div>
+        <div class="gh">06</div><div class="gh">07</div><div class="gh">08</div><div class="gh">09</div><div class="gh">10</div>
+        <div class="gh">11</div><div class="gh">12</div><div class="gh">13</div><div class="gh">14</div><div class="gh">15</div>
+
+        <div class="gl">INEP — Sede</div>
+        <div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div>
+        <div class="gc"><div class="bar vacation"></div></div><div class="gc"><div class="bar vacation"></div></div><div class="gc"><div class="bar vacation"></div></div>
+        <div class="gc"><div class="bar vacation"></div></div><div class="gc"><div class="bar gap"></div></div><div class="gc"><div class="bar gap"></div></div>
+        <div class="gc"><div class="bar gap"></div></div><div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div>
+        <div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div>
+
+        <div class="gl">TRF 1ª Região</div>
+        <div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div>
+        <div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar planned"></div></div>
+        <div class="gc"><div class="bar planned"></div></div><div class="gc"><div class="bar planned"></div></div><div class="gc"><div class="bar covered"></div></div>
+        <div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div>
+        <div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div>
+
+        <div class="gl">MJ — Esplanada</div>
+        <div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar vacation"></div></div>
+        <div class="gc"><div class="bar vacation"></div></div><div class="gc"><div class="bar vacation"></div></div><div class="gc"><div class="bar vacation"></div></div>
+        <div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar covered"></div></div>
+        <div class="gc"><div class="bar covered"></div></div><div class="gc"><div class="bar gap"></div></div><div class="gc"><div class="bar gap"></div></div>
+        <div class="gc"><div class="bar planned"></div></div><div class="gc"><div class="bar planned"></div></div><div class="gc"><div class="bar covered"></div></div>
+      </div>
+    </div>
+
+    <div class="table-section">
+      <div class="th">
+        <h2>Férias Pendentes de Aprovação</h2>
+        <div style="display:flex;gap:10px;">
+          <button class="btn-sm btn-outline">Filtrar</button>
+          <button class="btn-sm btn-primary">+ Cadastro em Massa</button>
+        </div>
+      </div>
+      <table>
+        <thead><tr><th>Colaborador</th><th>CPF</th><th>Período</th><th>Dias</th><th>Posto</th><th>Status</th><th>Cobertura</th><th>Ação</th></tr></thead>
+        <tbody>
+          <tr><td>Carlos Silva</td><td>111.222.333-44</td><td>01/07 — 30/07</td><td>30</td><td>INEP — Sede</td><td><span class="badge-sm badge-pending">Pendente</span></td><td><span class="badge-sm badge-gap">Sem cobertura</span></td><td><button class="btn-sm btn-primary">Aprovar</button></td></tr>
+          <tr><td>Ana Santos</td><td>555.666.777-88</td><td>15/07 — 29/07</td><td>15</td><td>TRF 1ª Região</td><td><span class="badge-sm badge-pending">Pendente</span></td><td><span class="badge-sm badge-approved">Coberto</span></td><td><button class="btn-sm btn-primary">Aprovar</button></td></tr>
+          <tr><td>Maria Oliveira</td><td>222.333.444-55</td><td>01/08 — 15/08</td><td>15</td><td>MJ — Esplanada</td><td><span class="badge-sm badge-approved">Aprovado</span></td><td><span class="badge-sm badge-approved">Coberto</span></td><td><button class="btn-sm btn-outline">Detalhes</button></td></tr>
+          <tr><td>José Ferreira</td><td>333.444.555-66</td><td>10/08 — 24/08</td><td>15</td><td>INEP — Sede</td><td><span class="badge-sm badge-pending">Pendente</span></td><td><span class="badge-sm badge-gap">Sem cobertura</span></td><td><button class="btn-sm btn-primary">Aprovar</button></td></tr>
+          <tr><td>Roberto Dias</td><td>999.888.777-66</td><td>01/09 — 30/09</td><td>30</td><td>TRF 1ª Região</td><td><span class="badge-sm badge-pending">Pendente</span></td><td><span class="badge-sm badge-pending">Planejado</span></td><td><button class="btn-sm btn-primary">Aprovar</button></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="d3-label">Direction 3: Spacious — Sidebar 280px, rows 44px, amplo whitespace</div>
+</div>
+
+<script>
+function show(id) {
+  document.querySelectorAll('.direction').forEach(d => d.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
+</body>
+</html>
