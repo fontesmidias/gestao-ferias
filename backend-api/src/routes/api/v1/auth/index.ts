@@ -406,9 +406,26 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       }
     })
 
-    // Enviar email (nao bloquear se falhar)
-    if (user.tenantId) {
-      EmailService.sendPasswordReset(user.tenantId, email, code, fastify.prisma).catch(() => {})
+    // Enviar email — se SUPERADMIN sem tenant, usar SMTP do primeiro tenant disponivel
+    let smtpTenantId = user.tenantId
+    if (!smtpTenantId) {
+      const anyTenant = await fastify.prisma.tenant.findFirst({
+        where: { smtpHost: { not: null } },
+        select: { id: true }
+      })
+      smtpTenantId = anyTenant?.id || null
+    }
+
+    if (smtpTenantId) {
+      EmailService.sendPasswordReset(smtpTenantId, email, code, fastify.prisma)
+        .then(sent => {
+          if (!sent) fastify.log.warn(`[AUTH] Falha ao enviar email de reset para ${email}. Codigo: ${code}`)
+        })
+        .catch(err => {
+          fastify.log.warn(`[AUTH] Erro SMTP ao enviar reset para ${email}. Codigo: ${code}`)
+        })
+    } else {
+      fastify.log.warn(`[AUTH] Nenhum SMTP configurado. Codigo de reset para ${email}: ${code}`)
     }
 
     fastify.log.info(`[AUTH] Password reset requested for: ${email}`)

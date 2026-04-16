@@ -6,7 +6,7 @@ export class EmailService {
    * Envia email de reset de senha.
    */
   static async sendPasswordReset(
-    tenantId: string | null,
+    tenantId: string,
     to: string,
     code: string,
     prisma: PrismaClient
@@ -23,11 +23,6 @@ export class EmailService {
         <p style="color:#475569;font-size:11px">GestaoFerias - Sistema de Gestao de Ferias</p>
       </div>
     `
-
-    if (!tenantId) {
-      console.warn('[EMAIL] Sem tenant para enviar email de reset. SUPERADMIN deve usar script de reset.')
-      return false
-    }
 
     return await EmailService.sendMail(tenantId, to, 'Recuperacao de Senha - GestaoFerias', html, prisma)
   }
