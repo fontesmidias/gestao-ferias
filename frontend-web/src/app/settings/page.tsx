@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { HttpClient } from '@/lib/api-client'
-import { Settings, Save, Server, Building2, KeyRound, BrainCircuit, ExternalLink, MessageSquare, Wifi, WifiOff, FileSignature } from 'lucide-react'
+import { Settings, Save, Server, Building2, KeyRound, BrainCircuit, ExternalLink, MessageSquare, Wifi, WifiOff, FileSignature, UserCog, Users, UserPlus, X, Trash2 } from 'lucide-react'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { toast } from 'sonner'
@@ -20,6 +20,15 @@ export default function SettingsPage() {
   const [showEvoApiKey, setShowEvoApiKey] = useState(false)
   const [showZapSignToken, setShowZapSignToken] = useState(false)
   const [whatsappStatus, setWhatsappStatus] = useState<{ loading: boolean; connected?: boolean; state?: string; error?: string }>({ loading: false })
+
+  // Profile self-service
+  const [profileForm, setProfileForm] = useState({ name: '', email: '', currentPassword: '', newPassword: '' })
+  const [savingProfile, setSavingProfile] = useState(false)
+
+  // Team management (ADMIN)
+  const [teamMembers, setTeamMembers] = useState<any[]>([])
+  const [showAddUserModal, setShowAddUserModal] = useState(false)
+  const [newUserForm, setNewUserForm] = useState({ name: '', email: '', password: '', role: 'ADMIN' })
   const [formData, setFormData] = useState({
     openaiKey: '',
     anthropicKey: '',
@@ -80,8 +89,14 @@ export default function SettingsPage() {
   }
 
   useEffect(() => {
-    fetchSettings()
-  }, [])
+    if (user) {
+      setProfileForm({ name: user.name || '', email: user.email || '', currentPassword: '', newPassword: '' })
+      if (user.tenantId) {
+        fetchSettings()
+        if (user.role === 'ADMIN' || user.role === 'SUPERADMIN') fetchTeam()
+      }
+    }
+  }, [user])
 
   const fetchSettings = async () => {
     try {
@@ -134,6 +149,58 @@ export default function SettingsPage() {
     setFormData({ ...formData, [e.target.id]: e.target.value })
   }
 
+  const saveProfile = async () => {
+    try {
+      setSavingProfile(true)
+      const payload: any = {}
+      if (profileForm.name) payload.name = profileForm.name
+      if (profileForm.email) payload.email = profileForm.email
+      if (profileForm.newPassword) {
+        payload.currentPassword = profileForm.currentPassword
+        payload.newPassword = profileForm.newPassword
+      }
+      await HttpClient.patch('/auth/profile', payload)
+      toast.success('Perfil atualizado!')
+      setProfileForm(p => ({ ...p, currentPassword: '', newPassword: '' }))
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao atualizar perfil.')
+    } finally {
+      setSavingProfile(false)
+    }
+  }
+
+  const fetchTeam = async () => {
+    try {
+      const data = await HttpClient.get('/auth/team')
+      setTeamMembers(data)
+    } catch { /* silent */ }
+  }
+
+  const addTeamMember = async () => {
+    try {
+      await HttpClient.post('/auth/team', newUserForm)
+      toast.success('Usuario criado!')
+      setShowAddUserModal(false)
+      setNewUserForm({ name: '', email: '', password: '', role: 'ADMIN' })
+      fetchTeam()
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao criar usuario.')
+    }
+  }
+
+  const toggleTeamMember = async (userId: string, isActive: boolean) => {
+    try {
+      if (!isActive) {
+        if (!confirm('Desativar este usuario?')) return
+      }
+      await HttpClient.patch(`/auth/team/${userId}`, { isActive })
+      toast.success(isActive ? 'Usuario reativado.' : 'Usuario desativado.')
+      fetchTeam()
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao alterar usuario.')
+    }
+  }
+
   const testWhatsappConnection = async () => {
     setWhatsappStatus({ loading: true })
     try {
@@ -150,22 +217,16 @@ export default function SettingsPage() {
     }
   }
 
-  if (user?.role !== 'ADMIN' && user?.role !== 'SUPERADMIN') {
-    return (
-      <div className="flex items-center justify-center h-full text-slate-400">
-        Você não tem permissão para acessar esta página.
-      </div>
-    )
-  }
+  const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPERADMIN'
+  const hasTenant = !!user?.tenantId
 
-  // SuperAdmin sem impersonar não tem tenant para configurar
-  if (user?.role === 'SUPERADMIN' && !user?.tenantId) {
-    return (
-      <div className="flex items-center justify-center h-full text-slate-400 flex-col gap-2">
-        <p className="font-bold">Entre em uma empresa para configurar.</p>
-        <p className="text-sm">Use o painel SuperAdmin para selecionar uma empresa.</p>
-      </div>
-    )
+  const roleBadge = (role: string) => {
+    const colors: Record<string, string> = {
+      ADMIN: 'bg-amber-500/20 text-amber-400',
+      USER: 'bg-emerald-500/20 text-emerald-400',
+      AUDITOR: 'bg-sky-500/20 text-sky-400',
+    }
+    return colors[role] || 'bg-slate-500/20 text-slate-400'
   }
 
   return (
@@ -175,13 +236,127 @@ export default function SettingsPage() {
           <div>
             <h2 className="text-3xl font-bold text-white flex items-center gap-3">
               <Settings className="w-8 h-8 text-primary" />
-              Configurações do Tenant
+              Configuracoes
             </h2>
-            <p className="text-slate-400 mt-2">Gerencie as integrações da sua Empresa Mestre.</p>
+            <p className="text-slate-400 mt-2">Perfil, equipe e integracoes.</p>
           </div>
         </div>
 
         <ErrorBoundary>
+          <div className="space-y-8">
+
+          {/* ─── Meu Perfil (qualquer role) ─────────────────── */}
+          <div className="glass-card p-8 rounded-2xl border border-white/5">
+            <div className="flex items-center gap-3 mb-6 border-b border-white/5 pb-4">
+              <div className="p-2 bg-indigo-500/20 rounded-lg">
+                <UserCog className="w-5 h-5 text-indigo-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">Meu Perfil</h3>
+                <p className="text-sm text-slate-400">Altere seu nome, email e senha.</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Nome</label>
+                <input type="text" value={profileForm.name} onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
+                  className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:ring-1 focus:ring-primary/50 outline-none" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Email</label>
+                <input type="email" value={profileForm.email} onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
+                  className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:ring-1 focus:ring-primary/50 outline-none" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Senha Atual <InfoTooltip text="Necessaria apenas se quiser trocar a senha." />
+                </label>
+                <input type="password" value={profileForm.currentPassword} onChange={(e) => setProfileForm({ ...profileForm, currentPassword: e.target.value })}
+                  placeholder="Somente para trocar senha"
+                  className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:ring-1 focus:ring-primary/50 outline-none" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Nova Senha</label>
+                <input type="password" value={profileForm.newPassword} onChange={(e) => setProfileForm({ ...profileForm, newPassword: e.target.value })}
+                  placeholder="Minimo 6 caracteres"
+                  className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:ring-1 focus:ring-primary/50 outline-none" />
+              </div>
+            </div>
+            <div className="flex justify-end mt-6">
+              <button type="button" onClick={saveProfile} disabled={savingProfile}
+                className="bg-primary hover:bg-primary/90 text-white px-6 py-2.5 rounded-xl font-bold text-sm transition-all flex items-center gap-2 disabled:opacity-50">
+                <Save className="w-4 h-4" /> {savingProfile ? 'Salvando...' : 'Salvar Perfil'}
+              </button>
+            </div>
+          </div>
+
+          {/* ─── Equipe (ADMIN only) ───────────────────────── */}
+          {isAdmin && hasTenant && (
+            <div className="glass-card p-8 rounded-2xl border border-white/5">
+              <div className="flex items-center justify-between mb-6 border-b border-white/5 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-emerald-500/20 rounded-lg">
+                    <Users className="w-5 h-5 text-emerald-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-white">Equipe</h3>
+                    <p className="text-sm text-slate-400">Gerencie os usuarios com acesso ao sistema.</p>
+                  </div>
+                </div>
+                <button type="button" onClick={() => setShowAddUserModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl hover:bg-primary/80 font-bold text-xs transition-colors">
+                  <UserPlus className="w-4 h-4" /> Novo Usuario
+                </button>
+              </div>
+
+              {teamMembers.length === 0 ? (
+                <p className="text-slate-500 text-sm text-center py-6">Nenhum usuario encontrado.</p>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-white/10 text-left">
+                      <th className="pb-3 text-xs font-bold text-slate-500 uppercase">Nome</th>
+                      <th className="pb-3 text-xs font-bold text-slate-500 uppercase">Email</th>
+                      <th className="pb-3 text-xs font-bold text-slate-500 uppercase">Perfil</th>
+                      <th className="pb-3 text-xs font-bold text-slate-500 uppercase">Status</th>
+                      <th className="pb-3 text-xs font-bold text-slate-500 uppercase">Acoes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {teamMembers.map((m: any) => (
+                      <tr key={m.id} className="border-b border-white/5 hover:bg-white/5">
+                        <td className="py-3 text-white font-medium">{m.name}</td>
+                        <td className="py-3 text-slate-300">{m.email}</td>
+                        <td className="py-3">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${roleBadge(m.role)}`}>{m.role}</span>
+                        </td>
+                        <td className="py-3">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${m.isActive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>
+                            {m.isActive ? 'ATIVO' : 'INATIVO'}
+                          </span>
+                        </td>
+                        <td className="py-3">
+                          {m.id !== user?.id && (
+                            <button type="button" onClick={() => toggleTeamMember(m.id, !m.isActive)}
+                              className={`text-xs font-bold px-3 py-1 rounded-lg transition-colors ${
+                                m.isActive
+                                  ? 'text-rose-400 hover:bg-rose-500/10'
+                                  : 'text-emerald-400 hover:bg-emerald-500/10'
+                              }`}>
+                              {m.isActive ? 'Desativar' : 'Reativar'}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
+
+          {/* ─── Configuracoes do Tenant (ADMIN only) ──────── */}
+          {isAdmin && hasTenant && (
           <form onSubmit={handleSubmit} className="space-y-8">
             
             {/* Configuração Unificada do Oráculo AI */}
@@ -663,7 +838,68 @@ export default function SettingsPage() {
             </div>
             
           </form>
+          )}
+
+          {!isAdmin && hasTenant && (
+            <div className="text-center py-8 text-slate-500 text-sm">
+              As configuracoes de integracao sao gerenciadas pelo administrador da empresa.
+            </div>
+          )}
+
+          {!hasTenant && user?.role === 'SUPERADMIN' && (
+            <div className="text-center py-8 text-slate-500 text-sm">
+              Entre em uma empresa pelo painel admin para configurar integracoes.
+            </div>
+          )}
+
+          </div>
         </ErrorBoundary>
+
+        {/* Modal: Novo Usuario */}
+        {showAddUserModal && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+            <div className="bg-slate-800 border border-white/10 rounded-2xl p-6 w-full max-w-md">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-lg font-bold text-white">Novo Usuario</h2>
+                <button onClick={() => setShowAddUserModal(false)} className="text-slate-400 hover:text-white">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-bold text-slate-400 mb-1">Nome *</label>
+                  <input type="text" value={newUserForm.name} onChange={(e) => setNewUserForm({ ...newUserForm, name: e.target.value })}
+                    className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-400 mb-1">Email *</label>
+                  <input type="email" value={newUserForm.email} onChange={(e) => setNewUserForm({ ...newUserForm, email: e.target.value })}
+                    className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-400 mb-1">Senha *</label>
+                  <input type="password" value={newUserForm.password} onChange={(e) => setNewUserForm({ ...newUserForm, password: e.target.value })}
+                    className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-400 mb-1">Perfil *</label>
+                  <select value={newUserForm.role} onChange={(e) => setNewUserForm({ ...newUserForm, role: e.target.value })}
+                    className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none">
+                    <option value="ADMIN">Administrador (RH)</option>
+                    <option value="USER">Colaborador</option>
+                    <option value="AUDITOR">Auditor</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button onClick={() => setShowAddUserModal(false)}
+                  className="flex-1 py-2.5 border border-white/10 text-slate-400 rounded-xl hover:bg-white/5 font-bold text-sm">Cancelar</button>
+                <button onClick={addTeamMember} disabled={!newUserForm.name || !newUserForm.email || !newUserForm.password}
+                  className="flex-1 py-2.5 bg-primary text-white rounded-xl hover:bg-primary/80 font-bold text-sm disabled:opacity-50">Criar Usuario</button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   )

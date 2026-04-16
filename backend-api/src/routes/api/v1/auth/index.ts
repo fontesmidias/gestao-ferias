@@ -1,6 +1,6 @@
 import { FastifyPluginAsync } from 'fastify'
 import * as bcrypt from 'bcryptjs'
-import { randomUUID } from 'crypto'
+import { randomUUID } from 'node:crypto'
 import { addDays, isAfter } from 'date-fns'
 
 const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
@@ -193,6 +193,173 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       }
     }
     return user
+  })
+
+  // ─── Perfil do usuario (qualquer role autenticado) ─────
+  fastify.patch('/profile', {
+    onRequest: [fastify.requireAuth],
+    schema: {
+      body: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', minLength: 2 },
+          email: { type: 'string', format: 'email' },
+          currentPassword: { type: 'string' },
+          newPassword: { type: 'string', minLength: 6 }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const { userId } = request.user as any
+    const { name, email, currentPassword, newPassword } = request.body as {
+      name?: string; email?: string; currentPassword?: string; newPassword?: string
+    }
+
+    const user = await fastify.prisma.user.findUnique({ where: { id: userId } })
+    if (!user) return reply.code(404).send({ error: 'Usuario nao encontrado.' })
+
+    // Se quer trocar senha, precisa da senha atual
+    if (newPassword) {
+      if (!currentPassword) {
+        return reply.code(400).send({ error: 'Informe a senha atual para definir uma nova.' })
+      }
+      const isValid = await bcrypt.compare(currentPassword, (user as any).passwordHash || '')
+      if (!isValid) {
+        return reply.code(401).send({ error: 'Senha atual incorreta.' })
+      }
+    }
+
+    const data: any = {}
+    if (name !== undefined) data.name = name
+    if (email !== undefined) data.email = email
+    if (newPassword) data.passwordHash = await bcrypt.hash(newPassword, 10)
+
+    if (Object.keys(data).length === 0) {
+      return reply.code(400).send({ error: 'Nenhum campo para atualizar.' })
+    }
+
+    try {
+      const updated = await fastify.prisma.user.update({
+        where: { id: userId },
+        data,
+        select: { id: true, name: true, email: true, role: true }
+      })
+      return updated
+    } catch (err: any) {
+      if (err.code === 'P2002') {
+        return reply.code(409).send({ error: 'Este email ja esta em uso.' })
+      }
+      throw err
+    }
+  })
+
+  // ─── Gestao de equipe pelo ADMIN do tenant ─────────────
+
+  // Listar usuarios do meu tenant
+  fastify.get('/team', {
+    onRequest: [fastify.requireAuth, fastify.requireAdmin]
+  }, async (request) => {
+    const { tenantId } = request.user as any
+    if (!tenantId) return []
+
+    return await fastify.prisma.user.findMany({
+      where: { tenantId },
+      select: {
+        id: true, name: true, email: true, role: true, isActive: true, createdAt: true,
+        employee: { select: { id: true, name: true } }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+  })
+
+  // Criar usuario no meu tenant (ADMIN cria ADMIN, USER, AUDITOR)
+  fastify.post('/team', {
+    onRequest: [fastify.requireAuth, fastify.requireAdmin],
+    schema: {
+      body: {
+        type: 'object',
+        required: ['name', 'email', 'password', 'role'],
+        properties: {
+          name: { type: 'string', minLength: 2 },
+          email: { type: 'string', format: 'email' },
+          password: { type: 'string', minLength: 6 },
+          role: { type: 'string', enum: ['ADMIN', 'USER', 'AUDITOR'] }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const { tenantId } = request.user as any
+    if (!tenantId) return reply.code(403).send({ error: 'Forbidden' })
+
+    const { name, email, password, role } = request.body as any
+    const passwordHash = await bcrypt.hash(password, 10)
+
+    try {
+      const user = await fastify.prisma.user.create({
+        data: { name, email, passwordHash, role, tenantId }
+      })
+      return reply.code(201).send({
+        id: user.id, name: user.name, email: user.email, role: user.role
+      })
+    } catch (err: any) {
+      if (err.code === 'P2002') {
+        return reply.code(409).send({ error: 'Email ja existe nesta empresa.' })
+      }
+      throw err
+    }
+  })
+
+  // Editar usuario do meu tenant
+  fastify.patch('/team/:userId', {
+    onRequest: [fastify.requireAuth, fastify.requireAdmin],
+    schema: {
+      body: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          email: { type: 'string', format: 'email' },
+          role: { type: 'string', enum: ['ADMIN', 'USER', 'AUDITOR'] },
+          isActive: { type: 'boolean' }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const { tenantId } = request.user as any
+    const { userId } = request.params as { userId: string }
+
+    const existing = await fastify.prisma.user.findFirst({ where: { id: userId, tenantId } })
+    if (!existing) return reply.code(404).send({ error: 'Usuario nao encontrado.' })
+
+    const data = request.body as any
+    const updated = await fastify.prisma.user.update({
+      where: { id: userId },
+      data: {
+        name: data.name !== undefined ? data.name : undefined,
+        email: data.email !== undefined ? data.email : undefined,
+        role: data.role !== undefined ? data.role : undefined,
+        isActive: data.isActive !== undefined ? data.isActive : undefined,
+      },
+      select: { id: true, name: true, email: true, role: true, isActive: true }
+    })
+    return updated
+  })
+
+  // Desativar usuario do meu tenant
+  fastify.delete('/team/:userId', {
+    onRequest: [fastify.requireAuth, fastify.requireAdmin]
+  }, async (request, reply) => {
+    const { tenantId, userId: currentUserId } = request.user as any
+    const { userId } = request.params as { userId: string }
+
+    if (userId === currentUserId) {
+      return reply.code(400).send({ error: 'Voce nao pode desativar sua propria conta.' })
+    }
+
+    const existing = await fastify.prisma.user.findFirst({ where: { id: userId, tenantId } })
+    if (!existing) return reply.code(404).send({ error: 'Usuario nao encontrado.' })
+
+    await fastify.prisma.user.update({ where: { id: userId }, data: { isActive: false } })
+    return { message: 'Usuario desativado.' }
   })
 }
 
