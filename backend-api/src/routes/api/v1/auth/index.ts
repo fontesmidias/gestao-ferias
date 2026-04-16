@@ -1,7 +1,8 @@
 import { FastifyPluginAsync } from 'fastify'
 import * as bcrypt from 'bcryptjs'
-import { randomUUID } from 'node:crypto'
-import { addDays, isAfter } from 'date-fns'
+import { randomUUID, randomInt } from 'node:crypto'
+import { addDays, addMinutes, isAfter } from 'date-fns'
+import { EmailService } from '../../../../modules/notifications/email-service.js'
 
 const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   // Rota Clássica de Autenticação: E-mail + Senha (rate limited: 5/min por IP)
@@ -360,6 +361,164 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
 
     await fastify.prisma.user.update({ where: { id: userId }, data: { isActive: false } })
     return { message: 'Usuario desativado.' }
+  })
+
+  // ─── Esqueci minha senha ───────────────────────────────
+
+  fastify.post('/forgot-password', {
+    config: {
+      rateLimit: {
+        max: 3,
+        timeWindow: '1 hour'
+      }
+    },
+    schema: {
+      body: {
+        type: 'object',
+        required: ['email'],
+        properties: {
+          email: { type: 'string', format: 'email' }
+        }
+      }
+    }
+  }, async (request) => {
+    const { email } = request.body as { email: string }
+
+    // Sempre retornar sucesso (nao revelar se email existe)
+    const successMsg = { message: 'Se o email existir no sistema, enviaremos instrucoes de recuperacao.' }
+
+    const user = await fastify.prisma.user.findFirst({
+      where: { email },
+      include: { tenant: true }
+    })
+
+    if (!user) return successMsg
+
+    // Gerar codigo de 6 digitos
+    const code = String(randomInt(100000, 999999))
+    const expires = addMinutes(new Date(), 30)
+
+    await fastify.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordResetToken: code,
+        passwordResetExpires: expires
+      }
+    })
+
+    // Enviar email (nao bloquear se falhar)
+    if (user.tenantId) {
+      EmailService.sendPasswordReset(user.tenantId, email, code, fastify.prisma).catch(() => {})
+    }
+
+    fastify.log.info(`[AUTH] Password reset requested for: ${email}`)
+    return successMsg
+  })
+
+  fastify.post('/reset-password', {
+    config: {
+      rateLimit: {
+        max: 5,
+        timeWindow: '1 hour'
+      }
+    },
+    schema: {
+      body: {
+        type: 'object',
+        required: ['email', 'code', 'newPassword'],
+        properties: {
+          email: { type: 'string', format: 'email' },
+          code: { type: 'string', minLength: 6, maxLength: 6 },
+          newPassword: { type: 'string', minLength: 6 }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const { email, code, newPassword } = request.body as { email: string; code: string; newPassword: string }
+
+    const user = await fastify.prisma.user.findFirst({
+      where: { email, passwordResetToken: code }
+    })
+
+    if (!user || !user.passwordResetExpires || isAfter(new Date(), user.passwordResetExpires)) {
+      return reply.code(400).send({ error: 'Codigo invalido ou expirado.' })
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10)
+    await fastify.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash,
+        passwordResetToken: null,
+        passwordResetExpires: null
+      }
+    })
+
+    fastify.log.info(`[AUTH] Password reset completed for: ${email}`)
+    return { message: 'Senha alterada com sucesso. Faca login com a nova senha.' }
+  })
+
+  // ─── Verificacao de email ──────────────────────────────
+
+  fastify.post('/send-verification', {
+    onRequest: [fastify.requireAuth],
+    config: {
+      rateLimit: {
+        max: 3,
+        timeWindow: '1 hour'
+      }
+    }
+  }, async (request) => {
+    const { userId, tenantId, email } = request.user as any
+
+    const code = String(randomInt(100000, 999999))
+
+    await fastify.prisma.user.update({
+      where: { id: userId },
+      data: {
+        passwordResetToken: code,
+        passwordResetExpires: addMinutes(new Date(), 30)
+      }
+    })
+
+    if (tenantId) {
+      EmailService.sendEmailVerification(tenantId, email, code, fastify.prisma).catch(() => {})
+    }
+
+    return { message: 'Codigo de verificacao enviado para seu email.' }
+  })
+
+  fastify.post('/verify-email', {
+    onRequest: [fastify.requireAuth],
+    schema: {
+      body: {
+        type: 'object',
+        required: ['code'],
+        properties: {
+          code: { type: 'string', minLength: 6, maxLength: 6 }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const { userId } = request.user as any
+    const { code } = request.body as { code: string }
+
+    const user = await fastify.prisma.user.findUnique({ where: { id: userId } })
+
+    if (!user || user.passwordResetToken !== code || !user.passwordResetExpires || isAfter(new Date(), user.passwordResetExpires)) {
+      return reply.code(400).send({ error: 'Codigo invalido ou expirado.' })
+    }
+
+    await fastify.prisma.user.update({
+      where: { id: userId },
+      data: {
+        emailVerifiedAt: new Date(),
+        passwordResetToken: null,
+        passwordResetExpires: null
+      }
+    })
+
+    return { message: 'Email verificado com sucesso!' }
   })
 }
 

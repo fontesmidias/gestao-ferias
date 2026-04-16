@@ -12,33 +12,35 @@ export default fp(async (fastify) => {
       })
     }
 
-    // Erros do Prisma (Exemplo: Unique Constraint P2002)
+    // Erros do Prisma
     if (error.code && error.code.startsWith('P2')) {
-      fastify.log.warn(`Prisma Error: ${error.code} - ${error.message}`)
-      
-      // Alguns tratamos direto nas rotas, como Tenants.
-      // Se escapou para cá, é um genérico não tratado.
+      fastify.log.error({ prismaCode: error.code, message: error.message, url: request.url, method: request.method }, `Prisma Error: ${error.code}`)
+
       if (error.code === 'P2002') {
         return reply.status(409).send({ error: 'Conflict', message: 'Registro duplicado detectado no banco de dados.' })
       }
-      
-      if (error.code === 'P2025') {
-        return reply.status(404).send({ error: 'Not Found', message: 'Registro não encontrado.' })
+
+      if (error.code === 'P2003' || error.code === 'P2014') {
+        return reply.status(409).send({ error: 'Conflict', message: 'Nao foi possivel concluir a operacao pois existem dados vinculados.' })
       }
 
-      return reply.status(500).send({ error: 'Internal Server Error', message: 'Erro interno no banco de dados.' })
+      if (error.code === 'P2025') {
+        return reply.status(404).send({ error: 'Not Found', message: 'Registro nao encontrado.' })
+      }
+
+      return reply.status(500).send({ error: 'DatabaseError', message: 'Erro interno no banco de dados.' })
     }
 
-    // Rate Limit (se adicionado)
+    // Rate Limit
     if (error.statusCode === 429) {
-      return reply.status(429).send({ error: 'Too Many Requests', message: 'Limite de requisições excedido.' })
+      return reply.status(429).send({ error: 'Too Many Requests', message: 'Limite de requisicoes excedido. Tente novamente em alguns minutos.' })
     }
 
-    // Default Fallback 500
-    fastify.log.error(error)
+    // Default Fallback
+    fastify.log.error({ err: error, url: request.url, method: request.method, statusCode: error.statusCode }, 'Unhandled error')
     reply.status(error.statusCode || 500).send({
       error: error.name || 'Internal Server Error',
-      message: 'Ocorreu um erro interno e inesperado. Nossa equipe já foi notificada.'
+      message: error.message || 'Ocorreu um erro interno.'
     })
   })
 })

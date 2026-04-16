@@ -77,7 +77,8 @@ const admin: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
           address: { type: 'string' },
           city: { type: 'string' },
           state: { type: 'string' },
-          responsible: { type: 'string' }
+          responsible: { type: 'string' },
+          isActive: { type: 'boolean' }
         }
       }
     }
@@ -99,27 +100,67 @@ const admin: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         city: data.city !== undefined ? data.city : undefined,
         state: data.state !== undefined ? data.state : undefined,
         responsible: data.responsible !== undefined ? data.responsible : undefined,
+        isActive: data.isActive !== undefined ? data.isActive : undefined,
       }
     })
     return updated
   })
 
-  // Deletar tenant (apenas se vazio)
-  fastify.delete('/tenants/:id', {
+  // Resumo de dependencias do tenant (antes de excluir)
+  fastify.get('/tenants/:id/dependencies', {
     onRequest: [fastify.requireAuth, fastify.requireSuperAdmin]
   }, async (request, reply) => {
     const { id } = request.params as { id: string }
-    const tenant = await fastify.prisma.tenant.findUnique({
-      where: { id },
-      include: { _count: { select: { employees: true } } }
-    })
-    if (!tenant) return reply.code(404).send({ error: 'Not Found' })
-    if ((tenant as any)._count.employees > 0) {
-      return reply.code(409).send({ error: 'Conflict', message: 'Tenant possui colaboradores. Remova-os primeiro.' })
+    const [employees, users, vacations, workplaces, coverages, auditLogs, webhooks] = await Promise.all([
+      fastify.prisma.employee.count({ where: { tenantId: id } }),
+      fastify.prisma.user.count({ where: { tenantId: id } }),
+      fastify.prisma.vacationRequest.count({ where: { tenantId: id } }),
+      fastify.prisma.workplace.count({ where: { tenantId: id } }),
+      fastify.prisma.coverageAssignment.count({ where: { tenantId: id } }),
+      fastify.prisma.auditLog.count({ where: { tenantId: id } }),
+      fastify.prisma.webhook.count({ where: { tenantId: id } }),
+    ])
+    return { employees, users, vacations, workplaces, coverages, auditLogs, webhooks }
+  })
+
+  // Deletar tenant com cascade controlado (POST com confirmacao)
+  fastify.post('/tenants/:id/delete', {
+    onRequest: [fastify.requireAuth, fastify.requireSuperAdmin],
+    schema: {
+      body: {
+        type: 'object',
+        required: ['confirmName'],
+        properties: { confirmName: { type: 'string' } }
+      }
     }
+  }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const { confirmName } = request.body as { confirmName: string }
+
+    const tenant = await fastify.prisma.tenant.findUnique({ where: { id } })
+    if (!tenant) return reply.code(404).send({ error: 'Not Found' })
+
+    // Confirmacao: nome digitado deve bater
+    if (confirmName !== tenant.name) {
+      return reply.code(400).send({ error: 'Bad Request', message: 'Nome da empresa nao confere. Digite o nome exato para confirmar.' })
+    }
+
+    // Cascade delete na ordem correta (respeitar FKs)
+    await fastify.prisma.coverageAssignment.deleteMany({ where: { tenantId: id } })
+    await fastify.prisma.signature.deleteMany({ where: { tenantId: id } })
+    await fastify.prisma.vacationRequest.deleteMany({ where: { tenantId: id } })
+    await fastify.prisma.workplaceAllocation.deleteMany({ where: { tenantId: id } })
+    await fastify.prisma.workplacePosition.deleteMany({ where: { tenantId: id } })
+    await fastify.prisma.workplace.deleteMany({ where: { tenantId: id } })
+    await fastify.prisma.webhook.deleteMany({ where: { tenantId: id } })
+    await fastify.prisma.auditLog.deleteMany({ where: { tenantId: id } })
+    await fastify.prisma.refreshToken.deleteMany({ where: { tenantId: id } })
+    await fastify.prisma.employee.deleteMany({ where: { tenantId: id } })
     await fastify.prisma.user.deleteMany({ where: { tenantId: id } })
     await fastify.prisma.tenant.delete({ where: { id } })
-    return { message: 'Tenant removido.' }
+
+    fastify.log.warn(`[ADMIN] Tenant "${tenant.name}" (${id}) excluido permanentemente pelo SuperAdmin`)
+    return { message: `Empresa "${tenant.name}" e todos os seus dados foram removidos permanentemente.` }
   })
 
   // ─── User Management (SUPERADMIN only) ────────────────
