@@ -3,10 +3,9 @@ import { PrismaClient } from '@prisma/client'
 
 export class EmailService {
   /**
-   * Envia email de reset de senha.
+   * Envia email de reset de senha usando SMTP global.
    */
   static async sendPasswordReset(
-    tenantId: string,
     to: string,
     code: string,
     prisma: PrismaClient
@@ -23,15 +22,13 @@ export class EmailService {
         <p style="color:#475569;font-size:11px">GestaoFerias - Sistema de Gestao de Ferias</p>
       </div>
     `
-
-    return await EmailService.sendMail(tenantId, to, 'Recuperacao de Senha - GestaoFerias', html, prisma)
+    return await EmailService.sendGlobalMail(to, 'Recuperacao de Senha - GestaoFerias', html, prisma)
   }
 
   /**
-   * Envia email de verificacao de email.
+   * Envia email de verificacao de email usando SMTP global.
    */
   static async sendEmailVerification(
-    tenantId: string,
     to: string,
     code: string,
     prisma: PrismaClient
@@ -48,40 +45,39 @@ export class EmailService {
         <p style="color:#475569;font-size:11px">GestaoFerias - Sistema de Gestao de Ferias</p>
       </div>
     `
-
-    return await EmailService.sendMail(tenantId, to, 'Verifique seu Email - GestaoFerias', html, prisma)
+    return await EmailService.sendGlobalMail(to, 'Verifique seu Email - GestaoFerias', html, prisma)
   }
 
   /**
-   * Envia um e-mail usando a configuração SMTP do tenant.
+   * Envia email usando o SMTP global (SystemConfig).
+   * Usado para emails do sistema (reset, verificacao, etc.)
    */
-  static async sendMail(
-    tenantId: string,
+  static async sendGlobalMail(
     to: string,
     subject: string,
     html: string,
     prisma: PrismaClient
   ): Promise<boolean> {
-    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } })
+    const config = await prisma.systemConfig.findUnique({ where: { id: 'singleton' } })
 
-    if (!tenant?.smtpHost || !tenant?.smtpPort || !tenant?.smtpUser || !tenant?.smtpPass) {
-      console.warn(`[EMAIL] SMTP não configurado para tenant ${tenantId}. E-mail não enviado.`)
+    if (!config?.smtpHost || !config?.smtpPort || !config?.smtpUser || !config?.smtpPass) {
+      console.warn('[EMAIL] SMTP global nao configurado. Configure em Painel Admin > SMTP.')
       return false
     }
 
     const transporter = nodemailer.createTransport({
-      host: tenant.smtpHost,
-      port: tenant.smtpPort,
-      secure: tenant.smtpPort === 465,
+      host: config.smtpHost,
+      port: config.smtpPort,
+      secure: config.smtpPort === 465,
       auth: {
-        user: tenant.smtpUser,
-        pass: tenant.smtpPass,
+        user: config.smtpUser,
+        pass: config.smtpPass,
       },
     })
 
     try {
       await transporter.sendMail({
-        from: tenant.smtpFrom || tenant.smtpUser,
+        from: config.smtpFrom || config.smtpUser,
         to,
         subject,
         html,
@@ -92,5 +88,49 @@ export class EmailService {
       console.error(`[EMAIL] Falha ao enviar para ${to}:`, error)
       return false
     }
+  }
+
+  /**
+   * Envia email usando SMTP do tenant (para notificacoes especificas do tenant).
+   * Fallback: usa SMTP global se tenant nao tiver SMTP configurado.
+   */
+  static async sendMail(
+    tenantId: string,
+    to: string,
+    subject: string,
+    html: string,
+    prisma: PrismaClient
+  ): Promise<boolean> {
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } })
+
+    // Se tenant tem SMTP proprio, usar
+    if (tenant?.smtpHost && tenant?.smtpPort && tenant?.smtpUser && tenant?.smtpPass) {
+      const transporter = nodemailer.createTransport({
+        host: tenant.smtpHost,
+        port: tenant.smtpPort,
+        secure: tenant.smtpPort === 465,
+        auth: {
+          user: tenant.smtpUser,
+          pass: tenant.smtpPass,
+        },
+      })
+
+      try {
+        await transporter.sendMail({
+          from: tenant.smtpFrom || tenant.smtpUser,
+          to,
+          subject,
+          html,
+        })
+        console.log(`[EMAIL] Enviado para ${to}: ${subject}`)
+        return true
+      } catch (error) {
+        console.error(`[EMAIL] Falha SMTP do tenant. Tentando SMTP global...`)
+        // Fallback para SMTP global
+      }
+    }
+
+    // Fallback: usar SMTP global
+    return await EmailService.sendGlobalMail(to, subject, html, prisma)
   }
 }

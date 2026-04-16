@@ -5,7 +5,7 @@ import { HttpClient } from '@/lib/api-client'
 import Link from 'next/link'
 import {
   Shield, Building2, Users, UserPlus, X, Edit3, Plus,
-  Briefcase, CalendarDays, Eye, LogIn, Trash2, UserCog, KeyRound, AlertTriangle, Power
+  Briefcase, CalendarDays, Eye, LogIn, Trash2, UserCog, KeyRound, AlertTriangle, Power, Mail
 } from 'lucide-react'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { toast } from 'sonner'
@@ -68,6 +68,12 @@ export default function AdminPage() {
   }>({ enabled: false, hasKey: false, preview: null, updatedAt: null })
   const [generatedKey, setGeneratedKey] = useState<string | null>(null)
   const [masterKeyLoading, setMasterKeyLoading] = useState(false)
+
+  // SMTP global
+  const [showSmtpPanel, setShowSmtpPanel] = useState(false)
+  const [smtpForm, setSmtpForm] = useState({ smtpHost: '', smtpPort: '', smtpUser: '', smtpPass: '', smtpFrom: '' })
+  const [smtpConfigured, setSmtpConfigured] = useState(false)
+  const [savingSmtp, setSavingSmtp] = useState(false)
 
   useEffect(() => {
     if (user?.role === 'SUPERADMIN') {
@@ -146,6 +152,38 @@ export default function AdminPage() {
   const openMasterKeyPanel = async () => {
     setShowMasterKeyPanel(true)
     await fetchMasterKeyLogs()
+  }
+
+  const openSmtpPanel = async () => {
+    try {
+      const data = await HttpClient.get('/admin/smtp')
+      setSmtpForm({
+        smtpHost: data.smtpHost || '',
+        smtpPort: data.smtpPort || '',
+        smtpUser: data.smtpUser || '',
+        smtpPass: data.smtpPass || '',
+        smtpFrom: data.smtpFrom || ''
+      })
+      setSmtpConfigured(data.configured || false)
+    } catch { /* silent */ }
+    setShowSmtpPanel(true)
+  }
+
+  const saveSmtp = async () => {
+    try {
+      setSavingSmtp(true)
+      const payload = {
+        ...smtpForm,
+        smtpPort: smtpForm.smtpPort ? Number(smtpForm.smtpPort) : null
+      }
+      await HttpClient.patch('/admin/smtp', payload)
+      toast.success('SMTP global atualizado!')
+      setSmtpConfigured(true)
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao salvar SMTP.')
+    } finally {
+      setSavingSmtp(false)
+    }
   }
 
   const fetchData = async () => {
@@ -316,6 +354,16 @@ export default function AdminPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            onClick={openSmtpPanel}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm transition-colors border ${
+              smtpConfigured
+                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
+                : 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
+            }`}
+          >
+            <Mail className="w-4 h-4" /> SMTP
+          </button>
           <button
             onClick={openMasterKeyPanel}
             className="relative flex items-center gap-2 px-4 py-2 bg-rose-500/10 text-rose-400 rounded-xl hover:bg-rose-500/20 font-bold text-sm transition-colors border border-rose-500/20"
@@ -908,6 +956,67 @@ export default function AdminPage() {
                 className="flex-1 py-2.5 bg-primary text-white rounded-xl hover:bg-primary/80 font-bold text-sm disabled:opacity-50"
               >
                 Criar Usuário
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: SMTP Global */}
+      {showSmtpPanel && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-slate-800 border border-white/10 rounded-2xl p-6 w-full max-w-lg">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <Mail className="w-5 h-5 text-emerald-400" /> SMTP Global
+              </h2>
+              <button onClick={() => setShowSmtpPanel(false)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-sm text-slate-400 mb-6">
+              Configure o servidor de email usado para enviar notificacoes de toda a plataforma (reset de senha, verificacao, aprovacoes).
+            </p>
+            <div className="space-y-4">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="col-span-2">
+                  <label className="block text-sm font-bold text-slate-400 mb-1">Servidor SMTP</label>
+                  <input type="text" value={smtpForm.smtpHost} onChange={(e) => setSmtpForm({ ...smtpForm, smtpHost: e.target.value })}
+                    placeholder="smtp.gmail.com"
+                    className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-400 mb-1">Porta</label>
+                  <input type="number" value={smtpForm.smtpPort} onChange={(e) => setSmtpForm({ ...smtpForm, smtpPort: e.target.value })}
+                    placeholder="465"
+                    className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-slate-400 mb-1">Usuario</label>
+                <input type="text" value={smtpForm.smtpUser} onChange={(e) => setSmtpForm({ ...smtpForm, smtpUser: e.target.value })}
+                  placeholder="email@empresa.com"
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none" />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-slate-400 mb-1">Senha</label>
+                <input type="password" value={smtpForm.smtpPass} onChange={(e) => setSmtpForm({ ...smtpForm, smtpPass: e.target.value })}
+                  placeholder="App Password ou senha SMTP"
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none" />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-slate-400 mb-1">Email Remetente (From)</label>
+                <input type="email" value={smtpForm.smtpFrom} onChange={(e) => setSmtpForm({ ...smtpForm, smtpFrom: e.target.value })}
+                  placeholder="noreply@empresa.com"
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none" />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button onClick={() => setShowSmtpPanel(false)}
+                className="flex-1 py-2.5 border border-white/10 text-slate-400 rounded-xl hover:bg-white/5 font-bold text-sm">Cancelar</button>
+              <button onClick={saveSmtp} disabled={savingSmtp || !smtpForm.smtpHost || !smtpForm.smtpUser}
+                className="flex-1 py-2.5 bg-primary text-white rounded-xl hover:bg-primary/80 font-bold text-sm disabled:opacity-50">
+                {savingSmtp ? 'Salvando...' : 'Salvar SMTP'}
               </button>
             </div>
           </div>

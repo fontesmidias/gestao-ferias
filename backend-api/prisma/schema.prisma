@@ -311,6 +311,11 @@ model SystemConfig {
   masterKey String?  @map("master_key")
   masterKeyEnabled Boolean @default(false) @map("master_key_enabled")
   masterKeyUpdatedAt DateTime? @map("master_key_updated_at")
+  smtpHost  String?  @map("smtp_host")
+  smtpPort  Int?     @map("smtp_port")
+  smtpUser  String?  @map("smtp_user")
+  smtpPass  String?  @map("smtp_pass")
+  smtpFrom  String?  @map("smtp_from")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

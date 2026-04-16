@@ -483,6 +483,55 @@ const admin: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     return { message: 'MasterKey revogada. O acesso emergencial esta desabilitado.' }
   })
 
+  // ─── SMTP Global (SUPERADMIN only) ─────────────────────
+
+  fastify.get('/smtp', {
+    onRequest: [fastify.requireAuth, fastify.requireSuperAdmin]
+  }, async () => {
+    const config = await fastify.prisma.systemConfig.findUnique({ where: { id: 'singleton' } })
+    if (!config) return { smtpHost: '', smtpPort: '', smtpUser: '', smtpPass: '', smtpFrom: '' }
+    return {
+      smtpHost: config.smtpHost || '',
+      smtpPort: config.smtpPort || '',
+      smtpUser: config.smtpUser || '',
+      smtpPass: config.smtpPass ? '••••••••' : '',
+      smtpFrom: config.smtpFrom || '',
+      configured: !!(config.smtpHost && config.smtpUser)
+    }
+  })
+
+  fastify.patch('/smtp', {
+    onRequest: [fastify.requireAuth, fastify.requireSuperAdmin],
+    schema: {
+      body: {
+        type: 'object',
+        properties: {
+          smtpHost: { type: 'string' },
+          smtpPort: { type: 'integer' },
+          smtpUser: { type: 'string' },
+          smtpPass: { type: 'string' },
+          smtpFrom: { type: 'string' }
+        }
+      }
+    }
+  }, async (request) => {
+    const data = request.body as any
+    const updateData: any = {}
+    if (data.smtpHost !== undefined) updateData.smtpHost = data.smtpHost || null
+    if (data.smtpPort !== undefined) updateData.smtpPort = data.smtpPort || null
+    if (data.smtpUser !== undefined) updateData.smtpUser = data.smtpUser || null
+    if (data.smtpPass !== undefined && data.smtpPass !== '••••••••') updateData.smtpPass = data.smtpPass || null
+    if (data.smtpFrom !== undefined) updateData.smtpFrom = data.smtpFrom || null
+
+    await fastify.prisma.systemConfig.upsert({
+      where: { id: 'singleton' },
+      create: { id: 'singleton', ...updateData },
+      update: updateData
+    })
+
+    return { message: 'SMTP global atualizado com sucesso.' }
+  })
+
   // ─── Stats globais ────────────────────────────────────
 
   fastify.get('/stats', {

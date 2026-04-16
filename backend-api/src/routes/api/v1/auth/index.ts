@@ -406,27 +406,14 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       }
     })
 
-    // Enviar email — se SUPERADMIN sem tenant, usar SMTP do primeiro tenant disponivel
-    let smtpTenantId = user.tenantId
-    if (!smtpTenantId) {
-      const anyTenant = await fastify.prisma.tenant.findFirst({
-        where: { smtpHost: { not: null } },
-        select: { id: true }
+    // Enviar email via SMTP global
+    EmailService.sendPasswordReset(email, code, fastify.prisma)
+      .then(sent => {
+        if (!sent) fastify.log.warn(`[AUTH] Falha ao enviar email de reset para ${email}. Codigo: ${code}`)
       })
-      smtpTenantId = anyTenant?.id || null
-    }
-
-    if (smtpTenantId) {
-      EmailService.sendPasswordReset(smtpTenantId, email, code, fastify.prisma)
-        .then(sent => {
-          if (!sent) fastify.log.warn(`[AUTH] Falha ao enviar email de reset para ${email}. Codigo: ${code}`)
-        })
-        .catch(err => {
-          fastify.log.warn(`[AUTH] Erro SMTP ao enviar reset para ${email}. Codigo: ${code}`)
-        })
-    } else {
-      fastify.log.warn(`[AUTH] Nenhum SMTP configurado. Codigo de reset para ${email}: ${code}`)
-    }
+      .catch(() => {
+        fastify.log.warn(`[AUTH] Erro SMTP ao enviar reset para ${email}. Codigo: ${code}`)
+      })
 
     fastify.log.info(`[AUTH] Password reset requested for: ${email}`)
     return successMsg
@@ -486,7 +473,7 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       }
     }
   }, async (request) => {
-    const { userId, tenantId, email } = request.user as any
+    const { userId, email } = request.user as any
 
     const code = String(randomInt(100000, 999999))
 
@@ -498,9 +485,7 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       }
     })
 
-    if (tenantId) {
-      EmailService.sendEmailVerification(tenantId, email, code, fastify.prisma).catch(() => {})
-    }
+    EmailService.sendEmailVerification(email, code, fastify.prisma).catch(() => {})
 
     return { message: 'Codigo de verificacao enviado para seu email.' }
   })
