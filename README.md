@@ -87,6 +87,57 @@ Variaveis obrigatorias em producao:
 
 ---
 
+## MasterKey (Acesso Emergencial)
+
+A MasterKey permite acessar qualquer conta do sistema sem a senha original. Util quando o administrador perde o acesso.
+
+### Configurar via Painel Admin
+
+1. Faca login como SUPERADMIN
+2. Clique em **MasterKey** no header da Sala de Controle
+3. Clique em **Gerar MasterKey**
+4. **Copie e guarde a chave** em local seguro (ela nao sera exibida novamente)
+
+### Usar a MasterKey
+
+```bash
+curl -X POST https://sua-api.com/api/v1/masterkey \
+  -H "Content-Type: application/json" \
+  -d '{"email":"usuario@empresa.com","masterKey":"sua_chave_aqui"}'
+```
+
+O token JWT retornado pode ser usado para autenticar qualquer requisicao.
+
+### Reset de Emergencia do SuperAdmin
+
+Se perdeu totalmente o acesso, use o script via terminal no servidor:
+
+```bash
+# Via Docker
+docker exec -it <container_backend> npx tsx scripts/reset-superadmin.ts --password NovaSenha123!
+
+# Localmente
+cd backend-api && npx tsx scripts/reset-superadmin.ts --password NovaSenha123!
+```
+
+---
+
+## Deploy e Migrations
+
+Sempre que fizer deploy de uma nova versao, rode as migrations **antes** de reiniciar os servicos:
+
+```bash
+cd backend-api && npx prisma migrate deploy
+```
+
+Para ambientes Docker, inclua no entrypoint do container ou rode manualmente:
+
+```bash
+docker exec -it <container_backend> npx prisma migrate deploy
+```
+
+---
+
 ## Endpoints Principais
 
 | Endpoint | Descricao |
@@ -107,6 +158,12 @@ Variaveis obrigatorias em producao:
 | POST /vacations/bulk-create | Cadastro em massa (max 50, CLT) |
 | GET /webhooks | Listar webhooks configurados |
 | POST /webhooks/:id/test | Testar webhook |
+| POST /masterkey | Login emergencial via MasterKey |
+| GET /admin/master-key | Status da MasterKey |
+| POST /admin/master-key/generate | Gerar nova MasterKey |
+| PATCH /admin/master-key | Ativar/desativar MasterKey |
+| DELETE /admin/master-key | Revogar MasterKey |
+| GET /admin/master-key-logs | Logs de acesso emergencial |
 
 ---
 

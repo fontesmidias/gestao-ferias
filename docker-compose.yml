@@ -48,6 +48,7 @@ services:
       REDIS_HOST: "redis"
       REDIS_PORT: "6379"
       JWT_SECRET: "${JWT_SECRET:-dev_secret_key_123}"
+      MASTER_KEY: "${MASTER_KEY:-}"
     depends_on:
       - postgres
       - redis

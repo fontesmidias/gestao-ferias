@@ -288,3 +288,27 @@ model Webhook {
 
   @@map("webhooks")
 }
+
+model MasterKeyLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String?  @map("user_id") @db.Uuid
+  email      String
+  targetRole String?  @map("target_role")
+  ip         String?
+  userAgent  String?  @map("user_agent")
+  success    Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  @@map("master_key_logs")
+}
+
+model SystemConfig {
+  id        String   @id @default("singleton")
+  masterKey String?  @map("master_key")
+  masterKeyEnabled Boolean @default(false) @map("master_key_enabled")
+  masterKeyUpdatedAt DateTime? @map("master_key_updated_at")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("system_config")
+}

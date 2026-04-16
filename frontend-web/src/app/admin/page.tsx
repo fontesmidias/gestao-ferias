@@ -5,7 +5,7 @@ import { HttpClient } from '@/lib/api-client'
 import Link from 'next/link'
 import {
   Shield, Building2, Users, UserPlus, X, Edit3, Plus,
-  Briefcase, CalendarDays, Eye, LogIn, Trash2, UserCog
+  Briefcase, CalendarDays, Eye, LogIn, Trash2, UserCog, KeyRound, AlertTriangle
 } from 'lucide-react'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { toast } from 'sonner'
@@ -58,9 +58,95 @@ export default function AdminPage() {
   const [profileForm, setProfileForm] = useState({ name: '', email: '', password: '' })
   const [savingProfile, setSavingProfile] = useState(false)
 
+  // MasterKey management
+  const [masterKeyLogs, setMasterKeyLogs] = useState<any[]>([])
+  const [masterKeyTotal, setMasterKeyTotal] = useState(0)
+  const [showMasterKeyPanel, setShowMasterKeyPanel] = useState(false)
+  const [hasRecentMasterKey, setHasRecentMasterKey] = useState(false)
+  const [masterKeyStatus, setMasterKeyStatus] = useState<{
+    enabled: boolean; hasKey: boolean; preview: string | null; updatedAt: string | null
+  }>({ enabled: false, hasKey: false, preview: null, updatedAt: null })
+  const [generatedKey, setGeneratedKey] = useState<string | null>(null)
+  const [masterKeyLoading, setMasterKeyLoading] = useState(false)
+
   useEffect(() => {
-    if (user?.role === 'SUPERADMIN') fetchData()
+    if (user?.role === 'SUPERADMIN') {
+      fetchData()
+      fetchMasterKeyStatus()
+    }
   }, [user])
+
+  const fetchMasterKeyStatus = async () => {
+    try {
+      const [status, logsData] = await Promise.all([
+        HttpClient.get('/admin/master-key').catch(() => ({ enabled: false, hasKey: false, preview: null, updatedAt: null })),
+        HttpClient.get('/admin/master-key-logs?limit=1').catch(() => ({ logs: [], total: 0 }))
+      ])
+      setMasterKeyStatus(status)
+      if (logsData.logs?.length > 0) {
+        const hoursAgo = (Date.now() - new Date(logsData.logs[0].createdAt).getTime()) / (1000 * 60 * 60)
+        setHasRecentMasterKey(hoursAgo < 24)
+      }
+    } catch { /* silent */ }
+  }
+
+  const fetchMasterKeyLogs = async () => {
+    try {
+      const data = await HttpClient.get('/admin/master-key-logs?limit=50')
+      setMasterKeyLogs(data.logs || [])
+      setMasterKeyTotal(data.total || 0)
+    } catch {
+      toast.error('Erro ao carregar logs.')
+    }
+  }
+
+  const generateMasterKey = async () => {
+    if (!confirm('Gerar nova MasterKey? A anterior sera substituida.')) return
+    try {
+      setMasterKeyLoading(true)
+      const result = await HttpClient.post('/admin/master-key/generate', {})
+      setGeneratedKey(result.key)
+      toast.success('MasterKey gerada! Copie e guarde em local seguro.')
+      await fetchMasterKeyStatus()
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao gerar MasterKey.')
+    } finally {
+      setMasterKeyLoading(false)
+    }
+  }
+
+  const toggleMasterKey = async (enabled: boolean) => {
+    try {
+      setMasterKeyLoading(true)
+      await HttpClient.patch('/admin/master-key', { enabled })
+      toast.success(`MasterKey ${enabled ? 'ativada' : 'desativada'}.`)
+      await fetchMasterKeyStatus()
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao alterar status.')
+    } finally {
+      setMasterKeyLoading(false)
+    }
+  }
+
+  const revokeMasterKey = async () => {
+    if (!confirm('Revogar MasterKey? O acesso emergencial sera desabilitado completamente.')) return
+    try {
+      setMasterKeyLoading(true)
+      await HttpClient.delete('/admin/master-key')
+      setGeneratedKey(null)
+      toast.success('MasterKey revogada.')
+      await fetchMasterKeyStatus()
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao revogar.')
+    } finally {
+      setMasterKeyLoading(false)
+    }
+  }
+
+  const openMasterKeyPanel = async () => {
+    setShowMasterKeyPanel(true)
+    await fetchMasterKeyLogs()
+  }
 
   const fetchData = async () => {
     try {
@@ -204,12 +290,23 @@ export default function AdminPage() {
             Visão geral de todas as empresas, usuários e métricas da plataforma.
           </p>
         </div>
-        <button
-          onClick={openProfileModal}
-          className="flex items-center gap-2 px-4 py-2 bg-slate-700/50 text-slate-300 rounded-xl hover:bg-slate-700 font-bold text-sm transition-colors border border-white/10"
-        >
-          <UserCog className="w-4 h-4" /> Meu Perfil
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={openMasterKeyPanel}
+            className="relative flex items-center gap-2 px-4 py-2 bg-rose-500/10 text-rose-400 rounded-xl hover:bg-rose-500/20 font-bold text-sm transition-colors border border-rose-500/20"
+          >
+            <KeyRound className="w-4 h-4" /> MasterKey
+            {hasRecentMasterKey && (
+              <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-rose-500 animate-pulse" />
+            )}
+          </button>
+          <button
+            onClick={openProfileModal}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-700/50 text-slate-300 rounded-xl hover:bg-slate-700 font-bold text-sm transition-colors border border-white/10"
+          >
+            <UserCog className="w-4 h-4" /> Meu Perfil
+          </button>
+        </div>
         </div>
 
         {/* KPI Cards */}
@@ -533,6 +630,160 @@ export default function AdminPage() {
               >
                 {savingProfile ? 'Salvando...' : 'Salvar Perfil'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: MasterKey — Gerenciamento + Logs */}
+      {showMasterKeyPanel && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-slate-800 border border-white/10 rounded-2xl p-6 w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <KeyRound className="w-5 h-5 text-rose-400" /> Acesso Emergencial (MasterKey)
+              </h2>
+              <button onClick={() => { setShowMasterKeyPanel(false); setGeneratedKey(null) }} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 space-y-6">
+              {/* Status Card */}
+              <div className="glass-card p-5 rounded-xl border border-white/5">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                      Status da MasterKey
+                      <InfoTooltip text="A MasterKey permite acessar qualquer conta do sistema via API, sem precisar da senha. Use para emergencias de acesso." />
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {masterKeyStatus.hasKey
+                        ? `Chave: ${masterKeyStatus.preview}`
+                        : 'Nenhuma chave configurada'}
+                      {masterKeyStatus.updatedAt && ` | Atualizada: ${new Date(masterKeyStatus.updatedAt).toLocaleString('pt-BR')}`}
+                    </p>
+                  </div>
+                  <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                    masterKeyStatus.enabled
+                      ? 'bg-emerald-500/20 text-emerald-400'
+                      : 'bg-slate-500/20 text-slate-400'
+                  }`}>
+                    {masterKeyStatus.enabled ? 'ATIVA' : 'INATIVA'}
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={generateMasterKey}
+                    disabled={masterKeyLoading}
+                    className="px-4 py-2 bg-primary text-white rounded-xl hover:bg-primary/80 font-bold text-xs transition-colors disabled:opacity-50"
+                  >
+                    {masterKeyStatus.hasKey ? 'Rotacionar Chave' : 'Gerar MasterKey'}
+                  </button>
+
+                  {masterKeyStatus.hasKey && (
+                    <>
+                      <button
+                        onClick={() => toggleMasterKey(!masterKeyStatus.enabled)}
+                        disabled={masterKeyLoading}
+                        className={`px-4 py-2 rounded-xl font-bold text-xs transition-colors disabled:opacity-50 border ${
+                          masterKeyStatus.enabled
+                            ? 'border-amber-500/20 text-amber-400 hover:bg-amber-500/10'
+                            : 'border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/10'
+                        }`}
+                      >
+                        {masterKeyStatus.enabled ? 'Desativar' : 'Ativar'}
+                      </button>
+                      <button
+                        onClick={revokeMasterKey}
+                        disabled={masterKeyLoading}
+                        className="px-4 py-2 border border-rose-500/20 text-rose-400 rounded-xl hover:bg-rose-500/10 font-bold text-xs transition-colors disabled:opacity-50"
+                      >
+                        Revogar
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                {/* Chave gerada (exibida apenas uma vez) */}
+                {generatedKey && (
+                  <div className="mt-4 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+                    <p className="text-xs font-bold text-emerald-400 mb-2 flex items-center gap-1.5">
+                      <KeyRound className="w-3.5 h-3.5" /> Sua nova MasterKey (copie agora, ela nao sera exibida novamente):
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 bg-slate-900 text-emerald-300 px-3 py-2 rounded-lg text-xs font-mono break-all select-all">
+                        {generatedKey}
+                      </code>
+                      <button
+                        onClick={() => { navigator.clipboard.writeText(generatedKey); toast.success('Copiado!') }}
+                        className="px-3 py-2 bg-emerald-500/20 text-emerald-400 rounded-lg hover:bg-emerald-500/30 text-xs font-bold shrink-0"
+                      >
+                        Copiar
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-2">
+                      Uso: POST /api/v1/masterkey com {`{"email":"usuario@empresa.com","masterKey":"<sua_chave>"}`}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Logs */}
+              <div>
+                <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
+                  Historico de Acessos
+                  <span className="text-xs font-normal text-slate-500">({masterKeyTotal} registros)</span>
+                </h3>
+                {masterKeyLogs.length === 0 ? (
+                  <div className="text-center py-8">
+                    <KeyRound className="w-8 h-8 text-slate-700 mx-auto mb-2" />
+                    <p className="text-slate-500 text-sm">Nenhum acesso registrado.</p>
+                  </div>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-white/10 text-left">
+                        <th className="pb-3 text-xs font-bold text-slate-500 uppercase">Data/Hora</th>
+                        <th className="pb-3 text-xs font-bold text-slate-500 uppercase">Email</th>
+                        <th className="pb-3 text-xs font-bold text-slate-500 uppercase">Role</th>
+                        <th className="pb-3 text-xs font-bold text-slate-500 uppercase">IP</th>
+                        <th className="pb-3 text-xs font-bold text-slate-500 uppercase">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {masterKeyLogs.map((log: any) => (
+                        <tr key={log.id} className="border-b border-white/5 hover:bg-white/5">
+                          <td className="py-3 text-slate-300 text-xs whitespace-nowrap">
+                            {new Date(log.createdAt).toLocaleString('pt-BR')}
+                          </td>
+                          <td className="py-3 text-white font-medium">{log.email}</td>
+                          <td className="py-3">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              log.targetRole === 'SUPERADMIN' ? 'bg-rose-500/20 text-rose-400' :
+                              log.targetRole === 'ADMIN' ? 'bg-amber-500/20 text-amber-400' :
+                              'bg-slate-500/20 text-slate-400'
+                            }`}>
+                              {log.targetRole || 'N/A'}
+                            </span>
+                          </td>
+                          <td className="py-3 text-slate-400 font-mono text-xs">{log.ip || '-'}</td>
+                          <td className="py-3">
+                            {log.success ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400">SUCESSO</span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-400 flex items-center gap-1 w-fit">
+                                <AlertTriangle className="w-3 h-3" /> FALHA
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
             </div>
           </div>
         </div>

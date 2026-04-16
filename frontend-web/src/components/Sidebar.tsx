@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, CheckSquare, Users, Settings, BrainCircuit, LogOut, PanelLeftOpen, PanelLeftClose, Building2, Shield, Crown, Calendar, Link2 } from 'lucide-react'
+import { LayoutDashboard, CheckSquare, Users, Settings, BrainCircuit, LogOut, PanelLeftOpen, PanelLeftClose, Building2, Shield, Crown } from 'lucide-react'
 import { useAuth } from '@/components/AuthContext'
 import { HttpClient } from '@/lib/api-client'
 
@@ -37,8 +37,8 @@ export function Sidebar() {
     return () => clearInterval(interval)
   }, [fetchBadges])
 
-  // Se estiver na PWA ou não estiver logado (e já carregou), não mostra sidebar
-  if (pathname.startsWith('/employee') || pathname.startsWith('/auth')) {
+  // Se estiver na PWA (/employee — singular, não /employees) ou não estiver logado, não mostra sidebar
+  if (pathname === '/employee' || pathname.startsWith('/employee/') || pathname.startsWith('/auth')) {
     return null
   }
   if (!loading && !user) {
@@ -55,10 +55,9 @@ export function Sidebar() {
       items: [
         { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
         { href: '/employees', label: 'Colaboradores', icon: Users },
-        { href: '/approvals', label: 'Férias', icon: Calendar },
+        { href: '/approvals', label: 'Aprovações', icon: CheckSquare, matchPath: '/approvals' },
         { href: '/workplaces', label: 'Postos', icon: Building2 },
         { href: '/coverage', label: 'Cobertura', icon: Shield },
-        { href: '/approvals', label: 'Aprovações', icon: CheckSquare, matchPath: '/approvals' },
       ],
     },
     {
@@ -68,9 +67,8 @@ export function Sidebar() {
       ],
     },
     {
-      label: 'Configurações',
+      label: 'Sistema',
       items: [
-        { href: '/settings', label: 'Webhooks', icon: Link2, matchPath: '/settings' },
         { href: '/settings', label: 'Configurações', icon: Settings, matchPath: '/settings' },
       ],
     },
@@ -208,15 +206,6 @@ export function Sidebar() {
         {/* User Popover Menu */}
         {expanded && isUserMenuOpen && (
           <div className="absolute bottom-full left-2 right-2 mb-2 bg-slate-800 border border-slate-700 rounded-xl shadow-xl overflow-hidden z-50">
-            <Link
-              href="/settings"
-              onClick={() => setIsUserMenuOpen(false)}
-              className="flex items-center gap-3 px-4 py-3 text-slate-300 hover:text-white hover:bg-white/5 transition-colors"
-            >
-              <Settings className="w-4 h-4" />
-              <span className="text-sm font-bold">Configurações</span>
-            </Link>
-            <div className="h-px bg-slate-700/50 w-full" />
             <button
               onClick={() => { setIsUserMenuOpen(false); logout(); }}
               className="w-full flex items-center gap-3 px-4 py-3 text-rose-400 hover:bg-rose-400/10 transition-colors"

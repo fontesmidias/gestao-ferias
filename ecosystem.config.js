@@ -13,6 +13,7 @@ module.exports = {
       env: {
         NODE_ENV: 'development',
         PORT: 3000,
+        MASTER_KEY: 'dev_masterkey_local_teste_32chars!',
       },
     },
     {
