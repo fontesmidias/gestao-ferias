@@ -50,7 +50,7 @@ export default function DashboardPage() {
           <div>
             <h2 className="text-3xl font-bold text-white flex items-center gap-3">
               <LayoutDashboard className="w-8 h-8 text-primary" />
-              Intelligence Dashboard
+              Dashboard Preditivo
             </h2>
             <p className="text-slate-400 mt-2">Cockpit preditivo e monitoramento global de férias.</p>
           </div>

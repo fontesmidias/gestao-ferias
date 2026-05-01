@@ -8,6 +8,9 @@ import { TourProvider } from '@/components/TourProvider'
 import { ImpersonationBanner } from '@/components/ImpersonationBanner'
 import { ServiceWorkerRegistration } from '@/components/ServiceWorkerRegistration'
 import { TenantBrandWrapper } from '@/components/TenantBrandWrapper'
+import { SessionTopbar } from '@/components/SessionTopbar'
+import { themeInitScript } from '@/components/DarkModeToggle'
+import { I18nProvider } from '@/lib/i18n'
 
 const inter = Inter({
   variable: "--font-inter",
@@ -30,18 +33,25 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="pt-BR">
+    <html lang="pt-BR" suppressHydrationWarning>
+      <head>
+        {/* Aplica tema antes do React montar — evita flash (FR-V31-BRAND-004) */}
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body className={`${inter.variable} antialiased h-screen flex bg-slate-950 text-slate-200 overflow-hidden`}>
         <AuthProvider>
-          <Toaster richColors theme="dark" position="top-right" />
-          <TourProvider />
-          <ImpersonationBanner />
-          <ServiceWorkerRegistration />
-          <TenantBrandWrapper />
-          <Sidebar />
-          <div className="flex-1 h-full overflow-y-auto">
-            {children}
-          </div>
+          <I18nProvider>
+            <Toaster richColors theme="dark" position="top-right" />
+            <SessionTopbar />
+            <TourProvider />
+            <ImpersonationBanner />
+            <ServiceWorkerRegistration />
+            <TenantBrandWrapper />
+            <Sidebar />
+            <div className="flex-1 h-full overflow-y-auto">
+              {children}
+            </div>
+          </I18nProvider>
         </AuthProvider>
       </body>
     </html>

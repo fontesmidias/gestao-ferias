@@ -7,6 +7,30 @@ import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { toast } from 'sonner'
 import { useAuth } from '@/components/AuthContext'
+import { PasswordInput } from '@/components/PasswordInput'
+import { ImageUpload } from '@/components/ImageUpload'
+
+// WCAG contrast ratio helper (FR-V31-BRAND-003)
+function hexToRgb(hex: string): [number, number, number] {
+  const clean = hex.replace('#', '')
+  const full = clean.length === 3 ? clean.split('').map(c => c + c).join('') : clean
+  const num = parseInt(full, 16)
+  return [(num >> 16) & 255, (num >> 8) & 255, num & 255]
+}
+function luminance(hex: string): number {
+  const [r, g, b] = hexToRgb(hex).map(v => {
+    const s = v / 255
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4)
+  })
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b
+}
+function contrastRatio(hex1: string, hex2: string): number {
+  try {
+    const l1 = luminance(hex1), l2 = luminance(hex2)
+    const [a, b] = l1 > l2 ? [l1, l2] : [l2, l1]
+    return (a + 0.05) / (b + 0.05)
+  } catch { return 1 }
+}
 
 export default function SettingsPage() {
   const { user } = useAuth()
@@ -156,7 +180,11 @@ export default function SettingsPage() {
       if (profileForm.name) payload.name = profileForm.name
       if (profileForm.email) payload.email = profileForm.email
       if (profileForm.newPassword) {
-        payload.currentPassword = profileForm.currentPassword
+        // V3.1 FR-V31-PWD-001: campo "currentPassword" é reaproveitado como "Repetir Nova Senha"
+        if (profileForm.newPassword !== profileForm.currentPassword) {
+          toast.error('A nova senha e a confirmação não conferem.')
+          return
+        }
         payload.newPassword = profileForm.newPassword
       }
       await HttpClient.patch('/auth/profile', payload)
@@ -268,17 +296,15 @@ export default function SettingsPage() {
                   className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:ring-1 focus:ring-primary/50 outline-none" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Senha Atual <InfoTooltip text="Necessaria apenas se quiser trocar a senha." />
-                </label>
-                <input type="password" value={profileForm.currentPassword} onChange={(e) => setProfileForm({ ...profileForm, currentPassword: e.target.value })}
-                  placeholder="Somente para trocar senha"
+                <label className="block text-sm font-medium text-slate-300 mb-2">Nova Senha <InfoTooltip text="Deixe em branco para não alterar." /></label>
+                <PasswordInput value={profileForm.newPassword} onChange={(e) => setProfileForm({ ...profileForm, newPassword: e.target.value })}
+                  placeholder="Mínimo 6 caracteres"
                   className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:ring-1 focus:ring-primary/50 outline-none" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Nova Senha</label>
-                <input type="password" value={profileForm.newPassword} onChange={(e) => setProfileForm({ ...profileForm, newPassword: e.target.value })}
-                  placeholder="Minimo 6 caracteres"
+                <label className="block text-sm font-medium text-slate-300 mb-2">Repetir Nova Senha</label>
+                <PasswordInput value={profileForm.currentPassword} onChange={(e) => setProfileForm({ ...profileForm, currentPassword: e.target.value })}
+                  placeholder="Repita a nova senha"
                   className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:ring-1 focus:ring-primary/50 outline-none" />
               </div>
             </div>
@@ -506,198 +532,18 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* SMTP Settings */}
-            <div className="glass-card p-8 rounded-2xl border border-white/5 relative overflow-hidden">
-              <div className="flex items-center gap-3 mb-6 border-b border-white/5 pb-4">
-                <div className="p-2 bg-rose-500/20 rounded-lg">
-                  <Server className="w-5 h-5 text-rose-400" />
+            {/* V3.1: SMTP e WhatsApp agora são gerenciados globalmente pelo Super Admin */}
+            <div className="glass-card p-6 rounded-2xl border border-amber-500/20 bg-amber-500/5">
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-amber-500/20 rounded-lg shrink-0">
+                  <Server className="w-5 h-5 text-amber-400" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white">Servidor de E-mail (SMTP)</h3>
-                  <p className="text-sm text-slate-400">Configure o disparador automático de aprovações e assinaturas.</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label htmlFor="smtpHost" className="block text-sm font-medium text-slate-300 mb-2">Servidor SMTP <InfoTooltip text="Endereço do servidor de e-mail da sua empresa (ex: smtp.zoho.com, smtp.gmail.com). Usado para enviar notificações automáticas de férias." /></label>
-                  <input
-                    id="smtpHost"
-                    type="text"
-                    value={formData.smtpHost}
-                    onChange={handleChange}
-                    placeholder="smtp.empresa.com"
-                    className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:ring-1 focus:ring-primary/50 outline-none"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="smtpPort" className="block text-sm font-medium text-slate-300 mb-2">Porta <InfoTooltip text="Porta de conexão do servidor de e-mail. Use 465 para SSL ou 587 para TLS. Consulte seu provedor de e-mail." /></label>
-                  <input
-                    id="smtpPort"
-                    type="number"
-                    value={formData.smtpPort}
-                    onChange={handleChange}
-                    placeholder="465"
-                    className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:ring-1 focus:ring-primary/50 outline-none"
-                  />
-                </div>
-                <div className="col-span-full">
-                  <label htmlFor="smtpFrom" className="block text-sm font-medium text-slate-300 mb-2">E-mail Remetente (From) <InfoTooltip text="Endereço que aparecerá como remetente em todas as notificações automáticas enviadas pelo sistema." /></label>
-                  <input
-                    id="smtpFrom"
-                    type="email"
-                    value={formData.smtpFrom}
-                    onChange={handleChange}
-                    placeholder="no-reply@suaempresa.com"
-                    className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:ring-1 focus:ring-primary/50 outline-none"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="smtpUser" className="block text-sm font-medium text-slate-300 mb-2">Usuário SMTP <InfoTooltip text="Login de autenticação no servidor de e-mail. Geralmente é o próprio endereço de e-mail." /></label>
-                  <input
-                    id="smtpUser"
-                    type="text"
-                    value={formData.smtpUser}
-                    onChange={handleChange}
-                    placeholder="usuario@dominio.com"
-                    className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:ring-1 focus:ring-primary/50 outline-none"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="smtpPass" className="block text-sm font-medium text-slate-300 mb-2">Senha SMTP <InfoTooltip text="Senha de acesso ao servidor de e-mail. Em provedores como Gmail, use uma 'Senha de App' ao invés da senha normal." /></label>
-                  <div className="relative">
-                    <input
-                      id="smtpPass"
-                      type={showSmtpPass ? "text" : "password"}
-                      value={formData.smtpPass}
-                      onChange={handleChange}
-                      placeholder="••••••••"
-                      className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 pr-12 text-white focus:ring-1 focus:ring-primary/50 outline-none"
-                    />
-                    <button 
-                      type="button" 
-                      onClick={() => setShowSmtpPass(!showSmtpPass)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-xl hover:scale-110 transition-transform focus:outline-none"
-                      title={showSmtpPass ? "Ocultar senha" : "Ver senha"}
-                    >
-                      {showSmtpPass ? "🐵" : "🙈"}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* WhatsApp (Evolution API) */}
-            <div className="glass-card p-8 rounded-2xl border border-white/5 relative overflow-hidden">
-              <div className="flex items-center gap-3 mb-6 border-b border-white/5 pb-4">
-                <div className="p-2 bg-emerald-500/20 rounded-lg">
-                  <MessageSquare className="w-5 h-5 text-emerald-400" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-white">WhatsApp (Evolution API)</h3>
-                  <p className="text-sm text-slate-400">Configure a integração com WhatsApp para envio automático de notificações de férias.</p>
-                </div>
-              </div>
-
-              <div className="space-y-6">
-                {/* Toggle WhatsApp habilitado */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <label className="text-sm font-medium text-slate-300">WhatsApp habilitado</label>
-                    <InfoTooltip text="Ativa ou desativa o envio de notificações automáticas via WhatsApp. Quando habilitado, aprovações e reprovações de férias serão notificadas ao colaborador." />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, whatsappEnabled: !formData.whatsappEnabled })}
-                    className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
-                      formData.whatsappEnabled ? 'bg-emerald-500' : 'bg-slate-600'
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
-                        formData.whatsappEnabled ? 'translate-x-6' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="col-span-full">
-                    <label htmlFor="evoApiUrl" className="block text-sm font-medium text-slate-300 mb-2">
-                      URL da Evolution API <InfoTooltip text="URL do servidor da Evolution API. Ex: https://evo.suaempresa.com" />
-                    </label>
-                    <input
-                      id="evoApiUrl"
-                      type="text"
-                      value={formData.evoApiUrl}
-                      onChange={handleChange}
-                      placeholder="https://evo.suaempresa.com"
-                      className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:ring-1 focus:ring-primary/50 outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label htmlFor="evoApiKey" className="block text-sm font-medium text-slate-300 mb-2">
-                      API Key <InfoTooltip text="Chave de autenticação da Evolution API. Gerada durante a configuração da sua instância." />
-                    </label>
-                    <div className="relative">
-                      <input
-                        id="evoApiKey"
-                        type={showEvoApiKey ? "text" : "password"}
-                        value={formData.evoApiKey}
-                        onChange={handleChange}
-                        placeholder="sua-api-key-aqui"
-                        className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 pr-12 text-white focus:ring-1 focus:ring-primary/50 outline-none"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowEvoApiKey(!showEvoApiKey)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-xl hover:scale-110 transition-transform focus:outline-none"
-                        title={showEvoApiKey ? "Ocultar chave" : "Ver chave"}
-                      >
-                        {showEvoApiKey ? "🐵" : "🙈"}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label htmlFor="evoInstanceName" className="block text-sm font-medium text-slate-300 mb-2">
-                      Nome da Instância <InfoTooltip text="Nome da instância configurada na Evolution API. Ex: gestaoferias" />
-                    </label>
-                    <input
-                      id="evoInstanceName"
-                      type="text"
-                      value={formData.evoInstanceName}
-                      onChange={handleChange}
-                      placeholder="gestaoferias"
-                      className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:ring-1 focus:ring-primary/50 outline-none"
-                    />
-                  </div>
-                </div>
-
-                {/* Testar Conexão */}
-                <div className="flex items-center gap-4">
-                  <button
-                    type="button"
-                    onClick={testWhatsappConnection}
-                    disabled={whatsappStatus.loading || !formData.evoApiUrl || !formData.evoApiKey || !formData.evoInstanceName}
-                    className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl font-medium transition-all active:scale-95 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {whatsappStatus.loading ? (
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    ) : whatsappStatus.connected ? (
-                      <Wifi className="w-4 h-4" />
-                    ) : (
-                      <WifiOff className="w-4 h-4" />
-                    )}
-                    Testar Conexão
-                  </button>
-                  {whatsappStatus.state && !whatsappStatus.loading && (
-                    <span className={`text-sm ${whatsappStatus.connected ? 'text-emerald-400' : 'text-red-400'}`}>
-                      Estado: {whatsappStatus.state}
-                      {whatsappStatus.error && ` — ${whatsappStatus.error}`}
-                    </span>
-                  )}
+                  <h3 className="text-base font-bold text-white mb-1">Credenciais Globais movidas</h3>
+                  <p className="text-sm text-slate-400">
+                    A partir do V3.1, as configurações de <strong>SMTP (e-mail)</strong> e <strong>Evolution (WhatsApp)</strong> são gerenciadas centralmente pelo Super Admin.
+                    Se precisar alterar essas credenciais, fale com o administrador do sistema.
+                  </p>
                 </div>
               </div>
             </div>
@@ -771,13 +617,19 @@ export default function SettingsPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">URL do Logo</label>
-                    <input
-                      type="url"
+                    <ImageUpload
                       value={formData.brandLogoUrl}
-                      onChange={(e) => setFormData({ ...formData, brandLogoUrl: e.target.value })}
-                      placeholder="https://exemplo.com/logo.png"
-                      className="w-full bg-slate-900/50 border border-slate-800 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/50"
+                      maxSizeKB={10240}
+                      accept="image/*"
+                      recommendedSize="PNG/JPG/SVG/WEBP/GIF — qualquer imagem, recomendado ~300×100px"
+                      onUpload={async (file) => {
+                        const result = await HttpClient.upload('/tenants/logo', 'file', file)
+                        setFormData({ ...formData, brandLogoUrl: result.brandLogoUrl })
+                      }}
+                      onRemove={async () => {
+                        await HttpClient.delete('/tenants/logo')
+                        setFormData({ ...formData, brandLogoUrl: '' })
+                      }}
                     />
                   </div>
                 </div>
@@ -819,6 +671,35 @@ export default function SettingsPage() {
                     </div>
                   </div>
                 </div>
+
+                {/* Preview + aviso de contraste (FR-V31-BRAND-003) */}
+                {(formData.brandPrimaryColor || formData.brandSecondaryColor) && (() => {
+                  const primary = formData.brandPrimaryColor || '#2563EB'
+                  const secondary = formData.brandSecondaryColor || '#7C3AED'
+                  const ratio = contrastRatio(primary, '#FFFFFF')
+                  const lowContrast = ratio < 4.5
+                  return (
+                    <div className="mt-3 p-3 bg-slate-900/40 border border-white/5 rounded-lg">
+                      <p className="text-xs font-bold text-slate-400 mb-2">Preview</p>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <button type="button" style={{ background: primary }}
+                          className="px-4 py-1.5 rounded-lg text-sm font-bold text-white pointer-events-none">
+                          Botão primário
+                        </button>
+                        <button type="button" style={{ background: secondary }}
+                          className="px-4 py-1.5 rounded-lg text-sm font-bold text-white pointer-events-none">
+                          Botão secundário
+                        </button>
+                        <span className="text-xs text-slate-500">Contraste primário × branco: <strong className="text-slate-300">{ratio.toFixed(2)}:1</strong></span>
+                      </div>
+                      {lowContrast && (
+                        <p className="mt-2 text-xs text-amber-400 flex items-center gap-1.5">
+                          ⚠️ Contraste abaixo de WCAG AA (4.5:1). Texto branco nesta cor pode ficar difícil de ler.
+                        </p>
+                      )}
+                    </div>
+                  )
+                })()}
               </div>
             </div>
 
@@ -878,7 +759,7 @@ export default function SettingsPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-bold text-slate-400 mb-1">Senha *</label>
-                  <input type="password" value={newUserForm.password} onChange={(e) => setNewUserForm({ ...newUserForm, password: e.target.value })}
+                  <PasswordInput value={newUserForm.password} onChange={(e) => setNewUserForm({ ...newUserForm, password: e.target.value })}
                     className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none" />
                 </div>
                 <div>

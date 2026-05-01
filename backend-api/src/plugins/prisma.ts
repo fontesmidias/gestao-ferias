@@ -19,7 +19,7 @@ export default fp(async (fastify) => {
   fastify.addHook('onClose', async (server) => {
     await server.prisma.$disconnect()
   })
-})
+}, { name: 'prisma' })
 
 // When using .decorate you have to specify added properties for Typescript
 declare module 'fastify' {

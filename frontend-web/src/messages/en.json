@@ -1,0 +1,72 @@
+{
+  "locale": {
+    "ptBR": "Português (Brasil)",
+    "en": "English",
+    "es": "Español"
+  },
+  "sidebar": {
+    "section": {
+      "operational": "Operational",
+      "intelligence": "Intelligence",
+      "system": "System"
+    },
+    "dashboard": "Dashboard",
+    "employees": "Employees",
+    "approvals": "Approvals",
+    "workplaces": "Workplaces",
+    "coverage": "Coverage",
+    "predict": "Predictive Dashboard",
+    "holidays": "Holidays",
+    "settings": "Settings",
+    "adminPanel": "Admin Panel",
+    "credentials": "Credentials",
+    "globalDashboard": "Global Dashboard",
+    "editProfile": "Edit profile",
+    "logout": "Sign Out",
+    "logoutConfirm": "Are you sure you want to sign out?"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "add": "Add",
+    "remove": "Remove",
+    "edit": "Edit",
+    "delete": "Delete",
+    "close": "Close",
+    "confirm": "Confirm",
+    "loading": "Loading…",
+    "saving": "Saving…",
+    "search": "Search",
+    "yes": "Yes",
+    "no": "No",
+    "back": "Back",
+    "next": "Next",
+    "test": "Test"
+  },
+  "session": {
+    "expiresIn": "This session expires in",
+    "expired": "Session expired",
+    "warning": "Your session expires in {seconds} seconds due to inactivity. Keep browsing to keep it active.",
+    "expiredLogout": "Session expired due to inactivity. You will be signed out."
+  },
+  "theme": {
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System",
+    "beta": "(beta — some components still being refined)"
+  },
+  "profile": {
+    "title": "Edit Profile",
+    "name": "Name",
+    "email": "E-mail",
+    "newPassword": "New Password",
+    "repeatPassword": "Repeat New Password",
+    "passwordOptional": "(optional)",
+    "passwordMin": "Minimum 6 characters",
+    "passwordMismatch": "New password and confirmation do not match.",
+    "updated": "Profile updated!"
+  },
+  "predict": {
+    "title": "Predictive Dashboard"
+  }
+}

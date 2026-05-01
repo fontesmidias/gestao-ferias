@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { Calendar, AlertCircle, Plane, CheckCircle2, Navigation, LogOut, Clock, Building2, Loader2 } from 'lucide-react'
+import { Calendar, AlertCircle, Plane, CheckCircle2, Navigation, LogOut, Clock, Building2, Loader2, CalendarDays, Info } from 'lucide-react'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { useAuth } from '@/components/AuthContext'
@@ -52,6 +52,20 @@ const STATUS_MAP: Record<string, { label: string; color: string }> = {
   COMPLETED: { label: 'Concluído', color: 'bg-slate-500/20 text-slate-400 border-slate-500/30' },
 }
 
+interface FractioningInfo {
+  period: { startDate: string; endDate: string; concessiveEndDate: string; daysOfRight: number; status: string } | null
+  analysis: {
+    fractionsUsed: number
+    daysUsed: number
+    daysRemaining: number
+    hasFractionWith14Plus: boolean
+    maxFractionsAllowed: number
+    nextRequestMinDays: number
+  } | null
+  existingFractions: { startDate: string; endDate: string; days: number; status: string }[]
+  holidaysAhead: { date: string; name: string; source: string }[]
+}
+
 export default function EmployeeDashboard() {
   const [requestMode, setRequestMode] = useState(false)
   const [selectedDays, setSelectedDays] = useState(15)
@@ -62,6 +76,7 @@ export default function EmployeeDashboard() {
   const [employee, setEmployee] = useState<Employee | null>(null)
   const [balance, setBalance] = useState<BalanceData | null>(null)
   const [vacations, setVacations] = useState<VacationRequest[]>([])
+  const [fractioning, setFractioning] = useState<FractioningInfo | null>(null)
   const [loadingData, setLoadingData] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -79,17 +94,19 @@ export default function EmployeeDashboard() {
         return
       }
 
-      // Fetch employee, balance and vacations in parallel
-      const [employees, balanceData, vacationsData] = await Promise.all([
+      // Fetch tudo em paralelo (incluindo análise de fracionamento + feriados)
+      const [employees, balanceData, vacationsData, fractioningData] = await Promise.all([
         HttpClient.get('/employees'),
         HttpClient.get(`/employees/${employeeId}/balance`),
         HttpClient.get('/vacations'),
+        HttpClient.get(`/vacations/fractioning/${employeeId}`).catch(() => null),
       ])
 
       const matched = (employees as Employee[]).find(e => e.id === employeeId)
       if (matched) setEmployee(matched)
 
       setBalance(balanceData)
+      setFractioning(fractioningData as FractioningInfo)
 
       const myVacations = (vacationsData as VacationRequest[]).filter(
         (v) => v.employeeId === employeeId
@@ -107,6 +124,25 @@ export default function EmployeeDashboard() {
     fetchData()
   }, [fetchData])
 
+  // Validação client-side: domingo + feriado + véspera (espelha o backend)
+  const validateStartDateClient = (dateStr: string): { ok: boolean; reason?: string } => {
+    if (!dateStr) return { ok: false }
+    const d = new Date(dateStr + 'T00:00:00')
+    if (d.getDay() === 0) return { ok: false, reason: 'Início em domingo não é permitido (CLT Art. 134 §3º).' }
+    if (fractioning?.holidaysAhead) {
+      const todayIso = dateStr
+      const eveDate = new Date(d); eveDate.setDate(eveDate.getDate() + 1)
+      const eveIso = eveDate.toISOString().slice(0, 10)
+      const hit = fractioning.holidaysAhead.find(h => h.date === todayIso)
+      if (hit) return { ok: false, reason: `Início em feriado "${hit.name}" não é permitido (CLT Art. 134 §3º).` }
+      const eveHit = fractioning.holidaysAhead.find(h => h.date === eveIso)
+      if (eveHit) return { ok: false, reason: `Início em véspera de feriado "${eveHit.name}" não é permitido (CLT Art. 134 §3º).` }
+    }
+    return { ok: true }
+  }
+
+  const minDaysForThisFraction = fractioning?.analysis?.nextRequestMinDays ?? 14
+
   const handleSubmit = async () => {
     if (!employee || !startDate || !balance) return
 
@@ -115,16 +151,19 @@ export default function EmployeeDashboard() {
       return
     }
 
-    // Validação CLT Art. 134 — não iniciar em quinta ou sexta (Story 5.2)
-    const startDay = new Date(startDate + 'T00:00:00').getDay()
-    if (startDay === 4 || startDay === 5) {
-      toast.error('Início em quinta ou sexta-feira não é permitido (CLT Art. 134 §3).')
+    // Validação CLT — fracionamento: 1ª fração ≥14, demais ≥5 (Lei 13.467/2017)
+    if (fractioning?.analysis && selectedDays < minDaysForThisFraction) {
+      const reason = fractioning.analysis.hasFractionWith14Plus
+        ? `Demais frações têm mínimo de 5 dias corridos (você selecionou ${selectedDays}).`
+        : `Sua primeira fração de férias deve ter no mínimo 14 dias corridos (você selecionou ${selectedDays}).`
+      toast.error(reason)
       return
     }
 
-    // Validação CLT — período mínimo de 14 dias
-    if (selectedDays < 14) {
-      toast.error('Período mínimo de um trecho é 14 dias corridos (CLT Art. 134 §1).')
+    // Validação CLT Art. 134 §3º — domingo, feriado, véspera
+    const startCheck = validateStartDateClient(startDate)
+    if (!startCheck.ok) {
+      toast.error(startCheck.reason || 'Data de início inválida.')
       return
     }
 
@@ -284,31 +323,68 @@ export default function EmployeeDashboard() {
                 </div>
               ) : (
                 <div className="bg-slate-900 rounded-[2rem] p-6 border border-white/5 shadow-2xl animate-in slide-in-from-bottom-8 fade-in duration-300">
-                  <h3 className="font-bold text-lg mb-4 text-white">Quantos dias deseja tirar? <InfoTooltip text="Escolha a duração das férias. Pela CLT, o mínimo é 10 dias corridos. Pode dividir em até 3 períodos." /></h3>
+                  {/* Card de fracionamento (CLT Art. 134 §1º — Lei 13.467/2017) */}
+                  {fractioning?.analysis && (
+                    <div className="mb-5 bg-slate-950/60 border border-indigo-500/20 rounded-xl p-4 text-left">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Info className="w-4 h-4 text-indigo-400" />
+                        <span className="text-xs font-bold uppercase tracking-wider text-indigo-300">Fracionamento (CLT)</span>
+                      </div>
+                      <p className="text-sm text-slate-300">
+                        Você já fez <strong className="text-white">{fractioning.analysis.fractionsUsed}</strong> de até <strong className="text-white">{fractioning.analysis.maxFractionsAllowed}</strong> frações
+                        {' '}usando <strong className="text-white">{fractioning.analysis.daysUsed}</strong> dias.
+                        {' '}Restam <strong className="text-emerald-400">{fractioning.analysis.daysRemaining}</strong> dias neste aquisitivo.
+                      </p>
+                      <p className="text-xs text-amber-300 mt-2">
+                        {fractioning.analysis.hasFractionWith14Plus
+                          ? 'Próxima fração: mínimo 5 dias.'
+                          : 'Próxima fração: mínimo 14 dias (regra da 1ª fração).'}
+                      </p>
+                    </div>
+                  )}
 
-                  <div className="flex bg-slate-950 p-2 rounded-xl mb-6">
-                     {[10, 15, 20, 30].map(d => (
-                       <button
-                        key={d}
-                        onClick={() => setSelectedDays(d)}
-                        className={`flex-1 py-3 text-sm font-bold rounded-lg transition-all ${selectedDays === d ? 'bg-indigo-500 text-white shadow-lg' : 'text-slate-400'}`}
-                       >
-                         {d}
-                       </button>
-                     ))}
+                  <h3 className="font-bold text-lg mb-4 text-white">Quantos dias deseja tirar? <InfoTooltip text={`Lei 13.467/2017: pode dividir em até 3 frações. A primeira deve ter ≥14 dias; as demais ≥5 dias. Mínimo agora: ${minDaysForThisFraction} dias.`} /></h3>
+
+                  <div className="flex bg-slate-950 p-2 rounded-xl mb-6 gap-1">
+                     {(() => {
+                       const remaining = fractioning?.analysis?.daysRemaining ?? balance.availableBalance
+                       const min = minDaysForThisFraction
+                       const options = Array.from(new Set([min, 14, 20, remaining]))
+                         .filter(d => d >= min && d <= remaining)
+                         .sort((a, b) => a - b)
+                       return options.map(d => (
+                         <button
+                          key={d}
+                          onClick={() => setSelectedDays(d)}
+                          className={`flex-1 py-3 text-sm font-bold rounded-lg transition-all ${selectedDays === d ? 'bg-indigo-500 text-white shadow-lg' : 'text-slate-400'}`}
+                         >
+                           {d}
+                         </button>
+                       ))
+                     })()}
                   </div>
 
-                  <div className="space-y-4 mb-8 text-left">
+                  <div className="space-y-4 mb-6 text-left">
                     <div>
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider pl-4 mb-2 block">Data de Início (A partir de) <InfoTooltip text="Primeiro dia das suas férias. Não pode iniciar em sexta-feira, sábado, domingo ou véspera de feriado (CLT Art. 134 §3)." /></label>
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider pl-4 mb-2 block">Data de Início <InfoTooltip text="Primeiro dia das suas férias. Não pode iniciar em domingo, feriado nacional/estadual ou véspera de feriado (CLT Art. 134 §3º)." /></label>
                       <input
                         type="date"
                         value={startDate}
                         onChange={(e) => setStartDate(e.target.value)}
                         className="w-full bg-slate-950 border border-white/5 rounded-xl px-4 py-4 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-mono"
                       />
+                      {startDate && (() => {
+                        const check = validateStartDateClient(startDate)
+                        if (check.ok) return null
+                        return (
+                          <div className="mt-2 flex items-start gap-2 bg-rose-500/10 border border-rose-500/30 rounded-lg p-2 text-xs text-rose-300">
+                            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                            <span>{check.reason}</span>
+                          </div>
+                        )
+                      })()}
                     </div>
-                    {startDate && (
+                    {startDate && validateStartDateClient(startDate).ok && (
                       <div className="bg-slate-950/50 rounded-xl p-3 border border-white/5">
                         <p className="text-xs text-slate-500">Período calculado:</p>
                         <p className="text-sm font-bold text-white">
@@ -323,6 +399,27 @@ export default function EmployeeDashboard() {
                       </div>
                     )}
                   </div>
+
+                  {/* Próximos feriados (referência) */}
+                  {fractioning?.holidaysAhead && fractioning.holidaysAhead.length > 0 && (
+                    <details className="mb-6 text-left">
+                      <summary className="text-xs font-bold text-slate-500 uppercase tracking-wider cursor-pointer hover:text-slate-300 flex items-center gap-2">
+                        <CalendarDays className="w-3.5 h-3.5" />
+                        Próximos feriados ({fractioning.holidaysAhead.slice(0, 8).length})
+                      </summary>
+                      <ul className="mt-2 space-y-1 text-xs text-slate-400">
+                        {fractioning.holidaysAhead.slice(0, 8).map(h => (
+                          <li key={h.date} className="flex justify-between bg-slate-950/40 rounded px-2 py-1">
+                            <span className="font-mono">{new Date(h.date + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
+                            <span>{h.name}</span>
+                            <span className={`text-[10px] px-1.5 rounded ${h.source === 'NATIONAL' ? 'bg-blue-500/20 text-blue-300' : h.source === 'STATE' ? 'bg-purple-500/20 text-purple-300' : 'bg-amber-500/20 text-amber-300'}`}>
+                              {h.source === 'NATIONAL' ? 'NAC' : h.source === 'STATE' ? 'EST' : 'MAN'}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
 
                   <div className="flex gap-3">
                     <button

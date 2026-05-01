@@ -19,6 +19,7 @@ model Tenant {
   city      String?
   state     String?
   responsible String?
+  uf        String?  @db.Char(2)
   smtpHost  String?  @map("smtp_host")
   smtpPort  Int?     @map("smtp_port")
   smtpUser  String?  @map("smtp_user")
@@ -47,6 +48,8 @@ model Tenant {
   brandLogoUrl       String?  @map("brand_logo_url")
 
   isActive  Boolean  @default(true) @map("is_active")
+  // Master Key generation mode (FR-V31-SES-002)
+  masterKeyCreationMode String @default("MANUAL") @map("master_key_creation_mode") // AUTOMATIC | MANUAL
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -61,8 +64,90 @@ model Tenant {
   workplacePositions WorkplacePosition[]
   workplaceAllocations WorkplaceAllocation[]
   coverageAssignments  CoverageAssignment[]
+  holidays             TenantHoliday[]
 
   @@map("tenants")
+}
+
+/// Pool de credenciais SMTP gerenciado pelo Super Admin (V3.1).
+/// Cada credencial pode ter escopo ALL (vale para todos os tenants) ou
+/// SPECIFIC (vale apenas para os tenants em CredentialTenant).
+/// Regra: cada tenant deve ser coberto por NO MÁXIMO uma credencial ativa por tipo.
+model EmailCredential {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  description String?
+  scope       String   @default("SPECIFIC") // ALL | SPECIFIC
+  isActive    Boolean  @default(true)       @map("is_active")
+  smtpHost    String   @map("smtp_host")
+  smtpPort    Int      @map("smtp_port")
+  smtpUser    String   @map("smtp_user")
+  smtpPass    String   @map("smtp_pass")
+  smtpFrom    String?  @map("smtp_from")
+  createdAt   DateTime @default(now())     @map("created_at")
+  updatedAt   DateTime @updatedAt           @map("updated_at")
+
+  tenantAssignments EmailCredentialTenant[]
+
+  @@map("email_credentials")
+}
+
+model EmailCredentialTenant {
+  credentialId String @map("credential_id") @db.Uuid
+  tenantId     String @map("tenant_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  credential EmailCredential @relation(fields: [credentialId], references: [id], onDelete: Cascade)
+
+  @@id([credentialId, tenantId])
+  @@index([tenantId])
+  @@map("email_credential_tenants")
+}
+
+/// Pool de credenciais Evolution/WhatsApp (mesmo modelo do SMTP).
+model WhatsappCredential {
+  id              String   @id @default(uuid()) @db.Uuid
+  name            String
+  description     String?
+  scope           String   @default("SPECIFIC") // ALL | SPECIFIC
+  isActive        Boolean  @default(true)       @map("is_active")
+  evoApiUrl       String   @map("evo_api_url")
+  evoApiKey       String   @map("evo_api_key")
+  evoInstanceName String   @map("evo_instance_name")
+  createdAt       DateTime @default(now())      @map("created_at")
+  updatedAt       DateTime @updatedAt           @map("updated_at")
+
+  tenantAssignments WhatsappCredentialTenant[]
+
+  @@map("whatsapp_credentials")
+}
+
+model WhatsappCredentialTenant {
+  credentialId String @map("credential_id") @db.Uuid
+  tenantId     String @map("tenant_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  credential WhatsappCredential @relation(fields: [credentialId], references: [id], onDelete: Cascade)
+
+  @@id([credentialId, tenantId])
+  @@index([tenantId])
+  @@map("whatsapp_credential_tenants")
+}
+
+model TenantHoliday {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  date      DateTime @db.Date
+  name      String
+  source    String   @default("MANUAL") // LIB | MANUAL
+  action    String   @default("ADD")    // ADD (cria/garante feriado) | REMOVE (cancela feriado oficial)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, date])
+  @@index([tenantId, date])
+  @@map("tenant_holidays")
 }
 
 model User {
@@ -72,6 +157,8 @@ model User {
   passwordHash String?  @map("password_hash")
   role         String   @default("USER") // SUPERADMIN, ADMIN, USER, AUDITOR
   isActive     Boolean  @default(true) @map("is_active")
+  colorScheme  String   @default("SYSTEM") @map("color_scheme") // LIGHT | DARK | SYSTEM (FR-V31-BRAND-004)
+  preferredLocale String @default("pt-BR") @map("preferred_locale") // FR-V31-I18N-001
   tenantId     String?  @map("tenant_id") @db.Uuid // nullable para SUPERADMIN
   passwordResetToken  String?   @unique @map("password_reset_token")
   passwordResetExpires DateTime? @map("password_reset_expires")
@@ -316,6 +403,10 @@ model SystemConfig {
   smtpUser  String?  @map("smtp_user")
   smtpPass  String?  @map("smtp_pass")
   smtpFrom  String?  @map("smtp_from")
+  // Evolution (WhatsApp) global — Super Admin only
+  evoApiUrl       String?  @map("evo_api_url")
+  evoApiKey       String?  @map("evo_api_key")
+  evoInstanceName String?  @map("evo_instance_name")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

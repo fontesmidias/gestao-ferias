@@ -1,0 +1,72 @@
+{
+  "locale": {
+    "ptBR": "Português (Brasil)",
+    "en": "English",
+    "es": "Español"
+  },
+  "sidebar": {
+    "section": {
+      "operational": "Operacional",
+      "intelligence": "Inteligência",
+      "system": "Sistema"
+    },
+    "dashboard": "Dashboard",
+    "employees": "Colaboradores",
+    "approvals": "Aprovações",
+    "workplaces": "Postos",
+    "coverage": "Cobertura",
+    "predict": "Dashboard Preditivo",
+    "holidays": "Feriados",
+    "settings": "Configurações",
+    "adminPanel": "Painel Admin",
+    "credentials": "Credenciais",
+    "globalDashboard": "Dashboard Global",
+    "editProfile": "Editar perfil",
+    "logout": "Encerrar Sessão",
+    "logoutConfirm": "Tem certeza que deseja encerrar a sessão?"
+  },
+  "common": {
+    "save": "Salvar",
+    "cancel": "Cancelar",
+    "add": "Adicionar",
+    "remove": "Remover",
+    "edit": "Editar",
+    "delete": "Excluir",
+    "close": "Fechar",
+    "confirm": "Confirmar",
+    "loading": "Carregando…",
+    "saving": "Salvando…",
+    "search": "Buscar",
+    "yes": "Sim",
+    "no": "Não",
+    "back": "Voltar",
+    "next": "Próximo",
+    "test": "Testar"
+  },
+  "session": {
+    "expiresIn": "Esta sessão expira em",
+    "expired": "Sessão expirada",
+    "warning": "Sua sessão expira em {seconds} segundos por inatividade. Continue navegando para mantê-la ativa.",
+    "expiredLogout": "Sessão expirada por inatividade. Você será desconectado."
+  },
+  "theme": {
+    "light": "Claro",
+    "dark": "Escuro",
+    "system": "Sistema",
+    "beta": "(beta — alguns componentes ainda em refinamento)"
+  },
+  "profile": {
+    "title": "Editar Perfil",
+    "name": "Nome",
+    "email": "E-mail",
+    "newPassword": "Nova Senha",
+    "repeatPassword": "Repetir Nova Senha",
+    "passwordOptional": "(opcional)",
+    "passwordMin": "Mínimo 6 caracteres",
+    "passwordMismatch": "A nova senha e a confirmação não conferem.",
+    "updated": "Perfil atualizado!"
+  },
+  "predict": {
+    "title": "Dashboard Preditivo"
+  }
+}

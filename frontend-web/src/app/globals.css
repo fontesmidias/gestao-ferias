@@ -14,6 +14,168 @@
 :root {
   --foreground: #f8fafc;
   --background: #020617;
+  --surface: rgba(30, 41, 59, 0.5);
+  --surface-strong: #0f172a;
+}
+
+/* Light mode (FR-V31-BRAND-004) — ativado via class="light" no <html> */
+html.light {
+  --foreground: #0f172a;
+  --background: #f8fafc;
+  --surface: rgba(255, 255, 255, 0.7);
+  --surface-strong: #ffffff;
+}
+
+html.light body { color-scheme: light; }
+
+/* Light mode — overrides abrangentes para tornar o app legível sem refatorar
+ * cada componente. Mantém cores de STATUS (gap/covered/planned) inalteradas.
+ */
+html.light body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+/* Superfícies escuras viram claras */
+html.light .bg-slate-950,
+html.light .bg-slate-900,
+html.light .bg-slate-900\/50,
+html.light .bg-slate-900\/60,
+html.light .bg-slate-900\/70,
+html.light .bg-slate-900\/80,
+html.light .bg-slate-900\/40 { background-color: #ffffff !important; }
+
+html.light .bg-slate-800,
+html.light .bg-slate-800\/50,
+html.light .bg-slate-800\/60,
+html.light .bg-slate-800\/40,
+html.light .bg-slate-700\/50,
+html.light .bg-slate-700\/60 { background-color: #f1f5f9 !important; }
+
+html.light .bg-slate-950\/50,
+html.light .bg-slate-950\/60,
+html.light .bg-slate-950\/40 { background-color: rgba(255,255,255,0.85) !important; }
+
+/* Bordas claras em light mode */
+html.light .border-white\/5,
+html.light .border-white\/10,
+html.light .border-white\/20 { border-color: rgba(15, 23, 42, 0.1) !important; }
+
+html.light .border-slate-700,
+html.light .border-slate-800 { border-color: #e2e8f0 !important; }
+
+/* Textos — slate */
+html.light .text-white,
+html.light .text-slate-50,
+html.light .text-slate-100,
+html.light .text-slate-200 { color: #0f172a !important; }
+
+html.light .text-slate-300 { color: #334155 !important; }
+html.light .text-slate-400 { color: #475569 !important; }
+html.light .text-slate-500 { color: #64748b !important; }
+
+/* Textos — cores semânticas (escurece o nível 300/400/500 para ficar legível em branco) */
+html.light .text-emerald-300,
+html.light .text-emerald-400 { color: #047857 !important; } /* emerald-700 */
+html.light .text-emerald-500 { color: #059669 !important; }
+
+html.light .text-rose-300,
+html.light .text-rose-400 { color: #be123c !important; } /* rose-700 */
+html.light .text-rose-500 { color: #e11d48 !important; }
+
+html.light .text-red-300,
+html.light .text-red-400 { color: #b91c1c !important; }
+
+html.light .text-amber-300,
+html.light .text-amber-400 { color: #b45309 !important; } /* amber-700 */
+html.light .text-amber-500 { color: #d97706 !important; }
+
+html.light .text-yellow-300,
+html.light .text-yellow-400 { color: #a16207 !important; }
+
+html.light .text-indigo-300,
+html.light .text-indigo-400 { color: #4338ca !important; } /* indigo-700 */
+html.light .text-indigo-500 { color: #4f46e5 !important; }
+
+html.light .text-blue-300,
+html.light .text-blue-400 { color: #1d4ed8 !important; }
+html.light .text-blue-500 { color: #2563eb !important; }
+
+html.light .text-purple-300,
+html.light .text-purple-400 { color: #6d28d9 !important; }
+html.light .text-purple-500 { color: #7c3aed !important; }
+
+html.light .text-violet-300,
+html.light .text-violet-400 { color: #6d28d9 !important; }
+
+html.light .text-cyan-300,
+html.light .text-cyan-400 { color: #0e7490 !important; }
+
+html.light .text-pink-300,
+html.light .text-pink-400 { color: #be185d !important; }
+
+html.light .text-orange-300,
+html.light .text-orange-400 { color: #c2410c !important; }
+
+/* Backgrounds coloridos translúcidos (badges, hints) — mantém semântica em tom claro */
+html.light .bg-emerald-500\/10,
+html.light .bg-emerald-500\/20 { background-color: #d1fae5 !important; }
+html.light .bg-rose-500\/10,
+html.light .bg-rose-500\/20 { background-color: #ffe4e6 !important; }
+html.light .bg-amber-500\/10,
+html.light .bg-amber-500\/20 { background-color: #fef3c7 !important; }
+html.light .bg-indigo-500\/10,
+html.light .bg-indigo-500\/20 { background-color: #e0e7ff !important; }
+html.light .bg-blue-500\/10,
+html.light .bg-blue-500\/20 { background-color: #dbeafe !important; }
+html.light .bg-purple-500\/10,
+html.light .bg-purple-500\/20 { background-color: #ede9fe !important; }
+
+/* Bordas coloridas translúcidas — mantém a cor */
+html.light .border-emerald-500\/20,
+html.light .border-emerald-500\/30 { border-color: #a7f3d0 !important; }
+html.light .border-rose-500\/20,
+html.light .border-rose-500\/30 { border-color: #fda4af !important; }
+html.light .border-amber-500\/20,
+html.light .border-amber-500\/30 { border-color: #fcd34d !important; }
+html.light .border-indigo-500\/20,
+html.light .border-indigo-500\/30 { border-color: #a5b4fc !important; }
+
+/* Cards glass */
+html.light .glass,
+html.light .glass-card {
+  background: rgba(255, 255, 255, 0.75) !important;
+  border-color: rgba(15, 23, 42, 0.08) !important;
+  backdrop-filter: blur(20px);
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.05);
+}
+
+/* Sidebar */
+html.light aside.bg-slate-900\/50 { background-color: rgba(255, 255, 255, 0.85) !important; }
+
+/* Inputs */
+html.light input,
+html.light select,
+html.light textarea {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+html.light input::placeholder,
+html.light textarea::placeholder { color: #94a3b8 !important; }
+
+/* Hover states */
+html.light .hover\:bg-white\/5:hover,
+html.light .hover\:bg-white\/10:hover { background-color: rgba(15, 23, 42, 0.05) !important; }
+html.light .hover\:bg-slate-800:hover,
+html.light .hover\:bg-slate-700:hover,
+html.light .hover\:bg-slate-700\/50:hover { background-color: #e2e8f0 !important; }
+
+/* Gradientes de fundo do dashboard */
+html.light .bg-dashboard {
+  background-image:
+    radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.10) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(168, 85, 247, 0.08) 0px, transparent 50%) !important;
 }
 
 body {

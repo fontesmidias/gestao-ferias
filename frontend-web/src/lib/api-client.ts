@@ -1,3 +1,5 @@
+import { markActivity } from './session-activity'
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1'
 
 async function refreshAccessToken(): Promise<string | null> {
@@ -31,9 +33,13 @@ export class HttpClient {
   static async request(path: string, options: any = {}) {
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
 
-    const headers = {
-      'Content-Type': 'application/json',
-      ...options.headers,
+    // Só incluímos Content-Type quando há body NÃO-FormData. Fastify reclama se vir
+    // Content-Type: application/json sem body (ex: DELETE sem payload). E FormData o
+    // navegador define o Content-Type com boundary correto automaticamente.
+    const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData
+    const headers: Record<string, string> = { ...(options.headers || {}) }
+    if (options.body !== undefined && !isFormData && !headers['Content-Type']) {
+      headers['Content-Type'] = 'application/json'
     }
 
     if (token) {
@@ -59,8 +65,14 @@ export class HttpClient {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ message: 'Erro desconhecido' }))
-      throw new Error(error.message || 'Erro na requisição')
+      const err: any = new Error(error.message || 'Erro na requisição')
+      err.status = response.status
+      err.body = error // preserva payload completo (ex: { conflicts: [...] })
+      throw err
     }
+
+    // Marca atividade de sessão (FR-V31-SES-001 — idle timer reset)
+    markActivity()
 
     return await response.json()
   }
@@ -69,4 +81,11 @@ export class HttpClient {
   static post(path: string, body: any) { return this.request(path, { method: 'POST', body: JSON.stringify(body) }) }
   static patch(path: string, body: any) { return this.request(path, { method: 'PATCH', body: JSON.stringify(body) }) }
   static delete(path: string) { return this.request(path, { method: 'DELETE' }) }
+
+  /** Upload multipart (ex: logo). Não envia Content-Type — o navegador define o boundary. */
+  static async upload(path: string, field: string, file: File) {
+    const form = new FormData()
+    form.append(field, file, file.name)
+    return this.request(path, { method: 'POST', body: form })
+  }
 }

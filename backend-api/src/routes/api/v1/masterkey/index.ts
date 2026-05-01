@@ -27,7 +27,7 @@ const masterkey: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     const config = await fastify.prisma.systemConfig.findUnique({ where: { id: 'singleton' } })
 
     // Se MasterKey nao esta configurada ou esta desabilitada, rota "nao existe"
-    if (!config || !config.masterKey || !config.masterKeyEnabled || config.masterKey.length < 32) {
+    if (!config || !config.masterKey || !config.masterKeyEnabled || config.masterKey.length < 3) {
       return reply.code(404).send({ error: 'Not Found' })
     }
 

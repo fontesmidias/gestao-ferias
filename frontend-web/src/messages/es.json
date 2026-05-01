@@ -1,0 +1,72 @@
+{
+  "locale": {
+    "ptBR": "Português (Brasil)",
+    "en": "English",
+    "es": "Español"
+  },
+  "sidebar": {
+    "section": {
+      "operational": "Operacional",
+      "intelligence": "Inteligencia",
+      "system": "Sistema"
+    },
+    "dashboard": "Panel",
+    "employees": "Colaboradores",
+    "approvals": "Aprobaciones",
+    "workplaces": "Puestos",
+    "coverage": "Cobertura",
+    "predict": "Panel Predictivo",
+    "holidays": "Feriados",
+    "settings": "Configuración",
+    "adminPanel": "Panel Admin",
+    "credentials": "Credenciales",
+    "globalDashboard": "Panel Global",
+    "editProfile": "Editar perfil",
+    "logout": "Cerrar Sesión",
+    "logoutConfirm": "¿Seguro que desea cerrar la sesión?"
+  },
+  "common": {
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "add": "Añadir",
+    "remove": "Quitar",
+    "edit": "Editar",
+    "delete": "Eliminar",
+    "close": "Cerrar",
+    "confirm": "Confirmar",
+    "loading": "Cargando…",
+    "saving": "Guardando…",
+    "search": "Buscar",
+    "yes": "Sí",
+    "no": "No",
+    "back": "Volver",
+    "next": "Siguiente",
+    "test": "Probar"
+  },
+  "session": {
+    "expiresIn": "Esta sesión expira en",
+    "expired": "Sesión expirada",
+    "warning": "Su sesión expira en {seconds} segundos por inactividad. Siga navegando para mantenerla activa.",
+    "expiredLogout": "Sesión expirada por inactividad. Será desconectado."
+  },
+  "theme": {
+    "light": "Claro",
+    "dark": "Oscuro",
+    "system": "Sistema",
+    "beta": "(beta — algunos componentes aún en refinamiento)"
+  },
+  "profile": {
+    "title": "Editar Perfil",
+    "name": "Nombre",
+    "email": "Correo",
+    "newPassword": "Nueva Contraseña",
+    "repeatPassword": "Repetir Contraseña",
+    "passwordOptional": "(opcional)",
+    "passwordMin": "Mínimo 6 caracteres",
+    "passwordMismatch": "La nueva contraseña y la confirmación no coinciden.",
+    "updated": "¡Perfil actualizado!"
+  },
+  "predict": {
+    "title": "Panel Predictivo"
+  }
+}

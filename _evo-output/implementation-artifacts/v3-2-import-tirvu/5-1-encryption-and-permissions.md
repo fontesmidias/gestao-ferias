@@ -1,6 +1,6 @@
 # Story 5.1: Encryption AES-256-GCM + HKDF derivation por tenant + Permission keys
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 

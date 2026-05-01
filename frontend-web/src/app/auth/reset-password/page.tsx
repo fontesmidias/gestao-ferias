@@ -5,6 +5,7 @@ import { HttpClient } from '@/lib/api-client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { toast } from 'sonner'
+import { PasswordInput } from '@/components/PasswordInput'
 
 export default function ResetPasswordPage() {
   const [email, setEmail] = useState('')
@@ -75,8 +76,7 @@ export default function ResetPasswordPage() {
 
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2">Nova Senha</label>
-            <input
-              type="password"
+            <PasswordInput
               required
               minLength={6}
               value={newPassword}
@@ -88,8 +88,7 @@ export default function ResetPasswordPage() {
 
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2">Confirmar Senha</label>
-            <input
-              type="password"
+            <PasswordInput
               required
               minLength={6}
               value={confirmPassword}

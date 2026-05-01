@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer'
 import { PrismaClient } from '@prisma/client'
+import { resolveEmailCredential } from '../credentials/credential-resolver'
 
 export class EmailService {
   /**
@@ -49,39 +50,57 @@ export class EmailService {
   }
 
   /**
-   * Envia email usando o SMTP global (SystemConfig).
+   * Envia email usando o SMTP global.
+   * Resolução: 1) pool de credenciais (V3.1) → 2) SystemConfig (legado).
    * Usado para emails do sistema (reset, verificacao, etc.)
    */
   static async sendGlobalMail(
     to: string,
     subject: string,
     html: string,
-    prisma: PrismaClient
+    prisma: PrismaClient,
+    tenantId?: string
   ): Promise<boolean> {
-    const config = await prisma.systemConfig.findUnique({ where: { id: 'singleton' } })
+    let host: string | null = null
+    let port: number | null = null
+    let user: string | null = null
+    let pass: string | null = null
+    let from: string | null = null
 
-    if (!config?.smtpHost || !config?.smtpPort || !config?.smtpUser || !config?.smtpPass) {
-      console.warn('[EMAIL] SMTP global nao configurado. Configure em Painel Admin > SMTP.')
+    // 1) Tenta pool de credenciais (precisa tenantId para resolver SPECIFIC; sem tenantId só pega ALL)
+    if (tenantId) {
+      const cred = await resolveEmailCredential(prisma, tenantId)
+      if (cred) {
+        host = cred.smtpHost; port = cred.smtpPort; user = cred.smtpUser; pass = cred.smtpPass; from = cred.smtpFrom
+      }
+    } else {
+      const allCred = await prisma.emailCredential.findFirst({ where: { isActive: true, scope: 'ALL' } })
+      if (allCred) {
+        host = allCred.smtpHost; port = allCred.smtpPort; user = allCred.smtpUser; pass = allCred.smtpPass; from = allCred.smtpFrom
+      }
+    }
+
+    // 2) Fallback: SystemConfig (legado)
+    if (!host || !port || !user || !pass) {
+      const config = await prisma.systemConfig.findUnique({ where: { id: 'singleton' } })
+      if (config?.smtpHost && config?.smtpPort && config?.smtpUser && config?.smtpPass) {
+        host = config.smtpHost; port = config.smtpPort; user = config.smtpUser; pass = config.smtpPass; from = config.smtpFrom
+      }
+    }
+
+    if (!host || !port || !user || !pass) {
+      console.warn('[EMAIL] Nenhuma credencial SMTP disponível. Configure em Painel Admin > Credenciais.')
       return false
     }
 
     const transporter = nodemailer.createTransport({
-      host: config.smtpHost,
-      port: config.smtpPort,
-      secure: config.smtpPort === 465,
-      auth: {
-        user: config.smtpUser,
-        pass: config.smtpPass,
-      },
+      host, port,
+      secure: port === 465,
+      auth: { user, pass },
     })
 
     try {
-      await transporter.sendMail({
-        from: config.smtpFrom || config.smtpUser,
-        to,
-        subject,
-        html,
-      })
+      await transporter.sendMail({ from: from || user, to, subject, html })
       console.log(`[EMAIL] Enviado para ${to}: ${subject}`)
       return true
     } catch (error) {
@@ -91,8 +110,8 @@ export class EmailService {
   }
 
   /**
-   * Envia email usando SMTP do tenant (para notificacoes especificas do tenant).
-   * Fallback: usa SMTP global se tenant nao tiver SMTP configurado.
+   * Envia email usando SMTP global (V3.1: tenant não tem mais SMTP próprio).
+   * Mantém assinatura `(tenantId, ...)` por compat — tenantId é apenas usado para logging.
    */
   static async sendMail(
     tenantId: string,
@@ -101,36 +120,37 @@ export class EmailService {
     html: string,
     prisma: PrismaClient
   ): Promise<boolean> {
-    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } })
+    return await EmailService.sendGlobalMail(to, subject, html, prisma, tenantId)
+  }
 
-    // Se tenant tem SMTP proprio, usar
-    if (tenant?.smtpHost && tenant?.smtpPort && tenant?.smtpUser && tenant?.smtpPass) {
-      const transporter = nodemailer.createTransport({
-        host: tenant.smtpHost,
-        port: tenant.smtpPort,
-        secure: tenant.smtpPort === 465,
-        auth: {
-          user: tenant.smtpUser,
-          pass: tenant.smtpPass,
-        },
-      })
-
-      try {
-        await transporter.sendMail({
-          from: tenant.smtpFrom || tenant.smtpUser,
-          to,
-          subject,
-          html,
-        })
-        console.log(`[EMAIL] Enviado para ${to}: ${subject}`)
-        return true
-      } catch (error) {
-        console.error(`[EMAIL] Falha SMTP do tenant. Tentando SMTP global...`)
-        // Fallback para SMTP global
-      }
+  /**
+   * Envia email de teste com config SMTP arbitrária (não persiste).
+   * Usado pelo botão "Testar Conexão" no painel Super Admin.
+   */
+  static async sendTestEmail(
+    to: string,
+    config: { smtpHost: string; smtpPort: number; smtpUser: string; smtpPass: string; smtpFrom?: string }
+  ): Promise<{ ok: boolean; message: string; durationMs: number }> {
+    const start = Date.now()
+    if (!config.smtpHost || !config.smtpPort || !config.smtpUser || !config.smtpPass) {
+      return { ok: false, message: 'Configuração SMTP incompleta.', durationMs: Date.now() - start }
     }
-
-    // Fallback: usar SMTP global
-    return await EmailService.sendGlobalMail(to, subject, html, prisma)
+    try {
+      const transporter = nodemailer.createTransport({
+        host: config.smtpHost,
+        port: config.smtpPort,
+        secure: config.smtpPort === 465,
+        auth: { user: config.smtpUser, pass: config.smtpPass }
+      })
+      await transporter.sendMail({
+        from: config.smtpFrom || config.smtpUser,
+        to,
+        subject: 'Teste SMTP — GestãoFérias',
+        html: `<div style="font-family:Arial,sans-serif"><h3>Teste de SMTP</h3><p>Se você recebeu este e-mail, sua configuração SMTP está funcionando.</p><p style="color:#888;font-size:12px">Enviado em ${new Date().toISOString()} via ${config.smtpHost}:${config.smtpPort}</p></div>`
+      })
+      return { ok: true, message: `E-mail entregue para ${to}.`, durationMs: Date.now() - start }
+    } catch (error: any) {
+      return { ok: false, message: error.message || 'Erro desconhecido.', durationMs: Date.now() - start }
+    }
   }
 }

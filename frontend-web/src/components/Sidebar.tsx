@@ -3,17 +3,21 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, CheckSquare, Users, Settings, BrainCircuit, LogOut, PanelLeftOpen, PanelLeftClose, Building2, Shield, Crown } from 'lucide-react'
+import { LayoutDashboard, CheckSquare, Users, Settings, BrainCircuit, LogOut, PanelLeftOpen, PanelLeftClose, Building2, Shield, Crown, CalendarDays, KeyRound } from 'lucide-react'
 import { useAuth } from '@/components/AuthContext'
 import { HttpClient } from '@/lib/api-client'
+import { UserProfileModal } from '@/components/UserProfileModal'
+import { useTranslation } from '@/lib/i18n'
 
 export function Sidebar() {
   const pathname = usePathname()
   const { user, logout, loading, isImpersonating } = useAuth()
+  const { t } = useTranslation()
   const [pinned, setPinned] = useState(false)
   const [hovered, setHovered] = useState(false)
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
   const [badges, setBadges] = useState<Record<string, number>>({})
+  const [showProfileModal, setShowProfileModal] = useState(false)
 
   // Buscar contagens para badges (pendentes, gaps)
   const fetchBadges = useCallback(async () => {
@@ -51,33 +55,35 @@ export function Sidebar() {
 
   const adminSections = [
     {
-      label: 'Operacional',
+      label: t('sidebar.section.operational'),
       items: [
-        { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-        { href: '/employees', label: 'Colaboradores', icon: Users },
-        { href: '/approvals', label: 'Aprovações', icon: CheckSquare, matchPath: '/approvals' },
-        { href: '/workplaces', label: 'Postos', icon: Building2 },
-        { href: '/coverage', label: 'Cobertura', icon: Shield },
+        { href: '/dashboard', label: t('sidebar.dashboard'), icon: LayoutDashboard },
+        { href: '/employees', label: t('sidebar.employees'), icon: Users },
+        { href: '/approvals', label: t('sidebar.approvals'), icon: CheckSquare, matchPath: '/approvals' },
+        { href: '/workplaces', label: t('sidebar.workplaces'), icon: Building2 },
+        { href: '/coverage', label: t('sidebar.coverage'), icon: Shield },
       ],
     },
     {
-      label: 'Inteligência',
+      label: t('sidebar.section.intelligence'),
       items: [
-        { href: '/predict', label: 'AI Oráculo', icon: BrainCircuit },
+        { href: '/predict', label: t('sidebar.predict'), icon: BrainCircuit },
       ],
     },
     {
-      label: 'Sistema',
+      label: t('sidebar.section.system'),
       items: [
-        { href: '/settings', label: 'Configurações', icon: Settings, matchPath: '/settings' },
+        { href: '/settings/holidays', label: t('sidebar.holidays'), icon: CalendarDays, matchPath: '/settings/holidays' },
+        { href: '/settings', label: t('sidebar.settings'), icon: Settings, matchPath: '/settings' },
       ],
     },
   ]
 
   const isSuperAdminView = isSuperAdmin && !isImpersonating
   const superAdminLinks = [
-    { href: '/admin', label: 'Painel Admin', icon: Crown },
-    { href: '/dashboard', label: 'Dashboard Global', icon: LayoutDashboard },
+    { href: '/admin', label: t('sidebar.adminPanel'), icon: Crown },
+    { href: '/admin/credentials', label: t('sidebar.credentials'), icon: KeyRound },
+    { href: '/dashboard', label: t('sidebar.globalDashboard'), icon: LayoutDashboard },
   ]
 
   return (
@@ -86,27 +92,44 @@ export function Sidebar() {
       onMouseLeave={() => { setHovered(false); if (!pinned) setIsUserMenuOpen(false) }}
       className={`border-r border-white/5 bg-slate-900/50 backdrop-blur-xl flex flex-col shrink-0 transition-all duration-300 z-40 ${expanded ? 'w-64' : 'w-16'}`}
     >
-      {/* Header: Logo + Pin toggle */}
+      {/* Header: Logo + Pin toggle — usa brandName/brandLogoUrl se o tenant configurou (FR-V31-BRAND-001) */}
       <div className={`h-14 flex items-center border-b border-white/5 ${expanded ? 'px-4 justify-between' : 'justify-center'}`}>
-        {expanded ? (
-          <>
-            <div className="flex items-center gap-2 overflow-hidden">
-              <div className="w-7 h-7 shrink-0 bg-gradient-to-tr from-primary to-secondary rounded-lg" />
-              <h1 className="text-lg font-bold tracking-tight text-white whitespace-nowrap">
-                Gestão<span className="text-gradient">Férias</span>
-              </h1>
-            </div>
-            <button
-              onClick={() => setPinned(!pinned)}
-              className="p-1.5 text-slate-500 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+        {(() => {
+          const branding = (user as any)?.branding || {}
+          const brandName: string | undefined = branding.brandName?.trim() || undefined
+          const brandLogoUrl: string | undefined = branding.brandLogoUrl?.trim() || undefined
+          return expanded ? (
+            <>
+              <div className="flex items-center gap-2 overflow-hidden">
+                {brandLogoUrl ? (
+                  <img src={brandLogoUrl} alt={brandName || 'Logo'} className="w-7 h-7 object-contain rounded-lg shrink-0" />
+                ) : (
+                  <div className="w-7 h-7 shrink-0 bg-gradient-to-tr from-primary to-secondary rounded-lg" />
+                )}
+                <h1 className="text-lg font-bold tracking-tight text-white whitespace-nowrap truncate">
+                  {brandName ? (
+                    <span>{brandName}</span>
+                  ) : (
+                    <>Gestão<span className="text-gradient">Férias</span></>
+                  )}
+                </h1>
+              </div>
+              <button
+                onClick={() => setPinned(!pinned)}
+                className="p-1.5 text-slate-500 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
               title={pinned ? 'Recolher menu' : 'Fixar menu aberto'}
             >
               {pinned ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
             </button>
           </>
-        ) : (
-          <div className="w-7 h-7 shrink-0 bg-gradient-to-tr from-primary to-secondary rounded-lg" />
-        )}
+          ) : (
+            brandLogoUrl ? (
+              <img src={brandLogoUrl} alt={brandName || 'Logo'} className="w-7 h-7 object-contain rounded-lg shrink-0" />
+            ) : (
+              <div className="w-7 h-7 shrink-0 bg-gradient-to-tr from-primary to-secondary rounded-lg" />
+            )
+          )
+        })()}
       </div>
 
       {/* Navigation */}
@@ -141,7 +164,9 @@ export function Sidebar() {
               )}
               <div className="space-y-0.5">
                 {section.items.map((link, idx) => {
-                  const isActive = pathname.startsWith(link.href)
+                  // Para itens com sub-rotas (ex: /settings vs /settings/holidays), usar match exato no pai
+                  const hasSubItem = section.items.some(s => s.href !== link.href && s.href.startsWith(link.href + '/'))
+                  const isActive = hasSubItem ? pathname === link.href : pathname.startsWith(link.href)
                   const Icon = link.icon
                   return (
                     <Link key={`${link.href}-${idx}`} href={link.href}
@@ -179,12 +204,14 @@ export function Sidebar() {
         )}
       </nav>
 
-      {/* User Section */}
-      <div className="px-2 py-3 border-t border-white/5 relative">
+      {/* User Section + Logout 1-click (FR-V31-SES-003) */}
+      <div className="px-2 py-3 border-t border-white/5 relative flex items-center gap-2">
         <button
-          onClick={() => expanded && setIsUserMenuOpen(!isUserMenuOpen)}
-          className={`group relative w-full flex items-center gap-3 p-2 bg-slate-800/50 rounded-xl overflow-hidden hover:bg-slate-700/50 transition-colors ${!expanded ? 'justify-center' : ''}`}
-          title={!expanded ? user?.name || 'Conta' : 'Opções da Conta'}
+          type="button"
+          onClick={() => setShowProfileModal(true)}
+          className={`group relative flex-1 flex items-center gap-3 p-2 bg-slate-800/50 rounded-xl overflow-hidden hover:bg-slate-700/60 transition-colors text-left ${!expanded ? 'justify-center' : ''}`}
+          title={expanded ? 'Editar perfil' : (user?.name || 'Conta')}
+          aria-label="Editar perfil"
         >
           <div className="w-8 h-8 shrink-0 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-bold border border-indigo-500/20">
             {(user?.name || 'G').charAt(0)}
@@ -195,27 +222,40 @@ export function Sidebar() {
               <p className="text-[11px] text-slate-500 truncate">{user?.role}</p>
             </div>
           )}
-          {/* Tooltip quando retraído */}
           {!expanded && (
             <span className="absolute left-full ml-3 px-2.5 py-1 bg-slate-800 text-white text-xs font-bold rounded-lg shadow-xl border border-white/10 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
-              {user?.name || 'Conta'}
+              {user?.name || 'Conta'} — clique para editar
             </span>
           )}
         </button>
 
-        {/* User Popover Menu */}
-        {expanded && isUserMenuOpen && (
-          <div className="absolute bottom-full left-2 right-2 mb-2 bg-slate-800 border border-slate-700 rounded-xl shadow-xl overflow-hidden z-50">
-            <button
-              onClick={() => { setIsUserMenuOpen(false); logout(); }}
-              className="w-full flex items-center gap-3 px-4 py-3 text-rose-400 hover:bg-rose-400/10 transition-colors"
-            >
-              <LogOut className="w-4 h-4" />
-              <span className="text-sm font-bold">Encerrar Sessão</span>
-            </button>
-          </div>
+        {expanded && (
+          <button
+            onClick={() => {
+              if (confirm(t('sidebar.logoutConfirm'))) logout()
+            }}
+            className="group relative shrink-0 p-2.5 rounded-xl bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 hover:text-rose-300 transition-colors"
+            title={t('sidebar.logout')}
+            aria-label={t('sidebar.logout')}
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+        )}
+        {!expanded && (
+          <button
+            onClick={() => {
+              if (confirm(t('sidebar.logoutConfirm'))) logout()
+            }}
+            className="absolute right-1 bottom-1 p-1 rounded bg-slate-900/80 text-rose-400 hover:bg-rose-500/20"
+            title={t('sidebar.logout')}
+            aria-label={t('sidebar.logout')}
+          >
+            <LogOut className="w-3.5 h-3.5" />
+          </button>
         )}
       </div>
+
+      <UserProfileModal open={showProfileModal} onClose={() => setShowProfileModal(false)} />
     </aside>
   )
 }

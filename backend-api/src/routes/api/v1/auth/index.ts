@@ -183,6 +183,11 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     onRequest: [fastify.requireAuth]
   }, async (request) => {
     const user = request.user as any
+    // Preferências persistidas (V3.1 FR-V31-BRAND-004 + FR-V31-I18N-001)
+    const prefs = await fastify.prisma.user.findUnique({
+      where: { id: user.userId },
+      select: { colorScheme: true, preferredLocale: true }
+    })
     // Story 7.2: Incluir branding do tenant na resposta
     if (user.tenantId) {
       const tenant = await fastify.prisma.tenant.findUnique({
@@ -190,10 +195,54 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         select: { brandName: true, brandPrimaryColor: true, brandSecondaryColor: true, brandLogoUrl: true }
       })
       if (tenant) {
-        return { ...user, branding: tenant }
+        return { ...user, branding: tenant, colorScheme: prefs?.colorScheme || 'SYSTEM', preferredLocale: prefs?.preferredLocale || 'pt-BR' }
       }
     }
-    return user
+    return { ...user, colorScheme: prefs?.colorScheme || 'SYSTEM', preferredLocale: prefs?.preferredLocale || 'pt-BR' }
+  })
+
+  // PATCH /me/preferences — FR-V31-BRAND-004 + FR-V31-I18N-001
+  // Persiste preferências do usuário: tema e idioma
+  fastify.patch('/me/preferences', {
+    onRequest: [fastify.requireAuth],
+    schema: {
+      body: {
+        type: 'object',
+        properties: {
+          colorScheme: { type: 'string', enum: ['LIGHT', 'DARK', 'SYSTEM'] },
+          preferredLocale: { type: 'string', enum: ['pt-BR', 'en', 'es'] }
+        }
+      }
+    }
+  }, async (request) => {
+    const { userId } = request.user as any
+    const body = request.body as { colorScheme?: string; preferredLocale?: string }
+    const data: any = {}
+    if (body.colorScheme !== undefined) data.colorScheme = body.colorScheme
+    if (body.preferredLocale !== undefined) data.preferredLocale = body.preferredLocale
+    if (Object.keys(data).length === 0) return { updated: false }
+    await fastify.prisma.user.update({ where: { id: userId }, data })
+    return { updated: true, ...data }
+  })
+
+  // GET /auth/session-info — V3.1 FR-V31-SES-001
+  // Retorna tempo restante até a expiração do token JWT atual
+  fastify.get('/session-info', {
+    onRequest: [fastify.requireAuth]
+  }, async (request) => {
+    const user = request.user as any
+    // O JWT exp vem em segundos (Unix timestamp)
+    const exp: number | undefined = user.exp
+    if (!exp) {
+      return { expiresAt: null, secondsRemaining: null, type: 'ACCESS' }
+    }
+    const expiresAt = new Date(exp * 1000)
+    const secondsRemaining = Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / 1000))
+    return {
+      expiresAt: expiresAt.toISOString(),
+      secondsRemaining,
+      type: 'ACCESS'
+    }
   })
 
   // ─── Perfil do usuario (qualquer role autenticado) ─────
@@ -219,11 +268,9 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     const user = await fastify.prisma.user.findUnique({ where: { id: userId } })
     if (!user) return reply.code(404).send({ error: 'Usuario nao encontrado.' })
 
-    // Se quer trocar senha, precisa da senha atual
-    if (newPassword) {
-      if (!currentPassword) {
-        return reply.code(400).send({ error: 'Informe a senha atual para definir uma nova.' })
-      }
+    // V3.1 FR-V31-PWD-001: senha atual é opcional para usuário já autenticado.
+    // Se enviada, validar; se não enviada, permitir troca direta (já tem JWT válido).
+    if (newPassword && currentPassword) {
       const isValid = await bcrypt.compare(currentPassword, (user as any).passwordHash || '')
       if (!isValid) {
         return reply.code(401).send({ error: 'Senha atual incorreta.' })

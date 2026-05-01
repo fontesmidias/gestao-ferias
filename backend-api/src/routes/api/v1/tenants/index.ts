@@ -90,7 +90,16 @@ const tenants: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     const user = request.user as any
     const payload = request.body as any
 
-    const { openaiKey, anthropicKey, geminiKey, groqKey, llmProvider, llmModel, smtpHost, smtpPort, smtpUser, smtpPass, smtpFrom, evoApiUrl, evoApiKey, evoInstanceName, whatsappEnabled, zapSignToken, brandName, brandPrimaryColor, brandSecondaryColor, brandLogoUrl } = payload
+    const { openaiKey, anthropicKey, geminiKey, groqKey, llmProvider, llmModel, smtpHost, smtpPort, smtpUser, smtpPass, smtpFrom, evoApiUrl, evoApiKey, evoInstanceName, whatsappEnabled, zapSignToken, brandName, brandPrimaryColor, brandSecondaryColor, brandLogoUrl, uf } = payload
+
+    // Validar UF (sigla brasileira)
+    if (uf !== undefined && uf !== null && uf !== '') {
+      const ufUpper = String(uf).toUpperCase()
+      const validUFs = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']
+      if (!validUFs.includes(ufUpper)) {
+        return reply.code(422).send({ error: 'Validation Error', message: `UF inválida: ${uf}` })
+      }
+    }
 
     await fastify.prisma.tenant.update({
       where: { id: user.tenantId },
@@ -115,8 +124,14 @@ const tenants: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         brandPrimaryColor: brandPrimaryColor !== undefined ? brandPrimaryColor : undefined,
         brandSecondaryColor: brandSecondaryColor !== undefined ? brandSecondaryColor : undefined,
         brandLogoUrl: brandLogoUrl !== undefined ? brandLogoUrl : undefined,
+        uf: uf !== undefined ? (uf ? String(uf).toUpperCase() : null) : undefined,
       }
     })
+
+    // Invalidar cache de feriados se UF mudou
+    if (uf !== undefined) {
+      fastify.holidayResolver.invalidateCache(user.tenantId)
+    }
 
     return reply.send({ message: "Configurações atualizadas com sucesso." })
   })
@@ -159,16 +174,80 @@ const tenants: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       brandPrimaryColor: tenant.brandPrimaryColor,
       brandSecondaryColor: tenant.brandSecondaryColor,
       brandLogoUrl: tenant.brandLogoUrl,
+      uf: tenant.uf,
     }
+  })
+
+  // POST /logo — upload da logo do tenant (FR-V31-BRAND-002)
+  // Aceita multipart; salva como data URL no Tenant.brandLogoUrl.
+  // Limites: PNG/JPG/SVG, máx 200KB (NFR-V31-UPLOAD-001).
+  fastify.post('/logo', {
+    onRequest: [fastify.requireAuth, fastify.requireAdmin]
+  }, async (request, reply) => {
+    const user = request.user as any
+    if (!user.tenantId) {
+      return reply.code(422).send({ error: 'No Tenant', message: 'Super Admin não tem tenant próprio. Faça login como admin de um tenant para alterar a logo.' })
+    }
+    try {
+      const data = await request.file()
+      if (!data) {
+        return reply.code(422).send({ error: 'Validation Error', message: 'Arquivo não recebido no campo "file".' })
+      }
+      // Aceita qualquer imagem — permite formatos modernos e legados
+      if (!data.mimetype.startsWith('image/')) {
+        return reply.code(422).send({ error: 'Validation Error', message: `Arquivo não é imagem: ${data.mimetype}` })
+      }
+      const buffer = await data.toBuffer()
+      const MAX_BYTES = 10 * 1024 * 1024 // 10MB
+      if (buffer.length > MAX_BYTES) {
+        return reply.code(422).send({ error: 'Validation Error', message: `Arquivo muito grande (${(buffer.length / 1024 / 1024).toFixed(1)}MB). Máximo 10MB.` })
+      }
+      const dataUrl = `data:${data.mimetype};base64,${buffer.toString('base64')}`
+      await fastify.prisma.tenant.update({
+        where: { id: user.tenantId },
+        data: { brandLogoUrl: dataUrl }
+      })
+      return { brandLogoUrl: dataUrl, size: buffer.length, mimetype: data.mimetype }
+    } catch (err: any) {
+      fastify.log.error({ err }, '[LOGO UPLOAD] Falha')
+      return reply.code(500).send({ error: 'Upload Error', message: err.message || 'Falha ao processar upload.' })
+    }
+  })
+
+  // DELETE /logo — remove logo atual
+  fastify.delete('/logo', {
+    onRequest: [fastify.requireAuth, fastify.requireAdmin]
+  }, async (request, reply) => {
+    const user = request.user as any
+    if (!user.tenantId) return reply.code(404).send({ error: 'Not Found' })
+    await fastify.prisma.tenant.update({
+      where: { id: user.tenantId },
+      data: { brandLogoUrl: null }
+    })
+    return reply.code(204).send()
+  })
+
+  // GET /me — dados básicos do tenant para uso geral no frontend (não inclui secrets)
+  fastify.get('/me', {
+    onRequest: [fastify.requireAuth]
+  }, async (request, reply) => {
+    const user = request.user as any
+    if (!user.tenantId) {
+      return reply.code(404).send({ error: 'Not Found' })
+    }
+    const tenant = await fastify.prisma.tenant.findUnique({
+      where: { id: user.tenantId },
+      select: { id: true, name: true, uf: true, brandName: true, brandLogoUrl: true }
+    })
+    if (!tenant) return reply.code(404).send({ error: 'Not Found' })
+    return tenant
   })
 
   // Testar conexão WhatsApp via Evolution API
   fastify.get('/whatsapp/status', {
     onRequest: [fastify.requireAuth, fastify.requireAdmin]
-  }, async (request, reply) => {
-    const user = request.user as any
-    const result = await WhatsAppService.checkConnection(user.tenantId, fastify.prisma as any)
-    return result
+  }, async () => {
+    return await WhatsAppService.checkConnection(fastify.prisma as any)
   })
 }
 

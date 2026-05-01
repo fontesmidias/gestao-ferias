@@ -143,14 +143,36 @@ const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     const periods = VacationEngine.calculatePeriods(employee.hireDate, 0, employee.balanceOffset)
     const totalBalance = periods.reduce((acc, p) => acc + p.daysOfRight, 0)
 
-    // 2. Validação Legal (Art. 134 CLT)
-    const validation = VacationEngine.validateRequest(start, end, totalBalance)
+    // 2. Buscar frações existentes do mesmo período aquisitivo (CLT Art. 134 §1º)
+    const targetPeriod = periods.find(p => start >= p.startDate && start < p.endDate)
+    const periodDaysOfRight = targetPeriod?.daysOfRight ?? 30
+    const existingRequests = await fastify.prisma.vacationRequest.findMany({
+      where: {
+        employeeId,
+        tenantId,
+        status: { not: 'REJECTED' },
+        startDate: { gte: targetPeriod?.startDate ?? new Date(0) },
+        endDate: { lt: targetPeriod?.endDate ?? new Date('2999-12-31') }
+      },
+      select: { startDate: true, endDate: true, days: true, status: true }
+    })
+
+    // 3. Validação Legal completa (Art. 134 CLT — inclui feriados + fracionamento)
+    const validation = await VacationEngine.validateRequestFull(start, end, totalBalance, {
+      tenantId,
+      resolver: fastify.holidayResolver,
+      fractionContext: {
+        existingFractions: existingRequests,
+        periodDaysOfRight
+      }
+    })
 
     if (!validation.isValid) {
-      return reply.code(400).send({
+      return reply.code(422).send({
         error: 'Legal Block',
         message: 'A solicitação viola regras da CLT (Art. 134).',
-        details: validation.errors
+        details: validation.errors,
+        codes: validation.errorDetails?.map(e => e.code)
       })
     }
 
@@ -356,7 +378,7 @@ const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
           }
 
           // Envio assíncrono — não bloqueia a resposta da API
-          WhatsAppService.sendMessage(tenantId, employee.phone, message, fastify.prisma as any)
+          WhatsAppService.sendMessage(fastify.prisma as any, employee.phone, message, tenantId)
             .catch((err: any) => fastify.log.error(`[WhatsApp] Falha ao notificar ${employee.name}: ${err.message}`))
         }
 
@@ -444,7 +466,7 @@ const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
                 // Enviar link de assinatura via WhatsApp
                 if (emp.phone && firstSigner?.signUrl) {
                   const signMessage = `Seu aviso de férias está pronto para assinatura digital. Acesse o link para assinar: ${firstSigner.signUrl}`
-                  WhatsAppService.sendMessage(tenantId, emp.phone, signMessage, fastify.prisma as any)
+                  WhatsAppService.sendMessage(fastify.prisma as any, emp.phone, signMessage, tenantId)
                     .catch((err: any) => fastify.log.error(`[WhatsApp] Falha ao enviar link de assinatura: ${err.message}`))
                 }
 
@@ -495,7 +517,7 @@ const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       return reply.code(422).send({ error: 'Validation Error', message: 'Máximo 50 itens por requisição.' })
     }
 
-    const results: { employeeId: string; status: 'created' | 'error'; message?: string }[] = []
+    const results: { employeeId: string; status: 'created' | 'error'; message?: string; codes?: string[] }[] = []
     let created = 0
     let errors = 0
 
@@ -514,14 +536,35 @@ const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         const end = parseISO(item.endDate)
         const days = differenceInDays(end, start) + 1
 
-        // Validar CLT
+        // Validar CLT (com fracionamento)
         const periods = VacationEngine.calculatePeriods(employee.hireDate, 0, employee.balanceOffset)
         const totalBalance = periods.reduce((acc: number, p: any) => acc + p.daysOfRight, 0)
-        const validation = VacationEngine.validateRequest(start, end, totalBalance)
+        const targetPeriod = periods.find((p: any) => start >= p.startDate && start < p.endDate)
+        const periodDaysOfRight = targetPeriod?.daysOfRight ?? 30
+        const existingRequests = await fastify.prisma.vacationRequest.findMany({
+          where: {
+            employeeId: item.employeeId,
+            tenantId,
+            status: { not: 'REJECTED' },
+            startDate: { gte: targetPeriod?.startDate ?? new Date(0) },
+            endDate: { lt: targetPeriod?.endDate ?? new Date('2999-12-31') }
+          },
+          select: { startDate: true, endDate: true, days: true, status: true }
+        })
+        const validation = await VacationEngine.validateRequestFull(start, end, totalBalance, {
+          tenantId,
+          resolver: fastify.holidayResolver,
+          fractionContext: { existingFractions: existingRequests, periodDaysOfRight }
+        })
 
         if (!validation.isValid) {
           errors++
-          results.push({ employeeId: item.employeeId, status: 'error', message: validation.errors.join('; ') })
+          results.push({
+            employeeId: item.employeeId,
+            status: 'error',
+            message: validation.errors.join('; '),
+            codes: validation.errorDetails?.map(e => e.code)
+          })
           continue
         }
 
@@ -537,6 +580,60 @@ const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     }
 
     return { created, errors, results }
+  })
+
+  // GET /api/v1/vacations/fractioning/:employeeId — análise para guiar UI
+  // Retorna: estado de fracionamento do aquisitivo atual + feriados/domingos próximos
+  fastify.get('/fractioning/:employeeId', {
+    onRequest: [fastify.requireAuth]
+  }, async (request, reply) => {
+    const { tenantId } = request.user as any
+    const { employeeId } = request.params as { employeeId: string }
+
+    const employee = await fastify.prisma.employee.findFirst({
+      where: { id: employeeId, tenantId }
+    })
+    if (!employee) return reply.code(404).send({ error: 'Not Found' })
+
+    const periods = VacationEngine.calculatePeriods(employee.hireDate, 0, employee.balanceOffset)
+    const today = new Date()
+    const currentPeriod =
+      periods.find((p: any) => today >= p.startDate && today < p.endDate) ||
+      periods[periods.length - 1]
+    if (!currentPeriod) return { analysis: null, period: null, holidaysAhead: [] }
+
+    const existing = await fastify.prisma.vacationRequest.findMany({
+      where: {
+        employeeId,
+        tenantId,
+        status: { not: 'REJECTED' },
+        startDate: { gte: currentPeriod.startDate },
+        endDate: { lt: currentPeriod.endDate }
+      },
+      select: { startDate: true, endDate: true, days: true, status: true }
+    })
+
+    const analysis = VacationEngine.analyzeFractioning(existing, currentPeriod.daysOfRight)
+
+    // Próximos 12 meses de feriados (para o calendário de seleção)
+    const year = today.getFullYear()
+    const [thisYear, nextYear] = await Promise.all([
+      fastify.holidayResolver.getHolidays({ tenantId, year }),
+      fastify.holidayResolver.getHolidays({ tenantId, year: year + 1 })
+    ])
+
+    return {
+      period: {
+        startDate: currentPeriod.startDate,
+        endDate: currentPeriod.endDate,
+        concessiveEndDate: currentPeriod.concessiveEndDate,
+        daysOfRight: currentPeriod.daysOfRight,
+        status: currentPeriod.status
+      },
+      analysis,
+      existingFractions: existing,
+      holidaysAhead: [...thisYear, ...nextYear].filter(h => h.date >= today.toISOString().slice(0, 10))
+    }
   })
 }
 

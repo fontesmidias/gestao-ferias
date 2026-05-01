@@ -45,8 +45,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const userData = await HttpClient.get('/auth/me')
       setUser(userData)
       setIsImpersonating(!!localStorage.getItem('adminToken'))
-    } catch (err) {
-      console.error('Failed to fetch user:', err)
+    } catch (err: any) {
+      // 401 = sessão expirada/inválida — fluxo esperado, não logar como erro.
+      if (err?.status !== 401 && err?.status !== 403) {
+        console.error('Failed to fetch user:', err)
+      }
       localStorage.removeItem('token')
       localStorage.removeItem('refreshToken')
       setUser(null)

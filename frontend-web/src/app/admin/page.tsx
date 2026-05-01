@@ -5,8 +5,9 @@ import { HttpClient } from '@/lib/api-client'
 import Link from 'next/link'
 import {
   Shield, Building2, Users, UserPlus, X, Edit3, Plus,
-  Briefcase, CalendarDays, Eye, LogIn, Trash2, UserCog, KeyRound, AlertTriangle, Power, Mail
+  Briefcase, CalendarDays, Eye, LogIn, Trash2, UserCog, KeyRound, AlertTriangle, Power, Mail, MessageSquare, Send, CheckCircle2, Loader2
 } from 'lucide-react'
+import { PasswordInput } from '@/components/PasswordInput'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { toast } from 'sonner'
 import { useAuth } from '@/components/AuthContext'
@@ -68,12 +69,25 @@ export default function AdminPage() {
   }>({ enabled: false, hasKey: false, preview: null, updatedAt: null })
   const [generatedKey, setGeneratedKey] = useState<string | null>(null)
   const [masterKeyLoading, setMasterKeyLoading] = useState(false)
+  const [customMasterKeyInput, setCustomMasterKeyInput] = useState('')
 
   // SMTP global
   const [showSmtpPanel, setShowSmtpPanel] = useState(false)
   const [smtpForm, setSmtpForm] = useState({ smtpHost: '', smtpPort: '', smtpUser: '', smtpPass: '', smtpFrom: '' })
   const [smtpConfigured, setSmtpConfigured] = useState(false)
   const [savingSmtp, setSavingSmtp] = useState(false)
+  const [showSmtpTest, setShowSmtpTest] = useState(false)
+  const [smtpTestEmail, setSmtpTestEmail] = useState('')
+  const [smtpTesting, setSmtpTesting] = useState(false)
+
+  // Evolution global (V3.1)
+  const [showEvoPanel, setShowEvoPanel] = useState(false)
+  const [evoForm, setEvoForm] = useState({ evoApiUrl: '', evoApiKey: '', evoInstanceName: '' })
+  const [evoConfigured, setEvoConfigured] = useState(false)
+  const [savingEvo, setSavingEvo] = useState(false)
+  const [showEvoTest, setShowEvoTest] = useState(false)
+  const [evoTestPhone, setEvoTestPhone] = useState('')
+  const [evoTesting, setEvoTesting] = useState(false)
 
   useEffect(() => {
     if (user?.role === 'SUPERADMIN') {
@@ -106,13 +120,17 @@ export default function AdminPage() {
     }
   }
 
-  const generateMasterKey = async () => {
-    if (!confirm('Gerar nova MasterKey? A anterior sera substituida.')) return
+  const generateMasterKey = async (customKey?: string) => {
+    const isCustom = !!(customKey && customKey.trim())
+    if (!confirm(isCustom
+      ? 'Definir esta MasterKey customizada? A anterior será substituída.'
+      : 'Gerar nova MasterKey aleatória? A anterior será substituída.')) return
     try {
       setMasterKeyLoading(true)
-      const result = await HttpClient.post('/admin/master-key/generate', {})
+      const result = await HttpClient.post('/admin/master-key/generate', isCustom ? { customKey: customKey!.trim() } : {})
       setGeneratedKey(result.key)
-      toast.success('MasterKey gerada! Copie e guarde em local seguro.')
+      toast.success(isCustom ? 'MasterKey customizada salva!' : 'MasterKey gerada! Copie e guarde em local seguro.')
+      setCustomMasterKeyInput('')
       await fetchMasterKeyStatus()
     } catch (err: any) {
       toast.error(err.message || 'Erro ao gerar MasterKey.')
@@ -179,10 +197,79 @@ export default function AdminPage() {
       await HttpClient.patch('/admin/smtp', payload)
       toast.success('SMTP global atualizado!')
       setSmtpConfigured(true)
+      setShowSmtpPanel(false) // FR-V31-CRED-003 — fecha automaticamente após save
     } catch (err: any) {
       toast.error(err.message || 'Erro ao salvar SMTP.')
     } finally {
       setSavingSmtp(false)
+    }
+  }
+
+  // FR-V31-CRED-002 — Testar conexão SMTP enviando e-mail real
+  const runSmtpTest = async () => {
+    if (!smtpTestEmail) return
+    setSmtpTesting(true)
+    try {
+      const result = await HttpClient.post('/admin/smtp/test', { to: smtpTestEmail }) as { ok: boolean; message: string; durationMs: number }
+      if (result.ok) {
+        toast.success(`E-mail entregue para ${smtpTestEmail} em ${result.durationMs}ms`)
+        setShowSmtpTest(false)
+        setSmtpTestEmail('')
+      } else {
+        toast.error(`Falha: ${result.message}`)
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Falha ao testar SMTP.')
+    } finally {
+      setSmtpTesting(false)
+    }
+  }
+
+  // FR-V31-CRED-001/003/004 — Painel Evolution Global
+  const openEvoPanel = async () => {
+    try {
+      const data = await HttpClient.get('/admin/evolution')
+      setEvoForm({
+        evoApiUrl: data.evoApiUrl || '',
+        evoApiKey: data.evoApiKey || '',
+        evoInstanceName: data.evoInstanceName || ''
+      })
+      setEvoConfigured(data.configured || false)
+    } catch { /* silent */ }
+    setShowEvoPanel(true)
+  }
+
+  const saveEvo = async () => {
+    setSavingEvo(true)
+    try {
+      await HttpClient.patch('/admin/evolution', evoForm)
+      toast.success('Evolution global atualizado!')
+      setEvoConfigured(true)
+      setShowEvoPanel(false)
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao salvar Evolution.')
+    } finally {
+      setSavingEvo(false)
+    }
+  }
+
+  // FR-V31-CRED-004 — Testar Evolution enviando WhatsApp real
+  const runEvoTest = async () => {
+    if (!evoTestPhone) return
+    setEvoTesting(true)
+    try {
+      const result = await HttpClient.post('/admin/evolution/test', { to: evoTestPhone }) as { ok: boolean; status?: number; error?: string }
+      if (result.ok) {
+        toast.success(`Mensagem WhatsApp enviada para ${evoTestPhone}`)
+        setShowEvoTest(false)
+        setEvoTestPhone('')
+      } else {
+        toast.error(`Falha: ${result.error || 'erro desconhecido'}`)
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Falha ao testar Evolution.')
+    } finally {
+      setEvoTesting(false)
     }
   }
 
@@ -354,31 +441,16 @@ export default function AdminPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={openSmtpPanel}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm transition-colors border ${
-              smtpConfigured
-                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
-                : 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
-            }`}
+          <Link
+            href="/admin/credentials"
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-500/10 text-indigo-300 rounded-xl hover:bg-indigo-500/20 font-bold text-sm transition-colors border border-indigo-500/20"
+            title="SMTP, Evolution e MasterKey"
           >
-            <Mail className="w-4 h-4" /> SMTP
-          </button>
-          <button
-            onClick={openMasterKeyPanel}
-            className="relative flex items-center gap-2 px-4 py-2 bg-rose-500/10 text-rose-400 rounded-xl hover:bg-rose-500/20 font-bold text-sm transition-colors border border-rose-500/20"
-          >
-            <KeyRound className="w-4 h-4" /> MasterKey
+            <KeyRound className="w-4 h-4" /> Credenciais
             {hasRecentMasterKey && (
-              <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-rose-500 animate-pulse" />
+              <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" title="Master Key usada recentemente" />
             )}
-          </button>
-          <button
-            onClick={openProfileModal}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-700/50 text-slate-300 rounded-xl hover:bg-slate-700 font-bold text-sm transition-colors border border-white/10"
-          >
-            <UserCog className="w-4 h-4" /> Meu Perfil
-          </button>
+          </Link>
         </div>
         </div>
 
@@ -676,8 +748,7 @@ export default function AdminPage() {
                   Nova Senha
                   <InfoTooltip text="Deixe em branco para manter a senha atual." />
                 </label>
-                <input
-                  type="password"
+                <PasswordInput
                   value={profileForm.password}
                   onChange={(e) => setProfileForm({ ...profileForm, password: e.target.value })}
                   placeholder="Deixe em branco para não alterar"
@@ -744,11 +815,12 @@ export default function AdminPage() {
 
                 <div className="flex flex-wrap gap-2">
                   <button
-                    onClick={generateMasterKey}
+                    onClick={() => generateMasterKey()}
                     disabled={masterKeyLoading}
                     className="px-4 py-2 bg-primary text-white rounded-xl hover:bg-primary/80 font-bold text-xs transition-colors disabled:opacity-50"
+                    title="Gera uma chave aleatória de 64 caracteres hex"
                   >
-                    {masterKeyStatus.hasKey ? 'Rotacionar Chave' : 'Gerar MasterKey'}
+                    {masterKeyStatus.hasKey ? 'Rotacionar Chave (auto)' : 'Gerar MasterKey (auto)'}
                   </button>
 
                   {masterKeyStatus.hasKey && (
@@ -773,6 +845,30 @@ export default function AdminPage() {
                       </button>
                     </>
                   )}
+                </div>
+
+                {/* Definir MasterKey customizada (digitada pelo Super Admin) */}
+                <div className="mt-4 p-3 bg-slate-900/50 border border-white/5 rounded-xl">
+                  <p className="text-xs font-bold text-slate-400 mb-2 flex items-center gap-1.5">
+                    <KeyRound className="w-3.5 h-3.5 text-indigo-400" /> Ou defina uma MasterKey manual
+                    <InfoTooltip text="Use se você quer escolher a chave em vez de aceitar a gerada automaticamente. Mínimo 16 caracteres." />
+                  </p>
+                  <div className="flex gap-2">
+                    <PasswordInput
+                      value={customMasterKeyInput}
+                      onChange={(e) => setCustomMasterKeyInput(e.target.value)}
+                      placeholder="Mínimo 16 caracteres (ex: minha-chave-super-secreta-2026)"
+                      minLength={16}
+                      className="flex-1 bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                    />
+                    <button
+                      onClick={() => generateMasterKey(customMasterKeyInput)}
+                      disabled={masterKeyLoading || customMasterKeyInput.trim().length < 16}
+                      className="px-3 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 font-bold text-xs disabled:opacity-40 shrink-0"
+                    >
+                      Salvar Manual
+                    </button>
+                  </div>
                 </div>
 
                 {/* Chave gerada (exibida apenas uma vez) */}
@@ -898,8 +994,7 @@ export default function AdminPage() {
                   Senha *
                   <InfoTooltip text="Senha inicial. O usuário poderá alterar depois." />
                 </label>
-                <input
-                  type="password"
+                <PasswordInput
                   value={userForm.password}
                   onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
                   className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none"
@@ -983,7 +1078,7 @@ export default function AdminPage() {
               </div>
               <div>
                 <label className="block text-sm font-bold text-slate-400 mb-1">Senha</label>
-                <input type="password" value={smtpForm.smtpPass} onChange={(e) => setSmtpForm({ ...smtpForm, smtpPass: e.target.value })}
+                <PasswordInput value={smtpForm.smtpPass} onChange={(e) => setSmtpForm({ ...smtpForm, smtpPass: e.target.value })}
                   placeholder="App Password ou senha SMTP"
                   className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none" />
               </div>
@@ -997,9 +1092,148 @@ export default function AdminPage() {
             <div className="flex gap-3 mt-6">
               <button onClick={() => setShowSmtpPanel(false)}
                 className="flex-1 py-2.5 border border-white/10 text-slate-400 rounded-xl hover:bg-white/5 font-bold text-sm">Cancelar</button>
+              <button
+                onClick={() => setShowSmtpTest(true)}
+                disabled={!smtpConfigured && !smtpForm.smtpHost}
+                title="Envia um e-mail real usando esta configuração"
+                className="flex items-center justify-center gap-2 py-2.5 px-4 border border-emerald-500/30 text-emerald-400 rounded-xl hover:bg-emerald-500/10 font-bold text-sm disabled:opacity-50">
+                <Send className="w-4 h-4" />
+                Testar
+              </button>
               <button onClick={saveSmtp} disabled={savingSmtp || !smtpForm.smtpHost || !smtpForm.smtpUser}
                 className="flex-1 py-2.5 bg-primary text-white rounded-xl hover:bg-primary/80 font-bold text-sm disabled:opacity-50">
                 {savingSmtp ? 'Salvando...' : 'Salvar SMTP'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pop-up: Testar SMTP */}
+      {showSmtpTest && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[60]">
+          <div className="bg-slate-800 border border-white/10 rounded-2xl p-6 w-full max-w-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Send className="w-4 h-4 text-emerald-400" /> Teste SMTP
+              </h3>
+              <button onClick={() => setShowSmtpTest(false)} className="text-slate-400 hover:text-white">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-sm text-slate-400 mb-4">
+              Enviaremos um e-mail real para o destino abaixo usando a configuração SMTP atual.
+            </p>
+            <input
+              type="email"
+              value={smtpTestEmail}
+              onChange={(e) => setSmtpTestEmail(e.target.value)}
+              placeholder="seu-email@empresa.com"
+              className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none mb-4"
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <button onClick={() => setShowSmtpTest(false)}
+                className="flex-1 py-2 border border-white/10 text-slate-400 rounded-xl hover:bg-white/5 text-sm">Cancelar</button>
+              <button
+                onClick={runSmtpTest}
+                disabled={smtpTesting || !smtpTestEmail}
+                className="flex-1 py-2 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 text-sm font-bold disabled:opacity-50 flex items-center justify-center gap-2">
+                {smtpTesting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                {smtpTesting ? 'Enviando...' : 'Enviar Teste'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Evolution Global (V3.1) */}
+      {showEvoPanel && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-slate-800 border border-white/10 rounded-2xl p-6 w-full max-w-lg">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <MessageSquare className="w-5 h-5 text-emerald-400" /> Evolution / WhatsApp Global
+              </h2>
+              <button onClick={() => setShowEvoPanel(false)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-sm text-slate-400 mb-6">
+              Configure a Evolution API global para envio de mensagens WhatsApp (assinatura digital, lembretes).
+            </p>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-slate-400 mb-1">URL da API</label>
+                <input type="text" value={evoForm.evoApiUrl} onChange={(e) => setEvoForm({ ...evoForm, evoApiUrl: e.target.value })}
+                  placeholder="https://evo.empresa.com"
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none" />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-slate-400 mb-1">API Key</label>
+                <PasswordInput value={evoForm.evoApiKey} onChange={(e) => setEvoForm({ ...evoForm, evoApiKey: e.target.value })}
+                  placeholder="••••••••"
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none" />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-slate-400 mb-1">Nome da Instância</label>
+                <input type="text" value={evoForm.evoInstanceName} onChange={(e) => setEvoForm({ ...evoForm, evoInstanceName: e.target.value })}
+                  placeholder="instance01"
+                  className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none" />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button onClick={() => setShowEvoPanel(false)}
+                className="flex-1 py-2.5 border border-white/10 text-slate-400 rounded-xl hover:bg-white/5 font-bold text-sm">Cancelar</button>
+              <button
+                onClick={() => setShowEvoTest(true)}
+                disabled={!evoConfigured && !evoForm.evoApiUrl}
+                title="Envia mensagem WhatsApp real para validar"
+                className="flex items-center justify-center gap-2 py-2.5 px-4 border border-emerald-500/30 text-emerald-400 rounded-xl hover:bg-emerald-500/10 font-bold text-sm disabled:opacity-50">
+                <Send className="w-4 h-4" />
+                Testar
+              </button>
+              <button onClick={saveEvo} disabled={savingEvo || !evoForm.evoApiUrl || !evoForm.evoInstanceName}
+                className="flex-1 py-2.5 bg-primary text-white rounded-xl hover:bg-primary/80 font-bold text-sm disabled:opacity-50">
+                {savingEvo ? 'Salvando...' : 'Salvar Evolution'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pop-up: Testar Evolution */}
+      {showEvoTest && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[60]">
+          <div className="bg-slate-800 border border-white/10 rounded-2xl p-6 w-full max-w-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Send className="w-4 h-4 text-emerald-400" /> Teste Evolution
+              </h3>
+              <button onClick={() => setShowEvoTest(false)} className="text-slate-400 hover:text-white">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-sm text-slate-400 mb-4">
+              Enviaremos uma mensagem real para o número abaixo. Pode digitar com ou sem DDD/máscara — vamos normalizar.
+            </p>
+            <input
+              type="tel"
+              value={evoTestPhone}
+              onChange={(e) => setEvoTestPhone(e.target.value)}
+              placeholder="(61) 99999-9999"
+              className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-primary focus:outline-none mb-4"
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <button onClick={() => setShowEvoTest(false)}
+                className="flex-1 py-2 border border-white/10 text-slate-400 rounded-xl hover:bg-white/5 text-sm">Cancelar</button>
+              <button
+                onClick={runEvoTest}
+                disabled={evoTesting || !evoTestPhone}
+                className="flex-1 py-2 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 text-sm font-bold disabled:opacity-50 flex items-center justify-center gap-2">
+                {evoTesting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                {evoTesting ? 'Enviando...' : 'Enviar Teste'}
               </button>
             </div>
           </div>

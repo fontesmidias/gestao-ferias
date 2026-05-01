@@ -10,7 +10,8 @@ services:
     profiles: ["never"]  # desabilita serviço — usa gv-redis do host
 
   backend:
-    depends_on: []  # remove depends de postgres/redis pois não sobem
+    depends_on: !reset null  # remove depends de postgres/redis pois não sobem
+
     extra_hosts:
       - "host.docker.internal:host-gateway"  # Linux compat (Docker Desktop já tem)
     environment:
