@@ -1,0 +1,20 @@
+# Override local — reusa containers gv-postgres e gv-redis já rodando no host
+# (do projeto gestao-vagas). Banco "gestaoferias" criado em 2026-05-01 no gv-postgres.
+# Não sobe novos containers de DB/Redis. Compose só sobe backend + frontend.
+
+services:
+  postgres:
+    profiles: ["never"]  # desabilita serviço — usa gv-postgres do host
+
+  redis:
+    profiles: ["never"]  # desabilita serviço — usa gv-redis do host
+
+  backend:
+    depends_on: []  # remove depends de postgres/redis pois não sobem
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # Linux compat (Docker Desktop já tem)
+    environment:
+      DATABASE_URL: "postgresql://admin:adminpassword@host.docker.internal:5433/gestaoferias?schema=public"
+      REDIS_HOST: "host.docker.internal"
+      REDIS_PORT: "6379"
+      BANK_DATA_ENCRYPTION_KEY: "${BANK_DATA_ENCRYPTION_KEY:-5JtP44Gz4XwhPUi0NCxOOeqgdZtZ18FrQsXkuiXYvwg=}"
