@@ -232,3 +232,12 @@ export interface CleanupResult {
   filesRemoved: number
   dbUpdated: number
 }
+
+// ===========================================================================
+// Story 3.1 — worker + watchdog
+// ===========================================================================
+
+export interface WatchdogResult {
+  cancelled?: number
+  timedOut?: number
+}
