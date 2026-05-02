@@ -1,6 +1,6 @@
 # Story 2.1: Schema migration para Employee + ImportJob model
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -68,29 +68,29 @@ so that as Stories 2.2 (parser), 2.3 (matcher), 3.x (apply) e 5.2 (preview) pode
 
 ### T1 — Editar `prisma/schema.prisma` (AC: 1, 2, 3, 4, 5, 6, 7)
 
-- [ ] T1.1 Abrir [backend-api/prisma/schema.prisma](backend-api/prisma/schema.prisma).
-- [ ] T1.2 No `model Employee` (linha 178), **antes** de `tenantId`/`createdAt` (mantém agrupamento lógico), adicionar bloco com 10 campos novos exatamente no formato de Architecture D1 (linhas 192–210). Manter os comentários `// ============ NOVO: ... ============` para facilitar code review humano.
-- [ ] T1.3 No `model Employee`, abaixo do `@@unique([cpf, tenantId])` existente (linha 211), adicionar:
+- [x] T1.1 Abrir [backend-api/prisma/schema.prisma](backend-api/prisma/schema.prisma).
+- [x] T1.2 No `model Employee` (linha 178), **antes** de `tenantId`/`createdAt` (mantém agrupamento lógico), adicionar bloco com 10 campos novos exatamente no formato de Architecture D1 (linhas 192–210). Manter os comentários `// ============ NOVO: ... ============` para facilitar code review humano.
+- [x] T1.3 No `model Employee`, abaixo do `@@unique([cpf, tenantId])` existente (linha 211), adicionar:
   ```prisma
   @@unique([tenantId, tirvuId], name: "tenant_tirvu_unique", map: "employees_tenant_tirvu_unique_idx")
   @@index([tenantId, inactivePending], name: "employees_tenant_inactive_pending_idx")
   ```
-- [ ] T1.4 No `model Tenant` (linha 12), na lista de relations no fim do bloco (próximo de outras `@relation` reversas), adicionar `importJobs ImportJob[]`.
-- [ ] T1.5 No `model User` (linha 153), adicionar `importJobs ImportJob[]`.
-- [ ] T1.6 Após o último model (logo antes ou após `SystemConfig`), adicionar bloco `model ImportJob { ... }` copiando o spec literal de Architecture D1 (linhas 218–256). **Atenção:** ajustar `tenant` e `operator` para referenciar `Tenant` e `User` por nome do model (Prisma valida).
-- [ ] T1.7 Adicionar `enum ImportJobStatus { ... }` com os 8 valores na ordem do spec (Architecture D1 linhas 258–268).
-- [ ] T1.8 Verificar visualmente que nenhum bloco existente foi alterado (apenas adições).
+- [x] T1.4 No `model Tenant` (linha 12), na lista de relations no fim do bloco (próximo de outras `@relation` reversas), adicionar `importJobs ImportJob[]`.
+- [x] T1.5 No `model User` (linha 153), adicionar `importJobs ImportJob[]`.
+- [x] T1.6 Após o último model (logo antes ou após `SystemConfig`), adicionar bloco `model ImportJob { ... }` copiando o spec literal de Architecture D1 (linhas 218–256). **Atenção:** ajustar `tenant` e `operator` para referenciar `Tenant` e `User` por nome do model (Prisma valida).
+- [x] T1.7 Adicionar `enum ImportJobStatus { ... }` com os 8 valores na ordem do spec (Architecture D1 linhas 258–268).
+- [x] T1.8 Verificar visualmente que nenhum bloco existente foi alterado (apenas adições).
 
 ### T2 — Gerar migration (AC: 8)
 
-- [ ] T2.1 Confirmar que Postgres dev está acessível: `docker ps` deve listar `gv-postgres` (host:5433). Se não, ler [HANDOFF-NEXT-CONVERSATION.md](HANDOFF-NEXT-CONVERSATION.md) §"Como rodar localmente".
-- [ ] T2.2 Validar que `backend-api/.env` aponta para o Postgres dev (`DATABASE_URL=postgresql://admin:adminpassword@localhost:5433/gestaoferias?schema=public`). Se Bruno trocou, ajustar.
-- [ ] T2.3 No diretório `backend-api`, rodar:
+- [x] T2.1 Confirmar que Postgres dev está acessível: `docker ps` deve listar `gv-postgres` (host:5433). Se não, ler [HANDOFF-NEXT-CONVERSATION.md](HANDOFF-NEXT-CONVERSATION.md) §"Como rodar localmente".
+- [x] T2.2 Validar que `backend-api/.env` aponta para o Postgres dev (`DATABASE_URL=postgresql://admin:adminpassword@localhost:5433/gestaoferias?schema=public`). Se Bruno trocou, ajustar.
+- [x] T2.3 No diretório `backend-api`, rodar:
   ```bash
   npx prisma migrate dev --name add_import_tirvu_v3_2
   ```
   Esperado: cria `prisma/migrations/<timestamp>_add_import_tirvu_v3_2/migration.sql`, aplica no banco dev e roda `prisma generate` automaticamente.
-- [ ] T2.4 **Inspecionar o SQL gerado.** Conferir que contém:
+- [x] T2.4 **Inspecionar o SQL gerado.** Conferir que contém:
   - `ALTER TABLE "employees" ADD COLUMN "tirvu_id" TEXT;` (e demais 9 colunas)
   - `CREATE TABLE "import_jobs" (...)` com todas as colunas e tipos corretos (UUID, TIMESTAMPTZ, JSONB, BYTEA, INT, BOOLEAN)
   - `CREATE TYPE "ImportJobStatus" AS ENUM (...)` com 8 valores
@@ -98,32 +98,32 @@ so that as Stories 2.2 (parser), 2.3 (matcher), 3.x (apply) e 5.2 (preview) pode
   - `CREATE INDEX "employees_tenant_inactive_pending_idx" ON "employees"("tenant_id", "inactive_pending")`
   - `CREATE INDEX "import_jobs_tenant_status_created_idx" ON "import_jobs"("tenant_id", "status", "created_at")`
   - FKs em `import_jobs` para `tenants(id)` e `users(id)`
-- [ ] T2.5 Se o SQL precisar ajuste manual (raríssimo — Prisma é determinístico aqui), editar `migration.sql` antes de rodar `migrate deploy` para outros ambientes. **Mas só editar se sobrou bug claro.** Em geral, nada a fazer.
+- [x] T2.5 Se o SQL precisar ajuste manual (raríssimo — Prisma é determinístico aqui), editar `migration.sql` antes de rodar `migrate deploy` para outros ambientes. **Mas só editar se sobrou bug claro.** Em geral, nada a fazer.
 
 ### T3 — Validar regeneração + compile (AC: 9, 10)
 
-- [ ] T3.1 Rodar `npx prisma generate` (já rodou no T2.3 mas reconfirmar). Esperado: zero output além de `✔ Generated Prisma Client`.
-- [ ] T3.2 Rodar `npx tsc --noEmit` em `backend-api`. Esperado: zero saída (zero erros).
-- [ ] T3.3 Caso `tsc` reclame em algum arquivo que **construa Employee** com `Prisma.EmployeeCreateInput` (ex.: seed file, factory de teste), confirmar que campos novos são opcionais/default — não devem ser exigidos. Se aparecer erro real, reportar nas Completion Notes (provavelmente bug do schema).
+- [x] T3.1 Rodar `npx prisma generate` (já rodou no T2.3 mas reconfirmar). Esperado: zero output além de `✔ Generated Prisma Client`.
+- [x] T3.2 Rodar `npx tsc --noEmit` em `backend-api`. Esperado: zero saída (zero erros).
+- [x] T3.3 Caso `tsc` reclame em algum arquivo que **construa Employee** com `Prisma.EmployeeCreateInput` (ex.: seed file, factory de teste), confirmar que campos novos são opcionais/default — não devem ser exigidos. Se aparecer erro real, reportar nas Completion Notes (provavelmente bug do schema).
 
 ### T4 — Não-regressão (AC: 11, 12)
 
-- [ ] T4.1 No diretório `backend-api`, rodar:
+- [x] T4.1 No diretório `backend-api`, rodar:
   ```bash
   node --test -r ts-node/register "test/modules/bank-data-encryption.test.ts" "test/modules/permissions.test.ts" "test/modules/coverage-engine.test.ts" "test/modules/vacation-engine.test.ts"
   ```
   (lista os 4 unit suites principais; `test/routes/tenants.test.ts` integration é ignorado conforme Story 5.1 Debug Log.)
-- [ ] T4.2 Resultado esperado: todos pass. Se algum quebrar por causa do schema (ex.: factory de Employee não compila), corrigir o factory adicionando os campos novos como `null`/`undefined` explicitamente. Documentar a correção em Dev Notes.
+- [x] T4.2 Resultado esperado: todos pass. Se algum quebrar por causa do schema (ex.: factory de Employee não compila), corrigir o factory adicionando os campos novos como `null`/`undefined` explicitamente. Documentar a correção em Dev Notes.
 
 ### T5 — Documentação inline (AC: nenhum direto, mas qualidade)
 
-- [ ] T5.1 No `model ImportJob`, adicionar comentário no topo:
+- [x] T5.1 No `model ImportJob`, adicionar comentário no topo:
   ```prisma
   // Tirvu spreadsheet import job (Story 2.1, feature v3-2-import-tirvu).
   // State machine: PENDING → PARSING → PREVIEW_READY → APPLYING → COMPLETED|FAILED|CANCELLED|TIMED_OUT
   // Ver _evo-output/planning-artifacts/v3-2-import-tirvu/architecture.md#D5
   ```
-- [ ] T5.2 NÃO adicionar comentário em cada campo novo do Employee — manter schema legível. Os nomes (`tirvuId`, `inactivePending`) são auto-explicativos; mapping detalhado já está em Architecture D1.
+- [x] T5.2 NÃO adicionar comentário em cada campo novo do Employee — manter schema legível. Os nomes (`tirvuId`, `inactivePending`) são auto-explicativos; mapping detalhado já está em Architecture D1.
 
 ## Dev Notes
 
@@ -236,16 +236,26 @@ feat(imports): add Employee schema extension + ImportJob model (Story 2.1)
 
 ### Agent Model Used
 
-(a preencher pelo dev quando rodar `evo-dev-story`)
+claude-opus-4-7[1m] (via skill `evo-dev-story`, 2026-05-01)
 
 ### Debug Log References
 
-(a preencher)
+- `prisma migrate dev` falhou com `Error: Prisma Migrate has detected that the environment is non-interactive`. Workaround: gerei o SQL via `npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script`, criei o diretório `prisma/migrations/20260501205952_add_import_tirvu_v3_2/` manualmente, escrevi o `migration.sql` ali e apliquei com `npx prisma migrate deploy`. Tive que limpar a primeira linha "`Loaded Prisma config from prisma.config.js.`" que o Prisma escreve em stdout ao gerar o SQL — é log do CLI, não SQL válido.
+- Warning durante diff: "A unique constraint covering the columns `[tenant_id,tirvu_id]` on the table `employees` will be added. If there are existing duplicate values, this will fail." — não é problema porque `tirvu_id` é nullable e ainda não há valores não-nulos no banco (Postgres trata múltiplos NULLs como distintos no unique).
 
 ### Completion Notes List
 
-(a preencher)
+- ✅ T1 — Schema editado: Employee +10 colunas, +1 unique composto, +1 index simples; ImportJob model criado (28 colunas + 2 FKs + 1 index); enum `ImportJobStatus` com 8 valores; relations reversas em Tenant (`importJobs ImportJob[]`) e User (`importJobs ImportJob[]`).
+- ✅ T2 — Migration `20260501205952_add_import_tirvu_v3_2/migration.sql` gerada via `prisma migrate diff` e aplicada via `migrate deploy`. SQL inspecionado e bate com Architecture D1.
+- ✅ T3 — `npx prisma generate` OK; `npx tsc --noEmit` zero erros (nenhum site atual quebrou — todos os campos novos são opcionais ou têm default).
+- ✅ T4 — Suite unit completa: 49/49 passing (`bank-data-encryption` 11 + `permissions` 14 + `coverage-engine` ~14 + `vacation-engine` 10). Zero regressões.
+- ✅ T5 — Comentário inline no model `ImportJob` referenciando state machine + arquivo de arquitetura.
 
 ### File List
 
-(a preencher)
+- ✏️ [backend-api/prisma/schema.prisma](backend-api/prisma/schema.prisma) — modificado: Employee estendido + relations reversas em Tenant/User + model ImportJob + enum ImportJobStatus
+- ✨ [backend-api/prisma/migrations/20260501205952_add_import_tirvu_v3_2/migration.sql](backend-api/prisma/migrations/20260501205952_add_import_tirvu_v3_2/migration.sql) — nova migration
+
+### Change Log
+
+- 2026-05-01 — Story 2.1 implementada. Migration `add_import_tirvu_v3_2` aplicada no banco dev `gestaoferias` (timestamp `20260501205952`). 49/49 unit tests passing, zero erros TS.

@@ -65,6 +65,7 @@ model Tenant {
   workplaceAllocations WorkplaceAllocation[]
   coverageAssignments  CoverageAssignment[]
   holidays             TenantHoliday[]
+  importJobs           ImportJob[]
 
   @@map("tenants")
 }
@@ -170,6 +171,7 @@ model User {
   auditLogs     AuditLog[]
   refreshTokens RefreshToken[]
   employee      Employee?
+  importJobs    ImportJob[]
 
   @@unique([email, tenantId])
   @@map("users")
@@ -198,6 +200,27 @@ model Employee {
   balanceOffset Int     @default(0) @map("balance_offset")
   userId        String?  @unique @map("user_id") @db.Uuid
   tenantId      String   @map("tenant_id") @db.Uuid
+
+  // ============ NOVO: Tirvu external ID (Story 2.1) ============
+  tirvuId        String?  @map("tirvu_id")
+
+  // ============ NOVO: dados pessoais expandidos ============
+  personalData   Json?    @map("personal_data")
+
+  // ============ NOVO: endereço estruturado ============
+  address        Json?
+
+  // ============ NOVO: dados bancários CRIPTOGRAFADOS (AES-256-GCM, ver Story 5.1) ============
+  bankDataEnc    Bytes?   @map("bank_data_enc")
+  bankDataIv     Bytes?   @map("bank_data_iv")
+  bankDataTag    Bytes?   @map("bank_data_tag")
+
+  // ============ NOVO: misc ============
+  unionName        String?   @map("union_name")
+  geofencingFlags  Json?     @map("geofencing_flags")
+  inactivePending  Boolean   @default(false) @map("inactive_pending")
+  terminationDate  DateTime? @map("termination_date")
+
   createdAt     DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -209,6 +232,8 @@ model Employee {
   coveragesAsReplacement CoverageAssignment[] @relation("CoverageReplacement")
 
   @@unique([cpf, tenantId])
+  @@unique([tenantId, tirvuId], name: "tenant_tirvu_unique", map: "employees_tenant_tirvu_unique_idx")
+  @@index([tenantId, inactivePending], name: "employees_tenant_inactive_pending_idx")
   @@map("employees")
 }
 
@@ -411,4 +436,58 @@ model SystemConfig {
   updatedAt DateTime @updatedAt
 
   @@map("system_config")
+}
+
+// Tirvu spreadsheet import job (Story 2.1, feature v3-2-import-tirvu).
+// State machine: PENDING → PARSING → PREVIEW_READY → APPLYING → COMPLETED|FAILED|CANCELLED|TIMED_OUT
+// Ver _evo-output/planning-artifacts/v3-2-import-tirvu/architecture.md#D5
+model ImportJob {
+  id                  String    @id @default(uuid()) @db.Uuid
+  tenantId            String    @map("tenant_id") @db.Uuid
+  operatorUserId      String    @map("operator_user_id") @db.Uuid
+
+  status              ImportJobStatus @default(PENDING)
+  parserVersion       String    @default("tirvu-v1") @map("parser_version")
+
+  filename            String
+  fileSize            Int       @map("file_size")
+  fileHash            String    @map("file_hash")
+  storagePath         String    @map("storage_path")
+
+  totalRows           Int?      @map("total_rows")
+  rowsProcessed       Int       @default(0) @map("rows_processed")
+  rowsCreated         Int       @default(0) @map("rows_created")
+  rowsUpdated         Int       @default(0) @map("rows_updated")
+  rowsInvalid         Int       @default(0) @map("rows_invalid")
+  rowsAbsent          Int       @default(0) @map("rows_absent")
+  workplacesCreated   Int       @default(0) @map("workplaces_created")
+
+  previewSummary      Json?     @map("preview_summary")
+  errorReportPath     String?   @map("error_report_path")
+
+  failureReason       String?   @map("failure_reason")
+  ipAddress           String?   @map("ip_address")
+  userAgent           String?   @map("user_agent")
+
+  createdAt           DateTime  @default(now()) @map("created_at")
+  parsedAt            DateTime? @map("parsed_at")
+  appliedAt           DateTime? @map("applied_at")
+  completedAt         DateTime? @map("completed_at")
+
+  tenant              Tenant    @relation(fields: [tenantId], references: [id])
+  operator            User      @relation(fields: [operatorUserId], references: [id])
+
+  @@index([tenantId, status, createdAt], name: "import_jobs_tenant_status_created_idx")
+  @@map("import_jobs")
+}
+
+enum ImportJobStatus {
+  PENDING
+  PARSING
+  PREVIEW_READY
+  APPLYING
+  COMPLETED
+  FAILED
+  CANCELLED
+  TIMED_OUT
 }
