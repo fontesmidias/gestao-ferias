@@ -30,6 +30,13 @@ jobs:
       DATABASE_URL: postgresql://admin:adminpassword@localhost:5432/gestaoferias?schema=public
       JWT_SECRET: ci_test_secret_key_not_for_production
       NODE_ENV: test
+      # Test-only key (32 bytes base64). Production usa Docker Secret no Swarm.
+      BANK_DATA_ENCRYPTION_KEY: 0+5mYyV8DG7BUSmJ6ugef35NARVs5HJ+TbogSnOD0D4=
+      IMPORT_FILE_STORAGE_PATH: /tmp/imports-ci
+      IMPORT_RETENTION_DAYS: '90'
+      IMPORT_WORKER_CONCURRENCY: '2'
+      IMPORT_TENANT_LOCK_TTL_SEC: '960'
+      IMPORT_JOB_TIMEOUT_MIN: '15'
 
     steps:
       - uses: actions/checkout@v4
