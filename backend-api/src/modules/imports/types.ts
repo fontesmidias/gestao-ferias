@@ -85,3 +85,103 @@ export interface ValidationResult {
   status: 'valid' | 'invalid'
   errors: string[]
 }
+
+// ===========================================================================
+// Story 2.3 — import-matcher + import-job-service
+// ===========================================================================
+
+import type { Employee, Workplace, ImportJob, ImportJobStatus } from '@prisma/client'
+
+export type EmployeePatch = Partial<
+  Pick<
+    Employee,
+    | 'tirvuId'
+    | 'name'
+    | 'birthDate'
+    | 'position'
+    | 'status'
+    | 'branch'
+    | 'workplace'
+    | 'shift'
+    | 'phone'
+    | 'salary'
+    | 'hireDate'
+    | 'unionName'
+    | 'terminationDate'
+    | 'personalData'
+    | 'address'
+    | 'geofencingFlags'
+    | 'inactivePending'
+  >
+>
+
+export type DiffEntry = { from: unknown; to: unknown }
+export type Diff = Record<string, DiffEntry>
+
+export interface MatchContext {
+  tenantId: string
+  existingEmployees: Employee[]
+  existingWorkplaces: Pick<Workplace, 'name'>[]
+}
+
+export type RowCategory =
+  | 'create'
+  | 'update'
+  | 'unchanged'
+  | 'reactivation'
+  | 'invalid'
+  | 'absent'
+
+export interface MatchResult {
+  create: { row: TirvuRow; patch: EmployeePatch }[]
+  update: { row: TirvuRow; employee: Employee; patch: EmployeePatch; diff: Diff }[]
+  unchanged: { row: TirvuRow; employee: Employee }[]
+  reactivation: { row: TirvuRow; employee: Employee; patch: EmployeePatch; diff: Diff }[]
+  invalid: { row: TirvuRow; errors: string[] }[]
+  absent: Employee[]
+  newWorkplaces: string[]
+}
+
+export interface PreviewSummary {
+  totalRows: number
+  counts: {
+    create: number
+    update: number
+    unchanged: number
+    reactivation: number
+    invalid: number
+    absent: number
+  }
+  newWorkplaces: string[]
+  sampleRows: Array<{
+    rowIndex: number
+    status: RowCategory
+    diff?: Diff
+    errors?: string[]
+  }>
+}
+
+export class InvalidStateTransitionError extends Error {
+  public readonly jobId: string
+  public readonly current: ImportJobStatus
+  public readonly expected: ImportJobStatus[]
+  public readonly attempted: ImportJobStatus
+
+  constructor(
+    jobId: string,
+    current: ImportJobStatus,
+    expected: ImportJobStatus[],
+    attempted: ImportJobStatus,
+  ) {
+    super(
+      `ImportJob ${jobId} está em ${current}; transição para ${attempted} requer estado em [${expected.join(', ')}]`,
+    )
+    this.name = 'InvalidStateTransitionError'
+    this.jobId = jobId
+    this.current = current
+    this.expected = expected
+    this.attempted = attempted
+  }
+}
+
+export type { ImportJob, ImportJobStatus, Employee, Workplace }
