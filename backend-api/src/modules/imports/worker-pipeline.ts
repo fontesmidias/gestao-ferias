@@ -121,7 +121,7 @@ export async function runImportPipeline(
       ctx: { tenantId, existingEmployees, existingWorkplaces },
     })
 
-    const previewSummary = buildPreviewSummary(matchResult, rows.length)
+    const previewSummary = buildPreviewSummary(matchResult, rows.length, rows.length)
 
     await transition(prisma, jobId, ['PARSING'], 'PREVIEW_READY', {
       previewSummary: previewSummary as never,
