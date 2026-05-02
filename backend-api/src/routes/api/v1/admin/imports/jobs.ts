@@ -5,6 +5,8 @@ import type { FastifyPluginAsync } from 'fastify'
 import { applyEntrypoint } from '../../../../../modules/imports/apply-flow'
 import { cancelEntrypoint } from '../../../../../modules/imports/cancel-flow'
 import { statusEntrypoint } from '../../../../../modules/imports/status-flow'
+import { previewEntrypoint } from '../../../../../modules/imports/preview-flow'
+import { errorReportEntrypoint } from '../../../../../modules/imports/error-report-flow'
 
 const ADMIN_GUARD = (fastify: Parameters<FastifyPluginAsync>[0]) => [
   fastify.requireAuth,
@@ -39,6 +41,40 @@ const route: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const { jobId } = request.params as { jobId: string }
       return applyEntrypoint(fastify, request, reply, { jobId, scope: 'admin' })
+    },
+  )
+
+  fastify.get(
+    '/:jobId/preview',
+    {
+      onRequest: ADMIN_GUARD(fastify),
+      config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+    },
+    async (request, reply) => {
+      const { jobId } = request.params as { jobId: string }
+      return previewEntrypoint(
+        { prisma: fastify.prisma },
+        { user: request.user as never, query: request.query as never },
+        reply as never,
+        { jobId, scope: 'admin' },
+      )
+    },
+  )
+
+  fastify.get(
+    '/:jobId/error-report.xlsx',
+    {
+      onRequest: ADMIN_GUARD(fastify),
+      config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+    },
+    async (request, reply) => {
+      const { jobId } = request.params as { jobId: string }
+      return errorReportEntrypoint(
+        { prisma: fastify.prisma, log: fastify.log },
+        { user: request.user as never },
+        reply as never,
+        { jobId, scope: 'admin' },
+      )
     },
   )
 
