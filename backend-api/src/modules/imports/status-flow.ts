@@ -3,6 +3,7 @@
 
 import type { PrismaClient } from '@prisma/client'
 import type { PreviewSummary } from './types'
+import { isUuid } from './utils'
 
 export type StatusScope = 'admin' | 'tenant'
 
@@ -53,6 +54,12 @@ export async function statusEntrypoint(
     return reply
       .code(401)
       .send(envelope(null, { code: 'UNAUTHORIZED', message: 'Sessão inválida' }))
+  }
+
+  if (!isUuid(input.jobId)) {
+    return reply
+      .code(404)
+      .send(envelope(null, { code: 'JOB_NOT_FOUND', message: 'Job não encontrado' }))
   }
 
   const job = await deps.prisma.importJob.findUnique({

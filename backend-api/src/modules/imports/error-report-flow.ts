@@ -4,6 +4,7 @@
 import type { PrismaClient } from '@prisma/client'
 import { buildErrorReportXlsx } from './error-report-builder'
 import { FileIntegrityError, type PreviewSummary } from './types'
+import { isUuid } from './utils'
 
 export type ErrorReportScope = 'admin' | 'tenant'
 
@@ -25,7 +26,7 @@ export interface ErrorReportRequest {
 export interface ErrorReportReply {
   code(c: number): ErrorReportReply
   header(name: string, value: string): ErrorReportReply
-  send(payload: unknown): ErrorReportReply
+  send(payload?: unknown): ErrorReportReply
 }
 
 export interface ErrorReportEntrypointInput {
@@ -70,6 +71,12 @@ export async function errorReportEntrypoint(
       .send(envelope(null, { code: 'UNAUTHORIZED', message: 'Sessão inválida' }))
   }
 
+  if (!isUuid(input.jobId)) {
+    return reply
+      .code(404)
+      .send(envelope(null, { code: 'JOB_NOT_FOUND', message: 'Job não encontrado' }))
+  }
+
   const job = await deps.prisma.importJob.findUnique({
     where: { id: input.jobId },
     select: {
@@ -107,7 +114,7 @@ export async function errorReportEntrypoint(
 
   const summary = job.previewSummary as unknown as PreviewSummary | null
   if (!summary || summary.counts.invalid === 0) {
-    return reply.code(204).send('')
+    return reply.code(204).send()
   }
 
   let buffer: Buffer

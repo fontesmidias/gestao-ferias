@@ -55,6 +55,13 @@ export function parseCpfNoMask(input: unknown): string | null {
   return digits.length === 0 ? null : digits
 }
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+export function isUuid(value: unknown): value is string {
+  return typeof value === 'string' && UUID_RE.test(value)
+}
+
 export function isCpfValid(cpfDigits: string | null): boolean {
   if (!cpfDigits || cpfDigits.length !== 11) return false
   if (/^(\d)\1{10}$/.test(cpfDigits)) return false

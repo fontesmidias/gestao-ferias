@@ -6,6 +6,7 @@ import { transition } from './import-job-service'
 import { validateConfirmTenantName } from './apply-validators'
 import { InvalidStateTransitionError } from './types'
 import type { ApplyOptions } from './import-applier'
+import { isUuid } from './utils'
 
 export type ApplyScope = 'admin' | 'tenant'
 
@@ -39,6 +40,12 @@ export async function applyEntrypoint(
     userId: string
     tenantId?: string
     role?: string
+  }
+
+  if (!isUuid(input.jobId)) {
+    return reply
+      .code(404)
+      .send(envelope(null, { code: 'JOB_NOT_FOUND', message: 'Job não encontrado' }))
   }
 
   const job = await fastify.prisma.importJob.findUnique({
