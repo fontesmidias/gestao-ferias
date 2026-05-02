@@ -7,6 +7,8 @@ import {
   type RedisLike,
 } from '../modules/imports/tenant-lock'
 import { runImportPipeline } from '../modules/imports/worker-pipeline'
+import { runApplyPipeline } from '../modules/imports/apply-pipeline'
+import type { ApplyOptions } from '../modules/imports/import-applier'
 import {
   autoCancelStalePreviews,
   timeoutStuckJobs,
@@ -94,6 +96,49 @@ export default fp(async (fastify) => {
             { module: 'imports', phase: 'watchdog', ...t, ...c },
             'watchdog tick',
           )
+        }
+        return
+      }
+
+      if (job.name === 'apply') {
+        const { jobId, options } = job.data as {
+          jobId: string
+          options: ApplyOptions
+        }
+        const found = await fastify.prisma.importJob.findUnique({
+          where: { id: jobId },
+          select: { tenantId: true, operatorUserId: true },
+        })
+        if (!found) {
+          fastify.log.warn(
+            { module: 'imports', importJobId: jobId, phase: 'apply' },
+            'job não encontrado, skip',
+          )
+          return
+        }
+        const tenantId = found.tenantId
+
+        const acquired = await acquireTenantLock(redisClient, tenantId)
+        if (!acquired) {
+          fastify.log.debug(
+            { module: 'imports', importJobId: jobId, tenantId, phase: 'lock' },
+            'lock contention, re-queued (apply)',
+          )
+          await importsQueue.add('apply', { jobId, options }, { delay: 5000 })
+          return
+        }
+
+        try {
+          await runApplyPipeline(
+            {
+              prisma: fastify.prisma,
+              log: fastify.log,
+              userId: found.operatorUserId,
+            },
+            { jobId, options },
+          )
+        } finally {
+          await releaseTenantLock(redisClient, tenantId)
         }
         return
       }
