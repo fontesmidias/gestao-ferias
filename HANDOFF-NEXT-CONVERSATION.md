@@ -1,259 +1,217 @@
 # Handoff — Continuidade em nova conversa
 
-**Data:** 2026-05-01
+**Data:** 2026-05-02 (sessão fechada às ~18h GMT-3)
 **Feature ativa:** `v3-2-import-tirvu` (Importação em massa de colaboradores via planilha Tirvu)
-**Status:** Story 5.1 implementada (Status: `review`), aguardando teste manual + decisão da próxima story.
+**Status do épico:** **Backend 100% pronto.** Próximo passo é UI (Story 4.1).
 
 ---
 
-## 📍 Onde paramos
+## ✅ O que está done (11 stories backend)
 
-### Pipeline BMAD percorrido (todos os artefatos prontos)
+Todas commitadas, pushadas, com CI verde, container rebuildado e smoke-tested via Postman.
 
-| Artefato | Arquivo | Status |
+| Story | Commit | Resumo |
 |---|---|---|
-| 1. PRD | [_evo-output/planning-artifacts/v3-2-import-tirvu/prd.md](_evo-output/planning-artifacts/v3-2-import-tirvu/prd.md) | ✅ Completo (45 FRs + 36 NFRs) |
-| 2. Implementation Readiness Report | [_evo-output/planning-artifacts/v3-2-import-tirvu/implementation-readiness-report.md](_evo-output/planning-artifacts/v3-2-import-tirvu/implementation-readiness-report.md) | ✅ Iter 2 completa, score 99.7%, GO |
-| 3. Architecture | [_evo-output/planning-artifacts/v3-2-import-tirvu/architecture.md](_evo-output/planning-artifacts/v3-2-import-tirvu/architecture.md) | ✅ Completo, 11 decisões D1-D11 + addendum 2026-05-01 |
-| 4. UX Design | [_evo-output/planning-artifacts/v3-2-import-tirvu/ux-design-specification.md](_evo-output/planning-artifacts/v3-2-import-tirvu/ux-design-specification.md) | ✅ Completo, 4 estados wireframed |
-| 5. Epics & Stories | [_evo-output/planning-artifacts/v3-2-import-tirvu/epics.md](_evo-output/planning-artifacts/v3-2-import-tirvu/epics.md) | ✅ 5 epics, 13 stories, 89 ACs Given/When/Then |
-| 6. Story 5.1 file | [_evo-output/implementation-artifacts/v3-2-import-tirvu/5-1-encryption-and-permissions.md](_evo-output/implementation-artifacts/v3-2-import-tirvu/5-1-encryption-and-permissions.md) | ✅ Implementada, status `review` |
+| 5.1 — encryption + permissions | `7d0271f` | AES-256-GCM HKDF + `requirePermission()` + 25 tests |
+| 2.1 — schema migration | `58cf132` | Employee +10 fields, ImportJob model, 8-state enum, 3 indexes |
+| 2.2 — parser + validator | `e98e098` | tirvu-v1 detect/parse + validator + 30 tests + 4 fixtures xlsx |
+| 2.3 — matcher + state machine | `4940347` | 2-stage match + 6-way categorization + diff + buildPreviewSummary + 30 tests |
+| 1.1 — file storage + cleanup-cron | `5763f75` | sha256 + 0o700 + UUID guard + retenção 90d + 17 tests + volume Docker |
+| 3.1 — BullMQ worker + watchdog | `61b5d5f` | queue `imports`, lock distribuído Redis, watchdog 1min + cleanup 03h UTC + 19 tests |
+| 1.2 — upload SuperAdmin | `6a5c04f` | POST /admin/imports/employees + 10 tests |
+| 1.3 — upload TenantAdmin + DRY | `7bcae0e` | POST /imports/employees + extract `upload-flow.ts` |
+| 3.2 — apply chunked + bankData | `046f27a` | Apply route + chunked applier + AuditLog + 15 tests |
+| 4.0a — GET status + POST cancel | `f69f12d` | Polling endpoint + cancel + 5 tests |
+| 4.0b — GET preview + error-report.xlsx | `75b09a3` | Paginação + xlsx download + 12 tests |
 
-### Decisão arquitetural crítica travada
+**Resultado consolidado:**
+- ✅ tsc zero erros
+- ✅ Suite full regression: **245 unit tests pass**
+- ✅ CI verde após `cf7499b`
+- ✅ Smoke tests Postman validados
 
-**Caminho 3 pragmático sobre RBAC** (Bruno aprovou 2026-05-01):
-- V3 atual tem RBAC role-based hardcoded (sem model `Permission` data-driven)
-- Story 5.1 implementa **abstração mínima**: mapa estático `PERMISSION_TO_ROLES` em `src/modules/auth/permissions.ts` + middleware Fastify `requirePermission(key)`
-- AC8 original ("opt-in `bankData.view` per tenant") **out-of-scope MVP** — fica para épico futuro `v3-3-rbac-data-driven`
-- TODOs `v3-3-rbac-data-driven` documentados em todos os 4 arquivos novos
-- Rotas legadas V3 (`auth-guard.ts`) **não foram tocadas**
+## 🔧 Fixes operacionais
 
----
+- **`cf7499b`** — CI ganhou env vars (BANK_DATA_ENCRYPTION_KEY + IMPORT_*) porque `tsx --test` em ESM hoisteia imports antes do `process.env.X = ...` dos test files.
+- **`390b201`** — entrypoints validam `jobId` como UUID antes de tocar Prisma. Sem isso, URL com `:jobId` vazio (variável Postman não preenchida) causava 500 DatabaseError.
 
-## ✅ O que foi implementado na Story 5.1
+## 📦 Artefatos pra você (operador)
 
-**Arquivos novos (7):**
-- `backend-api/.env.example` (criado — antes não existia)
-- `backend-api/src/modules/imports/types.ts` (BankData, EncryptedBlob)
-- `backend-api/src/modules/imports/bank-data-encryption.ts` (AES-256-GCM + HKDF + fail-fast)
-- `backend-api/src/modules/auth/permissions.ts` (mapa estático + helpers)
-- `backend-api/src/plugins/permissions.ts` (Fastify decorator `requirePermission`)
-- `backend-api/test/modules/bank-data-encryption.test.ts` (11 cases)
-- `backend-api/test/modules/permissions.test.ts` (14 cases)
-
-**Arquivos modificados (4):**
-- `backend-api/package.json` — `engines.node>=20`
-- `backend-api/.env` — `BANK_DATA_ENCRYPTION_KEY` (LOCAL, não commit)
-- `.env` (raiz) — `BANK_DATA_ENCRYPTION_KEY` para Docker Compose
-- `docker-compose.override.yml` (criado para resolver conflito de porta 5432)
-
-**Validações:**
-- 25 unit tests novos passando + 75 V3 = **100/100**
-- TypeScript compile zero erros
-- Fail-fast funciona (sem env: erro com instrução; tamanho errado: erro detalhado)
-- Cobertura: `permissions.ts` 100%, `bank-data-encryption.ts` 83.67%, `plugin/permissions.ts` 53.84%
+- **Postman collection:** [docs/postman/v3-2-import-tirvu.postman_collection.json](docs/postman/v3-2-import-tirvu.postman_collection.json) + environment template + README de setup. ~22 requests cobrindo todos os endpoints com `pm.test()` assertions.
 
 ---
 
-## 🐳 Como rodar localmente (Docker Compose)
+## 📋 Próximos passos (em ordem)
 
-### Reuso de containers existentes (decisão Bruno 2026-05-01)
+### Caminho crítico restante
 
-Containers `gv-postgres` (host:5433) e `gv-redis` (host:6379) do projeto **gestao-vagas** estão rodando e são reusados. **Não sobe novos** containers de DB/Redis para gestao-ferias. Banco `gestaoferias` foi criado dentro do `gv-postgres` (creds `admin/adminpassword`).
-
-`docker-compose.override.yml` desabilita os serviços `postgres` e `redis` (profiles `never`) e aponta o backend para `host.docker.internal:5433` (Postgres) e `:6379` (Redis).
-
-| Serviço | Onde | Acessar do PC |
+| Story | Status | Resumo |
 |---|---|---|
-| Postgres `gestaoferias` DB | container `gv-postgres` | **localhost:5433** (creds: admin/adminpassword) |
-| Redis | container `gv-redis` | localhost:6379 |
-| Backend gestao-ferias | container novo | http://localhost:3000 |
-| Frontend gestao-ferias | container novo | http://localhost:3002 |
+| **4.1 — UI Upload + Preview** | 📋 next | Frontend: tenant picker, dropzone, banner persistente, tabela virtualizada com filtros, expandir row → diff. Complexidade L. |
+| 4.2 — UI Apply + Confirm + Done | 📋 | Confirm modal (typing tenant name), progress polling 2s, summary view, download error-report. Complexidade L. |
 
-### Comandos para subir (passo a passo)
+### Off-critical (intercaláveis com UI)
 
-**1. Confirmar Docker Desktop rodando + containers gv-* up**
-```bash
-docker ps --format "{{.Names}}"
-# Deve listar gv-postgres e gv-redis. Se não, subir o compose do gestao-vagas primeiro.
+| Story | Status | Resumo |
+|---|---|---|
+| 5.2 — Pino sanitization plugin | 📋 dívida técnica | Middleware global que redacta CPF/bankData/PII em logs. |
+| 5.3 — bankData masked GET | 📋 | GET /employees/:id retorna `bankData: { masked: true, last4 }` por default; `X-Show-Bank-Data: true` + permission `bankData.view` retorna decrypted + AuditLog. |
+
+---
+
+## 🐳 Ambiente local (snapshot atual)
+
+### Containers rodando agora
+
+```
+gestaoferias_backend_local   gestao-ferias-backend     Up
+gestaoferias_frontend_local  gestao-ferias-frontend    Up
+gv-postgres                  pgvector/pgvector:pg15    Up (host:5433)
+gv-redis                     redis:7-alpine            Up (host:6379)
 ```
 
-**2. Da raiz do gestao-ferias, subir só backend + frontend:**
+Postgres+Redis são compartilhados com o projeto `gestao-vagas` (decisão 2026-05-01). Banco `gestaoferias` foi criado dentro do `gv-postgres`.
+
+### Para subir do zero
+
 ```bash
 cd c:/Users/cery0/projetos/gestao-ferias
 docker-compose up --build
 ```
 
-Isso vai (apenas):
-- Build + subir Backend gestao-ferias em `localhost:3000` (conecta em gv-postgres:5433 e gv-redis:6379 via host.docker.internal)
-- Build + subir Frontend em `localhost:3002`
-- **Não sobe Postgres nem Redis** (reusa os existentes do gv-*)
+[docker-compose.override.yml](docker-compose.override.yml) aponta backend para `host.docker.internal:5433` (Postgres) e `:6379` (Redis), reusando os containers `gv-*`.
 
-**3. Aguardar logs estabilizarem** (procure por):
-- `gestaoferias_db_local | database system is ready to accept connections`
-- `gestaoferias_redis_local | Ready to accept connections`
-- `gestaoferias_backend_local | Server listening at http://0.0.0.0:3000`
-- `gestaoferias_frontend_local | ✓ Ready in ...`
+### URLs
 
-**4. Aplicar migrations Prisma (1ª vez ou após mudanças):**
-
-Em **outro terminal**:
-```bash
-cd c:/Users/cery0/projetos/gestao-ferias/backend-api
-npx prisma migrate deploy
-npx prisma db seed
-```
-
-**5. Acessar:**
 - Frontend: http://localhost:3002
-- Backend API: http://localhost:3000
-- Prisma Studio (para inspecionar banco): `cd backend-api && npx prisma studio` → abre http://localhost:5555 (a porta varia)
+- Backend: http://localhost:3000
+- API base: http://localhost:3000/api/v1
+- Prisma Studio: `cd backend-api && npx prisma studio` (~5555)
 
-### Como parar
+### Rebuild backend após mudanças
+
+**Já é regra automática (memória `feedback_docker_rebuild.md`).** Comando:
 ```bash
-docker-compose down
-# Ou para apagar volumes (banco zerado):
-docker-compose down -v
+docker-compose up -d --build backend
 ```
 
 ---
 
-## 🧪 Como testar a Story 5.1 manualmente
+## 🧪 Estado dos testes
 
-### Teste 1 — Backend sobe sem erro
-```bash
-docker-compose logs backend
-# Procure por "Server listening" e ausência de "BANK_DATA_ENCRYPTION_KEY is required"
-```
-
-### Teste 2 — Fail-fast (chave ausente)
-1. Edite `.env` raiz e comente `BANK_DATA_ENCRYPTION_KEY`
-2. `docker-compose up backend`
-3. Deve falhar no startup com:
-   ```
-   Error: BANK_DATA_ENCRYPTION_KEY is required. Generate with: ...
-   ```
-4. Restaurar `.env` depois.
-
-### Teste 3 — Suite de testes unit
-```bash
-cd backend-api
-npm test
-```
-Deve mostrar `100/100 pass` (ou similar) — exclui o `tenants.test.ts` integration que precisa de banco live.
-
-Se quiser rodar **apenas os testes da Story 5.1**:
-```bash
-cd backend-api
-node --test -r ts-node/register "test/modules/bank-data-encryption.test.ts" "test/modules/permissions.test.ts"
-```
-
-### Teste 4 — Type check
-```bash
-cd backend-api
-npx tsc --noEmit
-# Sem output = OK
-```
-
-### Teste 5 — REPL manual de encryption (opcional)
-```bash
-cd backend-api
-node -e "
-process.env.BANK_DATA_ENCRYPTION_KEY = '5JtP44Gz4XwhPUi0NCxOOeqgdZtZ18FrQsXkuiXYvwg=';
-const enc = require('./dist/modules/imports/bank-data-encryption');
-const data = { tipoPix: 'CPF', chavePix: '036.707.881-31', banco: '001' };
-const blob = enc.encryptBankData(data, 'tenant-uuid-123');
-console.log('Encrypted (não legível):', blob);
-console.log('Decrypted:', enc.decryptBankData(blob, 'tenant-uuid-123'));
-"
-```
-**Pré-req:** ter rodado `npm run build` antes (compila TS para `dist/`).
+- **Backend unit:** 245/245 pass via `npx tsx --test test/modules/*.test.ts` (CI command)
+- **Frontend Vitest:** 6/6 pass
+- **TypeScript:** zero erros backend e frontend
+- **Smoke manual via Postman:** todos endpoints validados (com fix UUID em 7.1)
 
 ---
 
-## ⚠️ Action Items operacionais pendentes (do IR Report)
+## 📁 Arquivos importantes
 
-Antes de outras stories irem para produção, você precisa:
+### Specs e plans (todos em `_evo-output/`)
 
-| OP | Descrição | Quando |
-|---|---|---|
-| **OP1** | Gerar key prod com `openssl rand -base64 32` e adicionar como Docker Secret no Swarm | Antes deploy prod |
-| **OP2** | Adicionar volume `imports-data:/var/imports` em `docker-compose.yml` + Swarm | Antes Story 1.1 |
-| **OP3** | Medir LCP atual de `/admin/tenants` (Chrome DevTools) | Antes Story 4.1 |
-| **OP4** | Decidir feature flag `imports.enabled=true|false` para Green House | Antes deploy |
+```
+_evo-output/planning-artifacts/v3-2-import-tirvu/
+  ├── prd.md                              (45 FRs + 36 NFRs)
+  ├── architecture.md                     (D1-D11 decisões)
+  ├── ux-design-specification.md          (4 estados wireframed)
+  ├── implementation-readiness-report.md  (score 99.7%)
+  └── epics.md                            (5 epics, 13 stories)
 
-**Para dev local agora, OP1-OP4 podem esperar** — basta o `.env` que está pronto.
+_evo-output/implementation-artifacts/v3-2-import-tirvu/
+  ├── 5-1-encryption-and-permissions.md            done
+  ├── 1-1-import-storage-and-cleanup.md            review
+  ├── 1-2-upload-route-superadmin.md               review
+  ├── 1-3-upload-route-tenant-admin.md             review
+  ├── 2-1-schema-migration-employee-and-import-job.md  review
+  ├── 2-2-tirvu-parser-and-validator.md            review
+  ├── 2-3-matcher-and-job-state-transition.md      review
+  ├── 3-1-bullmq-worker-and-orchestration.md       review
+  ├── 3-2-apply-route-and-applier.md               review
+  ├── 4-0a-job-status-and-cancel-routes.md         review
+  └── 4-0b-preview-and-error-report-routes.md      review
+```
+
+### Código backend (todos em `backend-api/src/modules/imports/`)
+
+```
+modules/imports/
+  ├── types.ts                          (todos os tipos compartilhados)
+  ├── utils.ts                          (BR/CPF/datas/UUID helpers + isUuid)
+  ├── bank-data-encryption.ts           (Story 5.1)
+  ├── tirvu-parser.ts                   (Story 2.2)
+  ├── import-validator.ts               (Story 2.2)
+  ├── import-matcher.ts                 (Story 2.3)
+  ├── import-job-service.ts             (Story 2.3 — state transition)
+  ├── import-storage.ts                 (Story 1.1)
+  ├── cleanup-cron.ts                   (Story 1.1)
+  ├── tenant-lock.ts                    (Story 3.1)
+  ├── worker-pipeline.ts                (Story 3.1 — parse pipeline)
+  ├── watchdog.ts                       (Story 3.1)
+  ├── upload-flow.ts                    (Story 1.2/1.3 — DRY helper)
+  ├── upload-validators.ts              (Story 1.2)
+  ├── apply-flow.ts                     (Story 3.2 — route helper)
+  ├── apply-pipeline.ts                 (Story 3.2 — apply orchestration)
+  ├── apply-validators.ts               (Story 3.2)
+  ├── import-applier.ts                 (Story 3.2)
+  ├── status-flow.ts                    (Story 4.0a)
+  ├── cancel-flow.ts                    (Story 4.0a)
+  ├── preview-flow.ts                   (Story 4.0b)
+  ├── error-report-flow.ts              (Story 4.0b)
+  └── error-report-builder.ts           (Story 4.0b)
+
+plugins/imports.ts                       (Story 3.1 — BullMQ queue + worker)
+routes/api/v1/admin/imports/employees/   (Story 1.2 — upload)
+routes/api/v1/imports/employees/         (Story 1.3 — upload)
+routes/api/v1/admin/imports/jobs.ts      (4.0a/4.0b/3.2 — todas rotas /:jobId/*)
+routes/api/v1/imports/jobs.ts            (mesmas rotas, scope tenant)
+```
+
+### Frontend (não tocado nesta sessão — pronto pra Story 4.1)
+
+```
+frontend-web/src/
+  app/admin/imports/employees/page.tsx     🆕 a criar (Story 4.1)
+  app/settings/imports/employees/page.tsx  🆕 a criar (Story 4.1)
+  components/imports/                      🆕 a criar (Story 4.1)
+  lib/api/imports.ts                       🆕 a criar (Story 4.1)
+```
 
 ---
 
-## 🚦 Próximos passos sugeridos para a próxima conversa
+## 🚀 Para a próxima conversa — copiar e colar como primeira mensagem
 
-### Caminho A — Code review independente (recomendado pelo BMAD)
-Rodar `/code-review` com **modelo diferente** (ex.: Sonnet 4.6 em vez do Opus 4.7 que implementou) para peer review do código de Story 5.1 antes de marcar `done` e committar.
+```
+Estou retomando o trabalho na feature v3-2-import-tirvu.
+Por favor leia HANDOFF-NEXT-CONVERSATION.md na raiz pra contexto completo.
 
-### Caminho B — Avançar para próxima story
-A sequência crítica do `epics.md` recomenda:
-1. ~~Story 5.1~~ ✅ feita
-2. **Story 1.1** (file storage handler + cron retenção) — paralelizável
-3. **Story 2.1** (Prisma migration — Employee + ImportJob model)
-4. **Story 2.2** (parser tirvu-v1 + validator)
+Resumo: backend 100% done (Stories 5.1, 1.1, 1.2, 1.3, 2.1, 2.2, 2.3, 3.1,
+3.2, 4.0a, 4.0b — todas commitadas e smoke-tested). Próximo passo é
+Story 4.1 (frontend UI Upload + Preview com tenant picker + dropzone +
+tabela virtualizada).
 
-Disparar `evo-create-story` para Story 1.1 ou 2.1 (a próxima a ter file standalone gerado), depois `evo-dev-story`.
-
-### Caminho C — Apenas committar Story 5.1
-Mensagem sugerida:
-```bash
-cd backend-api
-git add src/modules/imports/types.ts \
-        src/modules/imports/bank-data-encryption.ts \
-        src/modules/auth/permissions.ts \
-        src/plugins/permissions.ts \
-        test/modules/bank-data-encryption.test.ts \
-        test/modules/permissions.test.ts \
-        .env.example \
-        package.json
-cd ..
-git add docker-compose.override.yml _evo-output/
-
-git commit -m "feat(imports): add bank data encryption module + permission abstraction (Story 5.1)
-
-- AES-256-GCM with HKDF-SHA256 per-tenant key derivation
-- Fastify requirePermission(key) middleware with static role mapping
-- 25 unit tests covering roundtrip, tampering detection, tenant isolation
-- AC8 (opt-in per tenant) explicitly out-of-scope, deferred to v3-3-rbac-data-driven
-
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
+Disparar /evo-create-story 4.1 e prosseguir.
 ```
 
-⚠️ **NÃO inclua `.env` no commit** (já está no `.gitignore`).
+A IA da próxima conversa vai ler esse arquivo e pegar o estado integral.
 
 ---
 
-## 📋 Para abrir a próxima conversa
+## 🧠 Memórias relevantes salvas (auto-loaded em toda conversa)
 
-**Cole o seguinte como primeira mensagem:**
-
-```
-Estou retomando trabalho da feature v3-2-import-tirvu. Por favor leia o arquivo
-HANDOFF-NEXT-CONVERSATION.md na raiz do projeto pra contexto completo.
-
-Resumo: Story 5.1 (encryption + permissions) está implementada e em status `review`.
-Quero [escolher um]:
-(A) rodar code-review com outro modelo
-(B) avançar para Story [1.1 ou 2.1]
-(C) committar Story 5.1 e validar manualmente
-
-[Sua escolha aqui]
-```
-
-A IA da próxima conversa vai abrir o handoff doc e pegar todo o estado.
+- `feedback_docker_rebuild.md` — auto-rebuild backend após mudanças em `backend-api/src/` ou `prisma/`
+- `feedback_engineering_practices.md` — commits frequentes, CI verde, testar local antes deploy
+- `feedback_ux_patterns.md` — sidebar hover-expand, info icons, tooltips, plataforma auto-explicativa
+- `feedback_technical_gotchas.md` — Fastify autoload, Prisma 7, DELETE body, timezone tests
+- `project_v32_import_tirvu.md` — feature overview (atualizada nesta sessão)
 
 ---
 
-## 🧠 Memória útil sobre o projeto (atualizada)
+## 📊 Métricas desta sessão (2026-05-01 → 2026-05-02)
 
-- **Stack:** Fastify 5 + Prisma 7.6 + Postgres 15 + Redis + BullMQ + Next.js 16 + React 19 + Tailwind + shadcn/ui
-- **Test runner:** `node:test` nativo (NÃO Vitest, NÃO Jest) — testes em `backend-api/test/modules/*.test.ts`
-- **Multi-tenant:** via Prisma extension de tenant scoping (já implementado)
-- **Roles V3:** `SUPERADMIN`, `ADMIN`, `USER`, `AUDITOR` (strings hardcoded)
-- **Convenções:** `kebab-case.ts` arquivos, `camelCase` funções, `PascalCase` tipos, `SCREAMING_SNAKE_CASE` constantes
+- **Stories completadas:** 11 (todas backend, ordem 5.1→1.1→2.1→2.2→2.3→3.1→3.2→1.2→1.3→4.0a→4.0b)
+- **Commits:** 14 (11 stories + CI fix `cf7499b` + Postman docs `d340bf7` + UUID guard `390b201`)
+- **Tests adicionados:** 195 unit tests novos (50 → 245)
+- **Linhas de código backend:** ~6000 (módulos imports/) + ~700 (rotas) + ~3500 (tests)
+- **CI status:** ✅ verde
+- **Endpoints REST entregues:** 12 (4 mutativos + 4 leitura + 4 write/cancel admin/tenant scoped)
