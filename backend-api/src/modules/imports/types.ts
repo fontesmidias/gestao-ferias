@@ -185,3 +185,50 @@ export class InvalidStateTransitionError extends Error {
 }
 
 export type { ImportJob, ImportJobStatus, Employee, Workplace }
+
+// ===========================================================================
+// Story 1.1 — import-storage + cleanup-cron
+// ===========================================================================
+
+export interface PersistOptions {
+  tenantId: string
+  jobId: string
+  buffer: Buffer
+  filename: string
+}
+
+export interface PersistResult {
+  storagePath: string
+  fileHash: string
+  fileSize: number
+}
+
+export interface ReadOptions {
+  tenantId: string
+  jobId: string
+  expectedHash: string
+}
+
+export class FileIntegrityError extends Error {
+  public readonly tenantId: string
+  public readonly jobId: string
+  public readonly expected: string
+  public readonly actual: string
+
+  constructor(tenantId: string, jobId: string, expected: string, actual: string) {
+    super(
+      `File integrity check failed for job ${jobId} (tenant ${tenantId}): expected ${expected.slice(0, 16)}…, got ${actual.slice(0, 16)}…`,
+    )
+    this.name = 'FileIntegrityError'
+    this.tenantId = tenantId
+    this.jobId = jobId
+    this.expected = expected
+    this.actual = actual
+  }
+}
+
+export interface CleanupResult {
+  scanned: number
+  filesRemoved: number
+  dbUpdated: number
+}

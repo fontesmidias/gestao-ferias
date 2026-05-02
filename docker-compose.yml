@@ -49,6 +49,10 @@ services:
       REDIS_PORT: "6379"
       JWT_SECRET: "${JWT_SECRET:-dev_secret_key_123}"
       MASTER_KEY: "${MASTER_KEY:-}"
+      IMPORT_FILE_STORAGE_PATH: "/var/imports"
+      IMPORT_RETENTION_DAYS: "${IMPORT_RETENTION_DAYS:-90}"
+    volumes:
+      - imports-data:/var/imports
     depends_on:
       - postgres
       - redis
@@ -78,3 +82,4 @@ networks:
 volumes:
   postgres_data_local:
   redis_data_local:
+  imports-data:
