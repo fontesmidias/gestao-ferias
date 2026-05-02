@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert'
-import { validateUploadedFile } from '../../src/routes/api/v1/admin/imports/employees/validators'
+import { validateUploadedFile } from '../../src/modules/imports/upload-validators'
 
 test('validateUploadedFile — filename ausente → INVALID_FILE_FORMAT', () => {
   const r = validateUploadedFile({ filename: null, size: 100 })

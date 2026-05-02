@@ -2,11 +2,8 @@
 // via mapa estático (Story 5.1). Migrar para data-driven em v3-3.
 
 import type { FastifyPluginAsync } from 'fastify'
-import { processUploadedImport } from '../../../../../../modules/imports/upload-flow'
-import { validateUploadedFile } from '../../../../../../modules/imports/upload-validators'
-
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+import { processUploadedImport } from '../../../../../modules/imports/upload-flow'
+import { validateUploadedFile } from '../../../../../modules/imports/upload-validators'
 
 function envelope(
   data: unknown,
@@ -22,13 +19,24 @@ const route: FastifyPluginAsync = async (fastify) => {
     {
       onRequest: [
         fastify.requireAuth,
-        fastify.requireSuperAdmin,
+        fastify.requireAdmin,
         fastify.requirePermission('import.run'),
       ],
       config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
     },
     async (request, reply) => {
-      const user = request.user as { userId: string; role?: string }
+      const user = request.user as { userId: string; tenantId?: string; role?: string }
+      const tenantId = user.tenantId
+
+      if (!tenantId) {
+        return reply.code(400).send(
+          envelope(null, {
+            code: 'INVALID_TARGET_TENANT',
+            message:
+              'Esta rota é para usuários com tenant. SUPERADMIN deve usar /admin/imports/employees',
+          }),
+        )
+      }
 
       let data: Awaited<ReturnType<typeof request.file>>
       try {
@@ -64,15 +72,6 @@ const route: FastifyPluginAsync = async (fastify) => {
 
       const filename = data.filename ?? null
 
-      const tenantField = data.fields?.tenantId
-      const tenantId =
-        tenantField &&
-        !Array.isArray(tenantField) &&
-        'value' in tenantField &&
-        typeof tenantField.value === 'string'
-          ? tenantField.value.trim()
-          : null
-
       const fileCheck = validateUploadedFile({ filename, size: buffer.length })
       if (!fileCheck.ok) {
         const status = fileCheck.code === 'FILE_TOO_LARGE' ? 413 : 400
@@ -81,29 +80,16 @@ const route: FastifyPluginAsync = async (fastify) => {
           .send(envelope(null, { code: fileCheck.code, message: fileCheck.message }))
       }
 
-      if (!tenantId || !UUID_RE.test(tenantId)) {
-        return reply
-          .code(400)
-          .send(
-            envelope(null, {
-              code: 'INVALID_TARGET_TENANT',
-              message: 'tenantId é obrigatório e deve ser UUID',
-            }),
-          )
-      }
-
       const tenant = await fastify.prisma.tenant.findUnique({
         where: { id: tenantId },
       })
       if (!tenant || !tenant.isActive) {
-        return reply
-          .code(400)
-          .send(
-            envelope(null, {
-              code: 'INVALID_TARGET_TENANT',
-              message: 'Tenant não encontrado ou inativo',
-            }),
-          )
+        return reply.code(400).send(
+          envelope(null, {
+            code: 'INVALID_TARGET_TENANT',
+            message: 'Tenant não encontrado ou inativo',
+          }),
+        )
       }
 
       const ipAddress = request.ip
