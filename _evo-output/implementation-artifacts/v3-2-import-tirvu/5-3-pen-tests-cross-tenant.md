@@ -354,3 +354,33 @@ claude-opus-4-7[1m] (skill `evo-dev-story`, 2026-05-03)
 ### Change Log
 
 - **2026-05-03** — Story 5.3 implementada. Suite penetration tests cross-tenant em `test/security/imports-cross-tenant.test.ts` (14 cases) cobrindo NFR10 (0 vazamentos cross-tenant): cross-tenant ImportJob (5 endpoints × 404 JOB_NOT_FOUND), forbidden cross-role (TenantAdmin → /admin/* → 403), payload tampering (tenantId silenciosamente ignorado, INVALID_TARGET_TENANT para tenant inativo/faltando), cross-tenant Employee + bankData (filter por tenant vence header X-Show-Bank-Data), AES-GCM tampering (500 BANK_DATA_DECRYPT_FAILED). CI ganhou step dedicado + README.md documenta política obrigatória. Workaround: bypass fastify-cli helper que era incompatível com tsx via Fastify manual setup. **Suite total backend: 276/276** (era 262, +14 security).
+- **2026-05-03 (review fixes)** — Endereçados 5 HIGH + 3 MEDIUM do code review adversarial. Suite expandida para **23 cases** (+9), backend total **285/285** (era 276). Detalhes em "Senior Developer Review" abaixo.
+
+## Senior Developer Review
+
+Code review adversarial encontrou 5 HIGH + 3 MEDIUM + 2 LOW. Opção 1 aplicada: corrigir HIGH + MEDIUM automaticamente, deixar LOW como action items abertos.
+
+### HIGH (5/5 resolvidos)
+
+- [x] **[AI-Review][HIGH] H1 — SuperAdmin com `tenantId: null` não testado.** Adicionado user `superAdminNullTenant` + 2 cases: GET `/admin/imports/:jobIdA` com null-tenant → **200** (admin scope ignora tenant); GET `/imports/:jobIdA` com null-tenant → **404** JOB_NOT_FOUND (branch `!user.tenantId` em `status-flow.ts:96` agora exercitada).
+- [x] **[AI-Review][HIGH] H2 — CNPJ UNIQUE flakiness via timestamp truncado.** Substituído `Date.now().toString().slice(-7)` + seq por `randomBytes(7).toString('hex')` cripto-forte (com map a→0..f→5 para manter formato numérico CNPJ). Idem para emails (`uniqEmail`) e CPFs. Elimina P2002 entre runs locais paralelos.
+- [x] **[AI-Review][HIGH] H3 — Body JSON com tenantId malicioso não testado.** Novo case: POST `/imports/employees` com `Content-Type: application/json` body `{tenantId: B}` → assert `statusCode !== 201` E `prisma.importJob.findFirst({tenantId: B, filename: 'malicious.xlsx'})` é null. Cobre vetor caso ordem de validações mude.
+- [x] **[AI-Review][HIGH] H4 — Test "→ 403" não validava ORIGEM do 403.** Asserts agora cobrem `body.error === 'Forbidden'` E `body.message` matches `/Acesso restrito ao Super Administrador/` (mensagem específica de `requireSuperAdmin` em `auth-guard.ts:29`). Garante que 403 vem do guard correto, não de rate-limit ou outro middleware.
+- [x] **[AI-Review][HIGH] H5 — Cobertura assimétrica.** Extraído helper `runCrossTenantSuite(label, adminToken, otherJob, otherTenantName)` e chamado 2× (TenantAdmin A → job B, TenantAdmin B → job A). Cobertura cross-tenant dobra de 5 → 10 cases. `tenantAdminB` agora é usado.
+
+### MEDIUM (3/3 resolvidos)
+
+- [x] **[AI-Review][MEDIUM] M1 — Rate limit pode causar flakiness em dev local.** Adicionado helper `uniqIp()` que gera IP único por upload (range 10.x.x.x reservado) via `app.inject({remoteAddress})`. `rate-limit.ts` usa `keyGenerator: (req) => req.ip`, então cada upload conta em bucket separado. Aplicado em todos cases que hit /imports/employees ou /admin/imports/employees.
+- [x] **[AI-Review][MEDIUM] M2 — Cleanup `t.after` sem try/catch + sem pre-cleanup.** Cada `deleteMany` agora wrapped em helper `safe(label, fn)` que loga warning sem propagar. Adicionado pre-cleanup defensivo no início do test: deleta tenants `name LIKE 'PenTest-%' AND createdAt < NOW() - 1h` (best-effort, não falha setup se der erro).
+- [x] **[AI-Review][MEDIUM] M3 — `confirmTenantName` validation no apply não testada.** Novo case: SuperAdmin POST `/admin/imports/:jobIdA/apply` com `confirmTenantName: 'NomeDeTenantQueNaoExiste'` → **400 CONFIRMATION_MISMATCH** (código real do `apply-validators.ts:26`, não `INVALID_CONFIRM_TENANT_NAME` como handoff dizia). Verifica também que job permanece em `PREVIEW_READY` (não transicionou).
+
+### LOW (action items abertos para futura iteração)
+
+- [ ] **[AI-Review][LOW] L1** — Assertar que decryptError NÃO grava AuditLog (defesa contra log-leak via tampering). 5 linhas extras, baixo valor isolado.
+- [ ] **[AI-Review][LOW] L2** — CPFs nas fixtures usam formato `xxx.yyy.000-99` que não passa em validador BR completo (DV não calculado). Defensivo se algum hook futuro validar CPF.
+
+### Validação
+
+- `tsc --noEmit` 0 erros.
+- `npx tsx --test test/modules/*.test.ts test/security/*.test.ts` → **285/285** verde (era 276; +9 cases na security suite: +5 mirror H5, +2 H1, +1 H3, +1 M3).
+- Suite security isolada: **23/23** verde, ~3.8s de runtime.
