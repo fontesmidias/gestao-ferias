@@ -40,6 +40,15 @@ const coverages: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       return reply.code(404).send({ error: 'Not Found', message: 'Colaborador substituto não encontrado.' })
     }
 
+    // AC#Story 2.3: type FERISTA exige replacement com isFerista=true.
+    if (data.type === 'FERISTA' && !replacement.isFerista) {
+      return reply.code(422).send({
+        error: 'Unprocessable Entity',
+        code: 'INVALID_REPLACEMENT_FOR_TYPE',
+        message: 'Cobertura do tipo FERISTA exige um colaborador com isFerista=true.',
+      })
+    }
+
     // Validar position
     const position = await fastify.prisma.workplacePosition.findFirst({
       where: { id: data.workplacePositionId, tenantId }
@@ -56,6 +65,7 @@ const coverages: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         startDate: parseISO(data.startDate),
         endDate: parseISO(data.endDate),
         type: data.type,
+        status: 'ACTIVE',
         cost: data.cost || null,
         tenantId
       },
@@ -270,7 +280,8 @@ const coverages: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       return reply.code(404).send({ error: 'Not Found', message: 'Solicitação de férias não encontrada.' })
     }
 
-    // 2. Buscar feristas disponíveis (isFerista=true, sem cobertura no período)
+    // 2. Buscar feristas disponíveis (isFerista=true, sem cobertura no período).
+    // Inclui coverages adjacentes para detectChaining (Story 2.2 AC#chaining).
     const feristas = await fastify.prisma.employee.findMany({
       where: {
         tenantId,
@@ -284,7 +295,13 @@ const coverages: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
           }
         }
       },
-      select: { id: true, name: true, cpf: true, salary: true, employeeType: true, isFerista: true }
+      select: {
+        id: true, name: true, cpf: true, salary: true, employeeType: true, isFerista: true,
+        coveragesAsReplacement: {
+          where: { status: { in: ['PLANNED', 'ACTIVE'] } },
+          select: { startDate: true, endDate: true },
+        },
+      },
     })
 
     // 3. Buscar intermitentes disponíveis (não-feristas intermitentes)
@@ -302,10 +319,25 @@ const coverages: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
           }
         }
       },
-      select: { id: true, name: true, cpf: true, salary: true, employeeType: true, isFerista: true }
+      select: { id: true, name: true, cpf: true, salary: true, employeeType: true, isFerista: true },
     })
 
     const allocation = vacation.employee.allocations[0]
+
+    // Janela de encadeamento: cobertura existente "encosta" no período pedido
+    // se sua endDate está até 7 dias antes da vacation.startDate ou sua startDate
+    // está até 7 dias depois da vacation.endDate.
+    const CHAIN_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
+    const detectChaining = (existing: { startDate: Date; endDate: Date }[]): boolean => {
+      const vStart = vacation.startDate.getTime()
+      const vEnd = vacation.endDate.getTime()
+      return existing.some((c) => {
+        const gapBefore = vStart - c.endDate.getTime()
+        const gapAfter = c.startDate.getTime() - vEnd
+        return (gapBefore >= 0 && gapBefore <= CHAIN_WINDOW_MS) ||
+               (gapAfter >= 0 && gapAfter <= CHAIN_WINDOW_MS)
+      })
+    }
 
     return {
       vacationRequest: {
@@ -320,15 +352,24 @@ const coverages: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         } : null
       },
       suggestions: {
-        feristas: feristas.map(f => ({
-          ...f,
-          estimatedCost: f.salary ? Number(f.salary) / 30 * vacation.days : null,
-          type: 'FERISTA' as const
-        })),
+        feristas: feristas.map(f => {
+          const { coveragesAsReplacement, ...rest } = f
+          return {
+            ...rest,
+            estimatedCost: f.salary ? Number(f.salary) / 30 * vacation.days : null,
+            type: 'FERISTA' as const,
+            // Filtro Prisma já exclui conflitos no período. canChain identifica
+            // feristas com coberturas adjacentes (≤7d), úteis para encadear.
+            conflictFree: true,
+            canChain: detectChaining(coveragesAsReplacement),
+          }
+        }),
         intermitentes: intermitentes.map(i => ({
           ...i,
           estimatedCost: i.salary ? Number(i.salary) / 30 * vacation.days : null,
-          type: 'INTERMITENTE' as const
+          type: 'INTERMITENTE' as const,
+          conflictFree: true,
+          canChain: false,
         }))
       }
     }

@@ -119,24 +119,44 @@ const workplaces: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     return reply.code(201).send(workplace)
   })
 
-  // Listar postos do tenant
+  // Listar postos do tenant (paginado)
   fastify.get('/', {
-    onRequest: [fastify.requireAuth]
+    onRequest: [fastify.requireAuth],
+    schema: {
+      querystring: {
+        type: 'object',
+        properties: {
+          page: { type: 'integer', minimum: 1, default: 1 },
+          limit: { type: 'integer', minimum: 1, maximum: 200, default: 20 },
+        },
+      },
+    },
   }, async (request) => {
     const { tenantId } = request.user as any
+    const query = (request.query ?? {}) as { page?: number; limit?: number }
+    const page = query.page ?? 1
+    const limit = query.limit ?? 20
+    const skip = (page - 1) * limit
 
-    return await fastify.prisma.workplace.findMany({
-      where: { tenantId },
-      include: {
-        positions: {
-          include: {
-            _count: { select: { allocations: { where: { status: 'ACTIVE' } } } }
-          }
+    const [data, total] = await Promise.all([
+      fastify.prisma.workplace.findMany({
+        where: { tenantId },
+        include: {
+          positions: {
+            include: {
+              _count: { select: { allocations: { where: { status: 'ACTIVE' } } } },
+            },
+          },
+          _count: { select: { employees: true } },
         },
-        _count: { select: { employees: true } }
-      },
-      orderBy: { name: 'asc' }
-    })
+        orderBy: { name: 'asc' },
+        skip,
+        take: limit,
+      }),
+      fastify.prisma.workplace.count({ where: { tenantId } }),
+    ])
+
+    return { data, meta: { total, page, limit } }
   })
 
   // Detalhes do posto com positions e alocações ativas
@@ -252,7 +272,7 @@ const workplaces: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     await fastify.prisma.workplacePosition.deleteMany({ where: { workplaceId: id } })
     await fastify.prisma.workplace.delete({ where: { id } })
 
-    return { message: 'Posto removido com sucesso.' }
+    return reply.code(204).send()
   })
 }
 

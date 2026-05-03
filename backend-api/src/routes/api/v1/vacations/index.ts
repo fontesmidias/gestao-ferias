@@ -243,6 +243,15 @@ const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     const existing = await fastify.prisma.vacationRequest.findFirst({ where: { id, tenantId } })
     if (!existing) return reply.code(404).send({ error: 'Not Found' })
 
+    // Story 3.3 AC: rejeição exige motivo (dispatchNote) não-vazio.
+    if (status === 'REJECTED' && (!dispatchNote || String(dispatchNote).trim().length === 0)) {
+      return reply.code(422).send({
+        error: 'Unprocessable Entity',
+        code: 'REJECTION_REASON_REQUIRED',
+        message: 'Rejeição exige um motivo não-vazio em dispatchNote.',
+      })
+    }
+
     const updateData: any = { status, dispatchNote: dispatchNote !== undefined ? dispatchNote : undefined }
 
     // Admin is forcibly editing dates

@@ -234,6 +234,8 @@ model Employee {
   @@unique([cpf, tenantId])
   @@unique([tenantId, tirvuId], name: "tenant_tirvu_unique", map: "employees_tenant_tirvu_unique_idx")
   @@index([tenantId, inactivePending], name: "employees_tenant_inactive_pending_idx")
+  @@index([tenantId, employeeType], name: "employees_tenant_type_idx")
+  @@index([tenantId, isFerista], name: "employees_tenant_ferista_idx")
   @@map("employees")
 }
 

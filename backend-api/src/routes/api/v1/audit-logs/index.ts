@@ -3,7 +3,7 @@ import { parseISO } from 'date-fns'
 
 const auditLogs: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   fastify.get('/', {
-    onRequest: [fastify.requireAuth],
+    onRequest: [fastify.requireAuth, fastify.requireAdmin],
     schema: {
       querystring: {
         type: 'object',

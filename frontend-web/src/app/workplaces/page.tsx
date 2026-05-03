@@ -63,7 +63,9 @@ export default function WorkplacesPage() {
     try {
       setLoading(true)
       const data = await HttpClient.get('/workplaces')
-      setWorkplaces(data)
+      // Backend agora pagina: { data, meta }. Mantém compat com array legado.
+      const list = Array.isArray(data) ? data : data?.data ?? []
+      setWorkplaces(list)
     } catch (err) {
       console.error(err)
     } finally {

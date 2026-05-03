@@ -71,6 +71,10 @@ jobs:
         working-directory: backend-api
         run: npx tsx --test test/security/*.test.ts
 
+      - name: Run V3 conformance tests (quick wins audit-2026-05-03)
+        working-directory: backend-api
+        run: npx tsx --test test/conformance/*.test.ts
+
   frontend-build:
     name: Frontend - Build & Lint
     runs-on: ubuntu-latest
