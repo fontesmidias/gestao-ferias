@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, CheckSquare, Users, Settings, BrainCircuit, LogOut, PanelLeftOpen, PanelLeftClose, Building2, Shield, Crown, CalendarDays, KeyRound } from 'lucide-react'
+import { LayoutDashboard, CheckSquare, Users, Settings, BrainCircuit, LogOut, PanelLeftOpen, PanelLeftClose, Building2, Shield, Crown, CalendarDays, KeyRound, Upload } from 'lucide-react'
 import { useAuth } from '@/components/AuthContext'
 import { HttpClient } from '@/lib/api-client'
 import { UserProfileModal } from '@/components/UserProfileModal'
@@ -73,6 +73,7 @@ export function Sidebar() {
     {
       label: t('sidebar.section.system'),
       items: [
+        { href: '/settings/imports/employees', label: t('sidebar.imports'), icon: Upload, matchPath: '/settings/imports' },
         { href: '/settings/holidays', label: t('sidebar.holidays'), icon: CalendarDays, matchPath: '/settings/holidays' },
         { href: '/settings', label: t('sidebar.settings'), icon: Settings, matchPath: '/settings' },
       ],
@@ -83,6 +84,7 @@ export function Sidebar() {
   const superAdminLinks = [
     { href: '/admin', label: t('sidebar.adminPanel'), icon: Crown },
     { href: '/admin/credentials', label: t('sidebar.credentials'), icon: KeyRound },
+    { href: '/admin/imports/employees', label: t('sidebar.imports'), icon: Upload },
     { href: '/dashboard', label: t('sidebar.globalDashboard'), icon: LayoutDashboard },
   ]
 

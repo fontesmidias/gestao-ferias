@@ -88,4 +88,70 @@ export class HttpClient {
     form.append(field, file, file.name)
     return this.request(path, { method: 'POST', body: form })
   }
+
+  /**
+   * Upload multipart com progresso real via XMLHttpRequest.
+   * fetch() não emite upload progress — XHR é necessário.
+   * Inclui auth header + retry com refresh token em 401.
+   */
+  static async uploadWithProgress(
+    path: string,
+    formData: FormData,
+    onProgress?: (pct: number) => void,
+  ): Promise<unknown> {
+    // Backend pode responder em duas formas:
+    //  - Plano (legacy): { message: '...' } ou { error: '...' }
+    //  - Envelope (rotas /imports): { data: null, error: { code, message }, meta: null }
+    interface XhrResult {
+      status: number
+      body: {
+        message?: string
+        error?: string | { code?: string; message?: string }
+      } & Record<string, unknown>
+    }
+    const send = (token: string | null): Promise<XhrResult> =>
+      new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
+        xhr.open('POST', `${API_URL}${path}`)
+        if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+        if (onProgress) {
+          xhr.upload.onprogress = (ev) => {
+            if (ev.lengthComputable) onProgress(Math.round((ev.loaded / ev.total) * 100))
+          }
+        }
+        xhr.onload = () => {
+          let body: XhrResult['body']
+          try { body = JSON.parse(xhr.responseText) } catch { body = { message: xhr.responseText || 'Erro desconhecido' } }
+          resolve({ status: xhr.status, body })
+        }
+        xhr.onerror = () => reject(new Error('Falha de rede no upload'))
+        xhr.onabort = () => reject(new Error('Upload cancelado'))
+        xhr.send(formData)
+      })
+
+    let token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+    let result = await send(token)
+
+    if (result.status === 401) {
+      const newToken = await refreshAccessToken()
+      if (newToken) {
+        token = newToken
+        result = await send(token)
+      }
+    }
+
+    if (result.status < 200 || result.status >= 300) {
+      const rawErr = result.body?.error
+      const envelopeMsg = rawErr && typeof rawErr === 'object' ? rawErr.message : undefined
+      const stringErr = typeof rawErr === 'string' ? rawErr : undefined
+      const message = envelopeMsg ?? result.body?.message ?? stringErr ?? 'Erro no upload'
+      const err = new Error(message) as Error & { status?: number; body?: unknown }
+      err.status = result.status
+      err.body = result.body
+      throw err
+    }
+
+    markActivity()
+    return result.body
+  }
 }

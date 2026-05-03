@@ -9,12 +9,14 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@tanstack/react-virtual": "^3.13.24",
     "date-fns": "^4.1.0",
     "driver.js": "^1.4.0",
     "lucide-react": "^1.7.0",
     "next": "16.2.2",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "react-dropzone": "^14.4.1",
     "recharts": "^3.8.1",
     "sonner": "^2.0.7"
   },
