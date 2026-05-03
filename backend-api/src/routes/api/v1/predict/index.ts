@@ -2,6 +2,7 @@ import { FastifyPluginAsync } from 'fastify'
 import { VacationEngine } from '../../../../modules/vacations/vacation-engine'
 import { ROIEngine } from '../../../../modules/finance/roi-engine'
 import { PromptBuilder } from '../../../../modules/ai/prompt-builder'
+import { isInScope, buildOutOfScopeAnswer, SUPPORTED_TOPICS } from '../../../../modules/predict/scope-filter'
 import { addMonths, startOfMonth, endOfMonth, format } from 'date-fns'
 
 const predict: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
@@ -131,6 +132,20 @@ const predict: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   }, async (request, reply) => {
     const { tenantId } = request.user as any
     const { question } = request.body as { question: string }
+
+    // Story 4.4 / M3 — filtro de escopo ANTES de qualquer chamada externa.
+    // Economiza custo LLM + redireciona educadamente AC linha 669-671.
+    const scope = isInScope(question)
+    if (!scope.inScope) {
+      return {
+        answer: buildOutOfScopeAnswer(scope.reason),
+        provider: 'scope-filter',
+        source: 'Filtro local — sem chamada LLM',
+        scope: 'out_of_scope' as const,
+        reason: scope.reason,
+        supportedTopics: SUPPORTED_TOPICS,
+      }
+    }
 
     // Buscar configuração LLM do tenant
     const tenant = await fastify.prisma.tenant.findUnique({ where: { id: tenantId } })

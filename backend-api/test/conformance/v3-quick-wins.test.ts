@@ -326,4 +326,33 @@ test('V3 conformance — quick wins Q1-Q7', async (t) => {
 
   // Cleanup KPI coverage (será garbage-collected pelo cleanup global, mas mantém isolamento).
   await prisma.coverageAssignment.delete({ where: { id: kpiCoverage.id } }).catch(() => {})
+
+  // ===== M3 (Story 4.4): /predict/ask filtra perguntas fora de escopo =====
+  await t.test('M3: POST /predict/ask com pergunta out-of-scope → 200, scope=out_of_scope, sem chamada LLM', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/api/v1/predict/ask',
+      headers: auth(tokenAdmin),
+      payload: { question: 'Qual a previsão do tempo amanhã?' },
+    })
+    assert.equal(res.statusCode, 200, `Expected 200, got ${res.statusCode}: ${res.payload}`)
+    const body = JSON.parse(res.payload)
+    assert.equal(body.scope, 'out_of_scope')
+    assert.equal(body.provider, 'scope-filter')
+    assert.equal(body.reason, 'out_of_scope')
+    assert.ok(Array.isArray(body.supportedTopics) && body.supportedTopics.length > 0)
+    assert.match(body.answer, /fora do escopo/i)
+  })
+
+  await t.test('M3: POST /predict/ask com cumprimento → 200, scope=out_of_scope, reason=greeting', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/api/v1/predict/ask',
+      headers: auth(tokenAdmin),
+      payload: { question: 'boa tarde' },
+    })
+    assert.equal(res.statusCode, 200)
+    const body = JSON.parse(res.payload)
+    assert.equal(body.scope, 'out_of_scope')
+    assert.equal(body.reason, 'greeting')
+    assert.match(body.answer, /Olá/)
+  })
 })
