@@ -272,4 +272,58 @@ test('V3 conformance — quick wins Q1-Q7', async (t) => {
     })
     assert.equal(res.statusCode, 200)
   })
+
+  // ===== M1 (Story 2.5): GET /coverages/kpis =====
+  // Cria 1 cobertura ACTIVE em 2030-06 para popular gapsTotal/cost.
+  const kpiCoverage = await prisma.coverageAssignment.create({
+    data: {
+      tenantId: tenant.id,
+      vacationRequestId: vacation.id,
+      replacementEmployeeId: empFerista.id,
+      workplacePositionId: position.id,
+      startDate: new Date('2030-06-05'),
+      endDate: new Date('2030-06-10'),
+      type: 'FERISTA',
+      status: 'ACTIVE',
+      cost: 600,
+    },
+  })
+
+  await t.test('M1: GET /coverages/kpis?month=2030-06 retorna shape correto', async () => {
+    const res = await app.inject({
+      method: 'GET', url: '/api/v1/coverages/kpis?month=2030-06',
+      headers: auth(tokenAdmin),
+    })
+    assert.equal(res.statusCode, 200, `Expected 200, got ${res.statusCode}: ${res.payload}`)
+    const body = JSON.parse(res.payload)
+    assert.equal(body.month, '2030-06')
+    assert.ok(typeof body.gapsTotal === 'number')
+    assert.ok(typeof body.estimatedCoverageMonthCost === 'number')
+    assert.ok(typeof body.availableFeristasCount === 'number')
+    // Custo deve incluir os 600 da cobertura criada acima.
+    assert.ok(body.estimatedCoverageMonthCost >= 600,
+      `cost >= 600, got ${body.estimatedCoverageMonthCost}`)
+  })
+
+  await t.test('M1: GET /coverages/kpis sem month → mês corrente, 200', async () => {
+    const res = await app.inject({
+      method: 'GET', url: '/api/v1/coverages/kpis',
+      headers: auth(tokenAdmin),
+    })
+    assert.equal(res.statusCode, 200)
+    const body = JSON.parse(res.payload)
+    assert.match(body.month, /^\d{4}-\d{2}$/)
+  })
+
+  await t.test('M1: GET /coverages/kpis com month inválido → 400', async () => {
+    const res = await app.inject({
+      method: 'GET', url: '/api/v1/coverages/kpis?month=abc',
+      headers: auth(tokenAdmin),
+    })
+    // Pattern do schema rejeita antes de chegar no handler.
+    assert.equal(res.statusCode, 400)
+  })
+
+  // Cleanup KPI coverage (será garbage-collected pelo cleanup global, mas mantém isolamento).
+  await prisma.coverageAssignment.delete({ where: { id: kpiCoverage.id } }).catch(() => {})
 })

@@ -62,6 +62,13 @@ interface Coverage {
   cost: number
 }
 
+interface CoverageKpis {
+  month: string
+  gapsTotal: number
+  estimatedCoverageMonthCost: number
+  availableFeristasCount: number
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -83,6 +90,7 @@ export default function CoveragePage() {
   const [selectedMonth, setSelectedMonth] = useState(() => startOfMonth(new Date()))
   const [gaps, setGaps] = useState<GapsResponse | null>(null)
   const [coverages, setCoverages] = useState<Coverage[]>([])
+  const [kpis, setKpis] = useState<CoverageKpis | null>(null)
   const [loading, setLoading] = useState(true)
 
   // Sheet (slide-in panel) state
@@ -102,12 +110,15 @@ export default function CoveragePage() {
     try {
       setLoading(true)
       const { from, to } = buildPeriodRange(selectedMonth)
-      const [gapsRes, coveragesRes] = await Promise.all([
+      const monthParam = format(selectedMonth, 'yyyy-MM')
+      const [gapsRes, coveragesRes, kpisRes] = await Promise.all([
         HttpClient.get(`/coverages/gaps?from=${from}&to=${to}`),
         HttpClient.get('/coverages'),
+        HttpClient.get(`/coverages/kpis?month=${monthParam}`),
       ])
       setGaps(gapsRes)
       setCoverages(coveragesRes)
+      setKpis(kpisRes)
     } catch (err: unknown) {
       console.error(err)
       toast.error('Erro ao carregar dados de cobertura')
@@ -140,11 +151,14 @@ export default function CoveragePage() {
     if (canGoNext()) setSelectedMonth(prev => startOfMonth(addMonths(prev, 1)))
   }
 
-  // ---------- KPI derived values ----------
+  // ---------- KPI values ----------
+  // Story 2.5 — vindos do endpoint /coverages/kpis (verdade do mês selecionado).
 
-  const totalGaps = gaps?.totalGaps ?? 0
-  const plannedCoverages = coverages.filter(c => c.status === 'PLANNED').length
+  const totalGaps = kpis?.gapsTotal ?? gaps?.totalGaps ?? 0
+  const monthCost = kpis?.estimatedCoverageMonthCost ?? 0
+  const availableFeristasCount = kpis?.availableFeristasCount ?? 0
   const uncoveredGaps = (gaps?.gaps ?? []).filter(g => !g.hasCoverage)
+  const plannedCoverages = coverages.filter(c => c.status === 'PLANNED').length
 
   // ---------- Modal logic ----------
 
@@ -223,7 +237,7 @@ export default function CoveragePage() {
 
   // ---------- Render ----------
 
-  const feristasCount = suggestions?.suggestions?.feristas?.length ?? 0
+  const fmtBRL = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
   return (
     <div className="bg-dashboard text-slate-200 pb-12 min-h-full relative">
@@ -352,10 +366,10 @@ export default function CoveragePage() {
             </>
           ) : (
             <>
-              {/* KPI Cards */}
+              {/* KPI Cards — Story 2.5 (alimentados por GET /coverages/kpis) */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                {/* Total de Gaps */}
-                <div className="glass-card p-6 rounded-2xl border border-white/5 relative overflow-hidden group">
+                {/* Total de Gaps — variante Danger se > 0 */}
+                <div className={`glass-card p-6 rounded-2xl relative overflow-hidden group border ${totalGaps > 0 ? 'border-rose-500/60 ring-1 ring-rose-500/30' : 'border-white/5'}`}>
                   <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
                     <AlertTriangle className="w-24 h-24 text-rose-500" />
                   </div>
@@ -363,37 +377,37 @@ export default function CoveragePage() {
                     Total de Gaps
                     <InfoTooltip text="Quantidade de periodos de ferias sem cobertura atribuida neste mes. Quanto maior, mais postos ficam descobertos." />
                   </h3>
-                  <p className="text-4xl font-black text-white z-10 relative">{totalGaps}</p>
+                  <p className={`text-4xl font-black z-10 relative ${totalGaps > 0 ? 'text-rose-400' : 'text-white'}`}>{totalGaps}</p>
                   <p className="mt-4 text-xs text-slate-500 z-10 relative">
-                    {uncoveredGaps.length} sem cobertura atribuida
+                    {uncoveredGaps.length} sem cobertura atribuida · {plannedCoverages} planejadas
                   </p>
                 </div>
 
-                {/* Coberturas Planejadas */}
+                {/* Custo Estimado do Mês */}
                 <div className="glass-card p-6 rounded-2xl border border-white/5 relative overflow-hidden group">
                   <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
                     <Shield className="w-24 h-24 text-emerald-500" />
                   </div>
                   <h3 className="text-slate-400 font-bold uppercase text-xs tracking-wider mb-2 z-10 relative flex items-center gap-1">
-                    Coberturas Planejadas
-                    <InfoTooltip text="Total de coberturas ja planejadas e atribuidas a substitutos. Cada cobertura garante continuidade em um posto." />
+                    Custo Estimado do Mes
+                    <InfoTooltip text="Soma dos custos estimados das coberturas (PLANNED + ACTIVE) que tocam o mes selecionado. Calculado a partir do salario / 30 x dias do substituto." />
                   </h3>
-                  <p className="text-4xl font-black text-white z-10 relative">{plannedCoverages}</p>
+                  <p className="text-3xl font-black text-white z-10 relative">{fmtBRL(monthCost)}</p>
                   <p className="mt-4 text-xs text-slate-500 z-10 relative">
-                    Substitutos ja designados
+                    Coberturas tocando o mes
                   </p>
                 </div>
 
-                {/* Feristas Disponiveis */}
+                {/* Feristas Disponíveis (do endpoint, não do modal) */}
                 <div className="glass-card p-6 rounded-2xl border border-white/5 relative overflow-hidden group">
                   <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
                     <Users className="w-24 h-24 text-sky-500" />
                   </div>
                   <h3 className="text-slate-400 font-bold uppercase text-xs tracking-wider mb-2 z-10 relative flex items-center gap-1">
                     Feristas Disponiveis
-                    <InfoTooltip text="Quantidade de profissionais feristas disponiveis para cobertura. Calculado a partir das sugestoes do ultimo gap consultado." />
+                    <InfoTooltip text="Feristas ATIVOs sem cobertura sobreposta ao mes selecionado. Sao candidatos imediatos para novos gaps." />
                   </h3>
-                  <p className="text-4xl font-black text-white z-10 relative">{feristasCount}</p>
+                  <p className="text-4xl font-black text-white z-10 relative">{availableFeristasCount}</p>
                   <p className="mt-4 text-xs text-slate-500 z-10 relative">
                     Profissionais para substituicao
                   </p>

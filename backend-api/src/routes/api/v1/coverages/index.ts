@@ -245,6 +245,84 @@ const coverages: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     }
   })
 
+  // KPIs do mês — Story 2.5
+  // gapsTotal: férias aprovadas sem cobertura no mês
+  // estimatedCoverageMonthCost: soma dos cost das coberturas que tocam o mês
+  // availableFeristasCount: feristas ATIVOs sem cobertura sobreposta ao mês
+  fastify.get('/kpis', {
+    onRequest: [fastify.requireAuth],
+    schema: {
+      querystring: {
+        type: 'object',
+        properties: {
+          month: { type: 'string', pattern: '^\\d{4}-\\d{2}$' },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const { tenantId } = request.user as any
+    const query = (request.query ?? {}) as { month?: string }
+
+    // Default: mês corrente.
+    const ref = query.month
+      ? parseISO(`${query.month}-01`)
+      : new Date()
+    if (Number.isNaN(ref.getTime())) {
+      return reply.code(400).send({ error: 'Bad Request', message: 'Parâmetro month inválido (esperado YYYY-MM).' })
+    }
+    const monthStart = new Date(Date.UTC(ref.getUTCFullYear(), ref.getUTCMonth(), 1, 0, 0, 0))
+    const monthEnd = new Date(Date.UTC(ref.getUTCFullYear(), ref.getUTCMonth() + 1, 1, 0, 0, 0) - 1)
+
+    // 1. gapsTotal — férias aprovadas que se sobrepõem ao mês e não têm cobertura.
+    const approvedVacations = await fastify.prisma.vacationRequest.findMany({
+      where: {
+        tenantId,
+        status: { in: ['APPROVED', 'SIGNED'] },
+        startDate: { lte: monthEnd },
+        endDate: { gte: monthStart },
+      },
+      select: { id: true, coverages: { select: { id: true } } },
+    })
+    const gapsTotal = approvedVacations.filter((v) => v.coverages.length === 0).length
+
+    // 2. estimatedCoverageMonthCost — soma dos cost de coberturas (ACTIVE/PLANNED) sobrepostas ao mês.
+    const monthCoverages = await fastify.prisma.coverageAssignment.findMany({
+      where: {
+        tenantId,
+        status: { in: ['ACTIVE', 'PLANNED'] },
+        startDate: { lte: monthEnd },
+        endDate: { gte: monthStart },
+      },
+      select: { cost: true },
+    })
+    const estimatedCoverageMonthCost = monthCoverages.reduce((acc, c) => {
+      return acc + (c.cost ? Number(c.cost) : 0)
+    }, 0)
+
+    // 3. availableFeristasCount — feristas ATIVO sem cobertura sobreposta ao mês.
+    const availableFeristasCount = await fastify.prisma.employee.count({
+      where: {
+        tenantId,
+        isFerista: true,
+        status: 'ATIVO',
+        coveragesAsReplacement: {
+          none: {
+            startDate: { lte: monthEnd },
+            endDate: { gte: monthStart },
+            status: { in: ['PLANNED', 'ACTIVE'] },
+          },
+        },
+      },
+    })
+
+    return {
+      month: `${monthStart.getUTCFullYear()}-${String(monthStart.getUTCMonth() + 1).padStart(2, '0')}`,
+      gapsTotal,
+      estimatedCoverageMonthCost,
+      availableFeristasCount,
+    }
+  })
+
   // Sugerir cobertura: feristas disponíveis no período
   fastify.get('/suggestions', {
     onRequest: [fastify.requireAuth],
