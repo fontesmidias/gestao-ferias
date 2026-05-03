@@ -79,6 +79,50 @@ export default function EmployeeDashboard() {
   const [fractioning, setFractioning] = useState<FractioningInfo | null>(null)
   const [loadingData, setLoadingData] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // Story 5.3 / L1 — PWA offline cache + indicador.
+  const [offline, setOffline] = useState<boolean>(
+    typeof navigator !== 'undefined' ? !navigator.onLine : false,
+  )
+  const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null)
+  const [usingCache, setUsingCache] = useState(false)
+
+  // Hidrata cache local no mount (snapshot da ultima sessão online).
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const employeeId = (user as any)?.employeeId
+    if (!employeeId) return
+    try {
+      const raw = localStorage.getItem(`employee-dashboard-cache-v1:${employeeId}`)
+      if (!raw) return
+      const cache = JSON.parse(raw) as {
+        timestamp: number
+        balance: BalanceData | null
+        vacations: VacationRequest[]
+        fractioning: FractioningInfo | null
+        employee: Employee | null
+      }
+      setLastSyncedAt(cache.timestamp)
+      if (!balance) setBalance(cache.balance)
+      if (vacations.length === 0) setVacations(cache.vacations ?? [])
+      if (!fractioning) setFractioning(cache.fractioning)
+      if (!employee && cache.employee) setEmployee(cache.employee)
+      setUsingCache(true)
+    } catch {/* corrupted cache is non-fatal */}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user])
+
+  // Listen para online/offline events.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const onOnline = () => setOffline(false)
+    const onOffline = () => setOffline(true)
+    window.addEventListener('online', onOnline)
+    window.addEventListener('offline', onOffline)
+    return () => {
+      window.removeEventListener('online', onOnline)
+      window.removeEventListener('offline', onOffline)
+    }
+  }, [])
 
   const fetchData = useCallback(async () => {
     if (!user) return
@@ -112,13 +156,35 @@ export default function EmployeeDashboard() {
         (v) => v.employeeId === employeeId
       )
       setVacations(myVacations)
+
+      // Persiste snapshot para uso offline na próxima sessão.
+      const now = Date.now()
+      setLastSyncedAt(now)
+      setUsingCache(false)
+      try {
+        localStorage.setItem(
+          `employee-dashboard-cache-v1:${employeeId}`,
+          JSON.stringify({
+            timestamp: now,
+            balance: balanceData,
+            vacations: myVacations,
+            fractioning: fractioningData,
+            employee: matched ?? null,
+          }),
+        )
+      } catch {/* QuotaExceeded ou storage indisponivel */}
     } catch (err: any) {
       console.error('Failed to fetch employee data:', err)
-      setError(err.message || 'Erro ao carregar dados. Tente novamente.')
+      // Se temos cache local, segue silencioso com banner; senão expoe o erro.
+      if (lastSyncedAt) {
+        setUsingCache(true)
+      } else {
+        setError(err.message || 'Erro ao carregar dados. Tente novamente.')
+      }
     } finally {
       setLoadingData(false)
     }
-  }, [user])
+  }, [user, lastSyncedAt])
 
   useEffect(() => {
     fetchData()
@@ -239,6 +305,18 @@ export default function EmployeeDashboard() {
 
       <main className="max-w-md mx-auto px-4 pt-8 pb-12">
         <ErrorBoundary>
+
+          {/* Story 5.3 / L1 — banner de offline / dados em cache */}
+          {(offline || usingCache) && lastSyncedAt && (
+            <div className="mb-4 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200 flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+              <span>
+                {offline ? 'Você está offline.' : 'Dados em cache.'}{' '}
+                Última atualização:{' '}
+                <b>{new Date(lastSyncedAt).toLocaleString('pt-BR')}</b>
+              </span>
+            </div>
+          )}
 
           {/* Loading State */}
           {loadingData && (
