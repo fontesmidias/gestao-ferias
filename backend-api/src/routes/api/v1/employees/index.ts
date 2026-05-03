@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client'
 import { ImportService } from '../../../../modules/employees/import-service'
 import { AuditService } from '../../../../modules/shared/audit-service'
 import { VacationEngine } from '../../../../modules/vacations/vacation-engine'
+import { resolveBankDataField } from '../../../../modules/employees/bank-data-view'
 
 const employees: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   // Download template de importacao
@@ -187,7 +188,8 @@ const employees: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     }
   }, async (request, reply) => {
     const { id } = request.params as { id: string }
-    const { tenantId } = request.user as any
+    const user = request.user as { userId: string; tenantId: string; role?: string }
+    const { tenantId } = user
 
     const employee = await fastify.prisma.employee.findFirst({
       where: { id, tenantId }
@@ -204,8 +206,84 @@ const employees: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       employee.balanceOffset
     )
 
+    // ----- Story 5.2: bankData masking + AuditLog -----
+    const wantsUnmask = String(request.headers['x-show-bank-data'] ?? '').toLowerCase() === 'true'
+    const resolved = resolveBankDataField(
+      { enc: employee.bankDataEnc, iv: employee.bankDataIv, tag: employee.bankDataTag },
+      { tenantId, wantsUnmask, role: user.role },
+    )
+
+    let bankDataField: unknown = undefined
+
+    if (resolved.kind === 'forbidden') {
+      return reply.code(403).send({
+        error: {
+          code: 'FORBIDDEN_BANK_DATA',
+          message: 'Sem permissão para visualizar dados bancários',
+        },
+      })
+    }
+    if (resolved.kind === 'decryptError') {
+      fastify.log.error(
+        { employeeId: employee.id, tenantId },
+        'decryptBankData falhou (modo desmascarar)',
+      )
+      return reply.code(500).send({
+        error: {
+          code: 'BANK_DATA_DECRYPT_FAILED',
+          message: 'Erro ao acessar dados bancários',
+        },
+      })
+    }
+    if (resolved.kind === 'masked') {
+      bankDataField = resolved.data
+    }
+    if (resolved.kind === 'unmasked') {
+      bankDataField = resolved.data
+      // LGPD Art. 37: registro de operações sobre dados sensíveis é hard
+      // requirement. Awaitamos antes da response para garantir gravação.
+      // Latência ~5ms é aceitável (operação rara, não hot path).
+      try {
+        await AuditService.log(fastify.prisma, {
+          tenantId,
+          userId: user.userId,
+          action: 'EMPLOYEE_BANK_DATA_VIEWED',
+          resourceId: employee.id,
+          resourceType: 'EMPLOYEE',
+          ip: request.ip,
+          userAgent: request.headers['user-agent'] ?? undefined,
+        })
+      } catch (err) {
+        // DB de audit caiu: NEGAR acesso desmascarado — sem audit, sem release.
+        // Posição conservadora alinhada com prestação de contas LGPD.
+        fastify.log.error(
+          { err: (err as Error).message?.slice(0, 200), employeeId: employee.id },
+          'AuditLog EMPLOYEE_BANK_DATA_VIEWED falhou — negando acesso',
+        )
+        return reply.code(503).send({
+          error: {
+            code: 'AUDIT_LOG_UNAVAILABLE',
+            message: 'Não foi possível registrar o acesso. Tente novamente em instantes.',
+          },
+        })
+      }
+    }
+
+    // Remove campos crus de ciphertext do response (defesa em profundidade).
+    const {
+      bankDataEnc: _bankDataEnc,
+      bankDataIv: _bankDataIv,
+      bankDataTag: _bankDataTag,
+      ...employeeSafe
+    } = employee
+    // Tipo de eslint-disable: variáveis prefixadas com _ devem ser ignoradas.
+    void _bankDataEnc
+    void _bankDataIv
+    void _bankDataTag
+
     return {
-      ...employee,
+      ...employeeSafe,
+      ...(bankDataField !== undefined ? { bankData: bankDataField } : {}),
       vacationSummary: {
         totalDaysOfRight: vacationPeriods.reduce((acc, p) => acc + p.daysOfRight, 0),
         periods: vacationPeriods
