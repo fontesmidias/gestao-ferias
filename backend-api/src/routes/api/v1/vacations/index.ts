@@ -7,6 +7,7 @@ import { EmailService } from '../../../../modules/notifications/email-service'
 import { ZapSignService } from '../../../../modules/integrations/zapsign-service'
 import { SignatureService } from '../../../../modules/signatures/signature-service'
 import { ImportService } from '../../../../modules/employees/import-service'
+import { coverageEventBus } from '../../../../modules/coverage-engine/tenant-event-bus'
 import { SanitizationService } from '../../../../modules/employees/sanitization-service'
 import { differenceInDays, parseISO, format } from 'date-fns'
 
@@ -329,6 +330,12 @@ const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
             status: 'ACTIVE',
             tenantId
           }
+        })
+        // Story 2.4 / L3 — notifica /coverage clients em tempo real.
+        coverageEventBus.emit(tenantId, {
+          type: 'coverage.created',
+          coverageId: coverageCreated.id,
+          vacationRequestId: existing.id,
         })
         // Webhook: coverage.assigned
         triggerWebhooks(fastify, tenantId, 'coverage.assigned', {

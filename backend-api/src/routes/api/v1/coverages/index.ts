@@ -1,5 +1,6 @@
 import { FastifyPluginAsync } from 'fastify'
 import { parseISO } from 'date-fns'
+import { coverageEventBus } from '../../../../modules/coverage-engine/tenant-event-bus'
 
 const coverages: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   // Criar cobertura
@@ -76,6 +77,11 @@ const coverages: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       }
     })
 
+    coverageEventBus.emit(tenantId, {
+      type: 'coverage.created',
+      coverageId: coverage.id,
+      vacationRequestId: coverage.vacationRequestId,
+    })
     return reply.code(201).send(coverage)
   })
 
@@ -150,6 +156,7 @@ const coverages: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       }
     })
 
+    coverageEventBus.emit(tenantId, { type: 'coverage.updated', coverageId: updated.id })
     return updated
   })
 
@@ -173,6 +180,7 @@ const coverages: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     }
 
     await fastify.prisma.coverageAssignment.delete({ where: { id } })
+    coverageEventBus.emit(tenantId, { type: 'coverage.deleted', coverageId: id })
     return { message: 'Cobertura removida com sucesso.' }
   })
 
@@ -243,6 +251,39 @@ const coverages: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       totalGaps: gaps.length,
       gaps
     }
+  })
+
+  // Story 2.4 / L3 — SSE de eventos de cobertura. Cliente assina e re-fetcha
+  // dados em tempo real quando algo muda no tenant.
+  fastify.get('/events', {
+    onRequest: [fastify.requireAuth],
+  }, async (request, reply) => {
+    const { tenantId } = request.user as any
+
+    reply.raw.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+    reply.raw.setHeader('Cache-Control', 'no-cache, no-transform')
+    reply.raw.setHeader('Connection', 'keep-alive')
+    reply.raw.setHeader('X-Accel-Buffering', 'no')
+    reply.raw.flushHeaders?.()
+
+    // Hello inicial — útil para o frontend confirmar conexão.
+    reply.raw.write(`event: ready\ndata: ${JSON.stringify({ tenantId })}\n\n`)
+
+    const unsubscribe = coverageEventBus.subscribe(tenantId, (event) => {
+      reply.raw.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`)
+    })
+
+    // Keep-alive ping a cada 30s para evitar proxy idle timeout.
+    const ping = setInterval(() => {
+      try { reply.raw.write(`: ping\n\n`) } catch { /* conexão fechou */ }
+    }, 30_000)
+
+    request.raw.on('close', () => {
+      clearInterval(ping)
+      unsubscribe()
+    })
+    // Não return — fastify mantém conexão aberta enquanto raw.end() não ocorrer.
+    return reply
   })
 
   // KPIs do mês — Story 2.5

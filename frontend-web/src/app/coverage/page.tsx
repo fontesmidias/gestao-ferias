@@ -131,6 +131,54 @@ export default function CoveragePage() {
     fetchData()
   }, [fetchData])
 
+  // Story 2.4 / L3 — SSE em tempo real. Re-fetcha quando há eventos.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const apiBase = process.env.NEXT_PUBLIC_API_URL ?? ''
+    const token = localStorage.getItem('token')
+    if (!token) return
+
+    let stopped = false
+    let reader: ReadableStreamDefaultReader<Uint8Array> | null = null
+
+    async function listen() {
+      try {
+        const res = await fetch(`${apiBase}/coverages/events`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!res.ok || !res.body) return
+        reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+        // eslint-disable-next-line no-constant-condition
+        while (!stopped) {
+          const { value, done } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
+          const parts = buffer.split('\n\n')
+          buffer = parts.pop() ?? ''
+          let touched = false
+          for (const part of parts) {
+            if (part.startsWith(':')) continue // comment/ping
+            for (const ln of part.split('\n')) {
+              if (ln.startsWith('event:')) {
+                const ev = ln.slice(6).trim()
+                if (ev.startsWith('coverage.') || ev === 'gap.changed') touched = true
+              }
+            }
+          }
+          if (touched) fetchData()
+        }
+      } catch {/* desconectou — useEffect cleanup faz a limpeza */}
+    }
+
+    listen()
+    return () => {
+      stopped = true
+      try { reader?.cancel() } catch { /* ignore */ }
+    }
+  }, [fetchData])
+
   // ---------- Month navigation ----------
 
   const canGoPrev = () => {
