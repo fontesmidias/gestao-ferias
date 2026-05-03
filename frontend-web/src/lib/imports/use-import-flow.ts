@@ -10,6 +10,8 @@ export type ImportFlowState =
   | { kind: 'applying'; mode: ImportMode; jobId: string; tenantId: string; tenantName: string }
   | { kind: 'done'; mode: ImportMode; jobId: string; tenantId: string; tenantName: string; result: 'completed' | 'failed' | 'timed_out' }
 
+export type DoneResult = 'completed' | 'failed' | 'timed_out'
+
 export type ImportFlowAction =
   | { type: 'SET_TENANT'; tenantId: string; tenantName: string }
   | { type: 'CLEAR_TENANT' }
@@ -17,8 +19,12 @@ export type ImportFlowAction =
   | { type: 'UPLOAD_SUCCESS'; jobId: string }
   | { type: 'SET_NEW_WORKPLACES_MODE'; mode: NewWorkplacesMode }
   | { type: 'HYDRATE_PREVIEW'; jobId: string; tenantId: string; tenantName: string }
+  | { type: 'HYDRATE_APPLYING'; jobId: string; tenantId: string; tenantName: string }
+  | { type: 'HYDRATE_DONE'; jobId: string; tenantId: string; tenantName: string; result: DoneResult }
+  | { type: 'APPLY_TRIGGERED' }
+  | { type: 'JOB_COMPLETED'; result: DoneResult }
   | { type: 'CANCEL' }
-  | { type: 'RESET' }
+  | { type: 'RESET'; preserveTenant?: boolean }
 
 export function reducer(state: ImportFlowState, action: ImportFlowAction): ImportFlowState {
   switch (action.type) {
@@ -60,6 +66,46 @@ export function reducer(state: ImportFlowState, action: ImportFlowAction): Impor
         newWorkplacesMode: 'decide-each',
       }
 
+    case 'HYDRATE_APPLYING':
+      return {
+        kind: 'applying',
+        mode: state.mode,
+        jobId: action.jobId,
+        tenantId: action.tenantId,
+        tenantName: action.tenantName,
+      }
+
+    case 'HYDRATE_DONE':
+      return {
+        kind: 'done',
+        mode: state.mode,
+        jobId: action.jobId,
+        tenantId: action.tenantId,
+        tenantName: action.tenantName,
+        result: action.result,
+      }
+
+    case 'APPLY_TRIGGERED':
+      if (state.kind !== 'preview') return state
+      return {
+        kind: 'applying',
+        mode: state.mode,
+        jobId: state.jobId,
+        tenantId: state.tenantId,
+        tenantName: state.tenantName,
+      }
+
+    case 'JOB_COMPLETED':
+      if (state.kind !== 'applying' && state.kind !== 'preview') return state
+      return {
+        kind: 'done',
+        mode: state.mode,
+        jobId: state.jobId,
+        tenantId: state.tenantId,
+        tenantName: state.tenantName,
+        result: action.result,
+      }
+
     case 'CANCEL':
       return state.kind === 'upload'
         ? state
@@ -71,6 +117,14 @@ export function reducer(state: ImportFlowState, action: ImportFlowAction): Impor
           }
 
     case 'RESET':
+      if (action.preserveTenant && state.kind !== 'upload') {
+        return {
+          kind: 'upload',
+          mode: state.mode,
+          tenantId: state.tenantId,
+          tenantName: state.tenantName,
+        }
+      }
       return { kind: 'upload', mode: state.mode }
 
     default:
@@ -86,8 +140,14 @@ function buildQuery(state: ImportFlowState): string {
   } else {
     params.set('jobId', state.jobId)
     if (state.tenantId) params.set('tenantId', state.tenantId)
+    if (state.kind === 'done') params.set('result', state.result)
   }
   return params.toString()
+}
+
+function parseDoneResult(v: string | null): DoneResult {
+  if (v === 'failed' || v === 'timed_out') return v
+  return 'completed'
 }
 
 interface UseImportFlowOptions {
@@ -116,14 +176,20 @@ export function useImportFlow({ mode, resolveTenantName }: UseImportFlowOptions)
       hydratedRef.current = true
     }
 
-    if (step === 'preview' && jobId) {
+    if ((step === 'preview' || step === 'applying' || step === 'done') && jobId) {
       const tid = tenantId ?? ''
+      const result = parseDoneResult(searchParams?.get('result') ?? null)
+      const buildAction = (name: string): ImportFlowAction => {
+        if (step === 'applying') return { type: 'HYDRATE_APPLYING', jobId, tenantId: tid, tenantName: name }
+        if (step === 'done') return { type: 'HYDRATE_DONE', jobId, tenantId: tid, tenantName: name, result }
+        return { type: 'HYDRATE_PREVIEW', jobId, tenantId: tid, tenantName: name }
+      }
       if (tid && resolveTenantName) {
         resolveTenantName(tid).then((name) => {
-          finish({ type: 'HYDRATE_PREVIEW', jobId, tenantId: tid, tenantName: name ?? tid })
+          finish(buildAction(name ?? tid))
         })
       } else {
-        finish({ type: 'HYDRATE_PREVIEW', jobId, tenantId: tid, tenantName: tid })
+        finish(buildAction(tid))
       }
       return
     }
@@ -159,6 +225,9 @@ export function useImportFlow({ mode, resolveTenantName }: UseImportFlowOptions)
   const setNewWorkplacesMode = useCallback((m: NewWorkplacesMode) => dispatch({ type: 'SET_NEW_WORKPLACES_MODE', mode: m }), [])
   const cancel = useCallback(() => dispatch({ type: 'CANCEL' }), [])
   const reset = useCallback(() => dispatch({ type: 'RESET' }), [])
+  const retry = useCallback(() => dispatch({ type: 'RESET', preserveTenant: true }), [])
+  const applyTriggered = useCallback(() => dispatch({ type: 'APPLY_TRIGGERED' }), [])
+  const jobCompleted = useCallback((result: DoneResult) => dispatch({ type: 'JOB_COMPLETED', result }), [])
 
   return {
     state,
@@ -168,8 +237,11 @@ export function useImportFlow({ mode, resolveTenantName }: UseImportFlowOptions)
       setUploadError,
       uploadSuccess,
       setNewWorkplacesMode,
+      applyTriggered,
+      jobCompleted,
       cancel,
       reset,
+      retry,
     },
   }
 }

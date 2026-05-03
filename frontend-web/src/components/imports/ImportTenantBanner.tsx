@@ -5,9 +5,11 @@ import { Database, X } from 'lucide-react'
 interface ImportTenantBannerProps {
   tenantName: string
   onCancel: () => void
+  /** Esconde o botão de cancelar (D5: apply é commit point — não permitir cancel durante APPLYING). */
+  cancelHidden?: boolean
 }
 
-export function ImportTenantBanner({ tenantName, onCancel }: ImportTenantBannerProps) {
+export function ImportTenantBanner({ tenantName, onCancel, cancelHidden = false }: ImportTenantBannerProps) {
   return (
     <div
       role="alert"
@@ -23,15 +25,17 @@ export function ImportTenantBanner({ tenantName, onCancel }: ImportTenantBannerP
           {tenantName}
         </span>
       </div>
-      <button
-        type="button"
-        onClick={onCancel}
-        className="flex items-center gap-1.5 px-3 py-1 rounded text-sm font-medium hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-blue-600 transition-colors"
-        aria-label="Cancelar importação"
-      >
-        <X className="w-4 h-4" aria-hidden="true" />
-        <span>Cancelar</span>
-      </button>
+      {!cancelHidden && (
+        <button
+          type="button"
+          onClick={onCancel}
+          className="flex items-center gap-1.5 px-3 py-1 rounded text-sm font-medium hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-blue-600 transition-colors"
+          aria-label="Cancelar importação"
+        >
+          <X className="w-4 h-4" aria-hidden="true" />
+          <span>Cancelar</span>
+        </button>
+      )}
     </div>
   )
 }

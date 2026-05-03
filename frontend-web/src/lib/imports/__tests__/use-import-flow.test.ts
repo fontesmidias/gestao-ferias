@@ -103,4 +103,83 @@ describe('useImportFlow reducer', () => {
     expect((after as Record<string, unknown>).jobId).toBe('job-9')
     expect((after as Record<string, unknown>).tenantName).toBe('Servi-Plus')
   })
+
+  // ---- Story 4.2 actions ----
+
+  it('APPLY_TRIGGERED transita preview → applying mantendo jobId/tenant', () => {
+    const preview: ImportFlowState = {
+      kind: 'preview',
+      mode: 'admin',
+      jobId: 'job-1',
+      tenantId: TENANT_ID,
+      tenantName: 'Servi-Plus',
+      newWorkplacesMode: 'create-all',
+    }
+    const after = reducer(preview, { type: 'APPLY_TRIGGERED' })
+    expect(after.kind).toBe('applying')
+    expect((after as Record<string, unknown>).jobId).toBe('job-1')
+    expect((after as Record<string, unknown>).tenantName).toBe('Servi-Plus')
+  })
+
+  it('APPLY_TRIGGERED em estado upload é noop', () => {
+    const upload: ImportFlowState = { kind: 'upload', mode: 'admin' }
+    const after = reducer(upload, { type: 'APPLY_TRIGGERED' })
+    expect(after).toBe(upload)
+  })
+
+  it('JOB_COMPLETED applying → done com result', () => {
+    const applying: ImportFlowState = {
+      kind: 'applying',
+      mode: 'admin',
+      jobId: 'job-1',
+      tenantId: TENANT_ID,
+      tenantName: 'Servi-Plus',
+    }
+    const after = reducer(applying, { type: 'JOB_COMPLETED', result: 'completed' })
+    expect(after.kind).toBe('done')
+    expect((after as Record<string, unknown>).result).toBe('completed')
+    expect((after as Record<string, unknown>).jobId).toBe('job-1')
+  })
+
+  it('JOB_COMPLETED preview → done com result failed (caso polling detectar antes de apply)', () => {
+    const preview: ImportFlowState = {
+      kind: 'preview',
+      mode: 'admin',
+      jobId: 'job-x',
+      tenantId: TENANT_ID,
+      tenantName: 'Servi-Plus',
+      newWorkplacesMode: 'decide-each',
+    }
+    const after = reducer(preview, { type: 'JOB_COMPLETED', result: 'failed' })
+    expect(after.kind).toBe('done')
+    expect((after as Record<string, unknown>).result).toBe('failed')
+  })
+
+  it('RESET com preserveTenant mantém tenantId/tenantName', () => {
+    const done: ImportFlowState = {
+      kind: 'done',
+      mode: 'admin',
+      jobId: 'job-x',
+      tenantId: TENANT_ID,
+      tenantName: 'Servi-Plus',
+      result: 'failed',
+    }
+    const after = reducer(done, { type: 'RESET', preserveTenant: true })
+    expect(after.kind).toBe('upload')
+    expect((after as Record<string, unknown>).tenantId).toBe(TENANT_ID)
+    expect((after as Record<string, unknown>).tenantName).toBe('Servi-Plus')
+  })
+
+  it('HYDRATE_DONE injeta result no state hidratado', () => {
+    const upload: ImportFlowState = { kind: 'upload', mode: 'admin' }
+    const after = reducer(upload, {
+      type: 'HYDRATE_DONE',
+      jobId: 'job-z',
+      tenantId: TENANT_ID,
+      tenantName: 'Servi-Plus',
+      result: 'timed_out',
+    })
+    expect(after.kind).toBe('done')
+    expect((after as Record<string, unknown>).result).toBe('timed_out')
+  })
 })

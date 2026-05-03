@@ -95,3 +95,15 @@ export interface UploadResult {
 export type ImportMode = 'admin' | 'tenant'
 
 export type NewWorkplacesMode = 'create-all' | 'decide-each'
+
+export interface ApplyBody {
+  confirmTenantName: string
+  createWorkplaces?: string[]
+  markAbsentAsPending?: boolean
+  reactivateAll?: boolean
+}
+
+export interface ApplyResult {
+  jobId: string
+  status: 'APPLYING'
+}

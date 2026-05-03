@@ -1,5 +1,8 @@
 import { HttpClient } from '@/lib/api-client'
+import { toast } from 'sonner'
 import type {
+  ApplyBody,
+  ApplyResult,
   ImportJobStatusResponse,
   ImportMode,
   PaginationMeta,
@@ -7,6 +10,8 @@ import type {
   RowCategory,
   UploadResult,
 } from './types'
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1'
 
 // Backend usa envelope { data, error, meta } nas rotas /admin/imports e /imports.
 // Helper simples para desempacotar.
@@ -83,8 +88,80 @@ export const importsApi = {
     unwrap(env)
   },
 
-  errorReportUrl(mode: ImportMode, jobId: string): string {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1'
-    return `${apiUrl}${basePath(mode)}/${jobId}/error-report.xlsx`
+  async apply(mode: ImportMode, jobId: string, body: ApplyBody): Promise<ApplyResult> {
+    const env = await HttpClient.post(`${basePath(mode)}/${jobId}/apply`, body)
+    return unwrap<ApplyResult>(env)
   },
+
+  errorReportUrl(mode: ImportMode, jobId: string): string {
+    return `${API_URL}${basePath(mode)}/${jobId}/error-report.xlsx`
+  },
+
+  /**
+   * Download autenticado: fetch com Bearer + blob + trigger <a download>.
+   * Browsers não enviam Authorization em <a href>, daí esse padrão.
+   */
+  async downloadErrorReport(mode: ImportMode, jobId: string): Promise<void> {
+    const url = importsApi.errorReportUrl(mode, jobId)
+    await downloadAuthenticated(url, 'import-erros.xlsx', { emptyMessage: 'Sem linhas inválidas para baixar.' })
+  },
+
+  /**
+   * Stub: backend ainda não tem rota de download do arquivo original (Story 4.2 open question).
+   * Tenta GET; se 404 → toast informando que não está disponível.
+   */
+  async downloadOriginal(mode: ImportMode, jobId: string): Promise<void> {
+    const url = `${API_URL}${basePath(mode)}/${jobId}/file`
+    try {
+      await downloadAuthenticated(url, 'import-original.xlsx')
+    } catch (err: unknown) {
+      const status = (err as { status?: number })?.status
+      if (status === 404) {
+        toast.info('Download do arquivo original ainda não disponível neste ambiente.')
+        return
+      }
+      throw err
+    }
+  },
+}
+
+interface DownloadOptions {
+  /** Mensagem mostrada quando backend retorna 204 No Content. */
+  emptyMessage?: string
+}
+
+async function downloadAuthenticated(
+  url: string,
+  fallbackFilename: string,
+  opts: DownloadOptions = {},
+): Promise<void> {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+  const res = await fetch(url, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+
+  if (res.status === 204) {
+    if (opts.emptyMessage) toast.info(opts.emptyMessage)
+    return
+  }
+
+  if (!res.ok) {
+    const err = new Error(`Download falhou (HTTP ${res.status})`) as Error & { status?: number }
+    err.status = res.status
+    throw err
+  }
+
+  const blob = await res.blob()
+  const cd = res.headers.get('content-disposition') ?? ''
+  const m = cd.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i)
+  const filename = m?.[1] ? decodeURIComponent(m[1]) : fallbackFilename
+
+  const objectUrl = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = objectUrl
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(objectUrl)
 }

@@ -23,6 +23,10 @@ import { ImportPreviewFilters } from './ImportPreviewFilters'
 import { ImportPreviewTable } from './ImportPreviewTable'
 import { ImportNewWorkplacesBlock } from './ImportNewWorkplacesBlock'
 import { ImportConfirmCancelModal } from './ImportConfirmCancelModal'
+import { ImportConfirmApplyModal } from './ImportConfirmApplyModal'
+import { ImportApplyingView } from './ImportApplyingView'
+import { ImportSummaryView } from './ImportSummaryView'
+import { ImportFailureView } from './ImportFailureView'
 
 interface TenantOption {
   id: string
@@ -43,6 +47,8 @@ export function ImportEmployeesFlow({ mode }: ImportEmployeesFlowProps) {
   const [showFormatModal, setShowFormatModal] = useState(false)
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [cancelling, setCancelling] = useState(false)
+  const [showApplyModal, setShowApplyModal] = useState(false)
+  const [applying, setApplying] = useState(false)
   const [statusFilter, setStatusFilter] = useState<RowCategory | 'all'>('all')
   const [page, setPage] = useState(1)
   const [previewData, setPreviewData] = useState<PreviewPageResponse | null>(null)
@@ -81,12 +87,15 @@ export function ImportEmployeesFlow({ mode }: ImportEmployeesFlowProps) {
       .finally(() => setTenantsLoading(false))
   }, [mode])
 
-  // Polling enquanto job está em PARSING ou PENDING.
-  const pollEnabled = state.kind === 'preview'
+  // Polling enquanto job está em preview, applying ou done (status completo
+  // ainda é necessário no done view para sumário/failure reason).
+  const pollJobId = state.kind === 'preview' || state.kind === 'applying' || state.kind === 'done'
+    ? state.jobId
+    : null
   const { status: jobStatus, error: pollError } = usePollImportStatus({
     mode,
-    jobId: state.kind === 'preview' ? state.jobId : null,
-    enabled: pollEnabled,
+    jobId: pollJobId,
+    enabled: pollJobId !== null,
   })
 
   // Surface poll error (M3): toast de uma vez quando entra em estado de erro.
@@ -139,17 +148,24 @@ export function ImportEmployeesFlow({ mode }: ImportEmployeesFlowProps) {
     setPage(1)
   }, [statusFilter])
 
-  // Detecta FAILED/TIMED_OUT e avisa (Story 4.2 cobre UI completa de FAILED, mas
-  // vamos pelo menos surfar um toast aqui para não deixar o usuário no escuro).
+  // Detecta transição para estado terminal durante applying/preview e
+  // dispara JOB_COMPLETED → state.done. Polling continua em done para popular
+  // sumário/failure reason, mas paramos de transitar de novo.
   useEffect(() => {
     if (!jobStatus) return
-    if (jobStatus.status === 'FAILED') {
-      toast.error(`Importação falhou: ${jobStatus.failureReason ?? 'erro desconhecido'}`)
+    if (state.kind !== 'applying' && state.kind !== 'preview') return
+    if (jobStatus.status === 'COMPLETED') {
+      actions.jobCompleted('completed')
+    } else if (jobStatus.status === 'FAILED') {
+      actions.jobCompleted('failed')
     } else if (jobStatus.status === 'TIMED_OUT') {
-      toast.error('Importação expirou (timeout).')
+      actions.jobCompleted('timed_out')
+    } else if (jobStatus.status === 'CANCELLED' && state.kind === 'applying') {
+      // Edge case: backend cancelou (watchdog) durante applying — trata como falha.
+      actions.jobCompleted('failed')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobStatus?.status, jobStatus?.failureReason])
+  }, [jobStatus?.status, state.kind])
 
   // -- Handlers --
 
@@ -184,6 +200,44 @@ export function ImportEmployeesFlow({ mode }: ImportEmployeesFlowProps) {
       setUploading(false)
       setUploadProgress(0)
     }
+  }
+
+  const handleApply = async ({ confirmTenantName, createWorkplaces }: { confirmTenantName: string; createWorkplaces: string[] }) => {
+    if (state.kind !== 'preview') return
+    setApplying(true)
+    try {
+      await importsApi.apply(mode, state.jobId, {
+        confirmTenantName,
+        createWorkplaces,
+        markAbsentAsPending: false,
+      })
+      toast.success('Aplicação iniciada.')
+      setShowApplyModal(false)
+      actions.applyTriggered()
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code
+      if (code === 'INVALID_CONFIRM_TENANT_NAME') {
+        toast.error('Nome digitado não confere com o tenant alvo.')
+      } else {
+        toast.error(err instanceof Error ? err.message : 'Erro ao aplicar')
+      }
+    } finally {
+      setApplying(false)
+    }
+  }
+
+  const handleNewImport = () => {
+    actions.reset()
+    setPreviewData(null)
+    setPage(1)
+    setStatusFilter('all')
+  }
+
+  const handleRetry = () => {
+    actions.retry()
+    setPreviewData(null)
+    setPage(1)
+    setStatusFilter('all')
   }
 
   const handleCancelConfirm = async () => {
@@ -221,6 +275,7 @@ export function ImportEmployeesFlow({ mode }: ImportEmployeesFlowProps) {
         <ImportTenantBanner
           tenantName={tenantNameForBanner}
           onCancel={() => setShowCancelModal(true)}
+          cancelHidden={state.kind === 'applying' || state.kind === 'done'}
         />
       )}
 
@@ -264,6 +319,50 @@ export function ImportEmployeesFlow({ mode }: ImportEmployeesFlowProps) {
             pagination={pagination}
             onPageChange={setPage}
             onCancel={() => setShowCancelModal(true)}
+            onApply={() => setShowApplyModal(true)}
+          />
+        )}
+
+        {state.kind === 'applying' && (
+          <ImportApplyingView
+            rowsProcessed={jobStatus?.rowsProcessed ?? null}
+            totalRows={jobStatus?.totalRows ?? null}
+            rowsCreated={jobStatus?.rowsCreated ?? null}
+            rowsUpdated={jobStatus?.rowsUpdated ?? null}
+            rowsInvalid={jobStatus?.rowsInvalid ?? null}
+            rowsAbsent={jobStatus?.rowsAbsent ?? null}
+            appliedAt={jobStatus?.appliedAt ?? null}
+          />
+        )}
+
+        {state.kind === 'done' && state.result === 'completed' && (
+          <ImportSummaryView
+            mode={mode}
+            jobId={state.jobId}
+            tenantId={state.tenantId}
+            tenantName={state.tenantName}
+            rowsCreated={jobStatus?.rowsCreated ?? null}
+            rowsUpdated={jobStatus?.rowsUpdated ?? null}
+            workplacesCreated={jobStatus?.workplacesCreated ?? null}
+            rowsInvalid={jobStatus?.rowsInvalid ?? null}
+            rowsAbsent={jobStatus?.rowsAbsent ?? null}
+            rowsReactivated={jobStatus?.previewSummary?.counts?.reactivation ?? null}
+            appliedAt={jobStatus?.appliedAt ?? null}
+            completedAt={jobStatus?.completedAt ?? null}
+            onNewImport={handleNewImport}
+          />
+        )}
+
+        {state.kind === 'done' && state.result !== 'completed' && (
+          <ImportFailureView
+            mode={mode}
+            jobId={state.jobId}
+            tenantName={state.tenantName}
+            result={state.result}
+            failureReason={jobStatus?.failureReason ?? null}
+            appliedAt={jobStatus?.appliedAt ?? null}
+            completedAt={jobStatus?.completedAt ?? null}
+            onRetry={handleRetry}
           />
         )}
       </div>
@@ -276,6 +375,20 @@ export function ImportEmployeesFlow({ mode }: ImportEmployeesFlowProps) {
         onClose={() => setShowCancelModal(false)}
         onConfirm={handleCancelConfirm}
       />
+
+      {state.kind === 'preview' && (
+        <ImportConfirmApplyModal
+          open={showApplyModal}
+          mode={mode}
+          tenantName={state.tenantName}
+          counts={counts}
+          newWorkplaces={newWorkplaces}
+          newWorkplacesMode={state.newWorkplacesMode}
+          loading={applying}
+          onClose={() => setShowApplyModal(false)}
+          onConfirm={handleApply}
+        />
+      )}
     </div>
   )
 }
@@ -396,6 +509,7 @@ interface PreviewStepProps {
   pagination: PaginationMeta
   onPageChange: (p: number) => void
   onCancel: () => void
+  onApply: () => void
 }
 
 function PreviewStep({
@@ -413,6 +527,7 @@ function PreviewStep({
   pagination,
   onPageChange,
   onCancel,
+  onApply,
 }: PreviewStepProps) {
   if (!previewReady) {
     if (failureReason) {
@@ -468,9 +583,8 @@ function PreviewStep({
         </button>
         <button
           type="button"
-          disabled
-          title="A aplicação será habilitada na Story 4.2."
-          className="px-4 py-2 rounded-lg text-sm font-bold bg-primary text-white opacity-60 cursor-not-allowed"
+          onClick={onApply}
+          className="px-4 py-2 rounded-lg text-sm font-bold bg-primary text-white hover:bg-primary/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
           Aplicar importação ▶
         </button>
