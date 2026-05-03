@@ -392,6 +392,246 @@ const predict: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       message: 'Configure uma chave de API (OpenAI, Anthropic, Gemini ou Groq) nas Configurações do Tenant para ativar o Oráculo AI.'
     })
   })
+
+  // Story 4.5 / L2 — Streaming SSE do chat. Emite eventos:
+  //   data: {"type":"token","content":"..."}     — incremental
+  //   data: {"type":"meta","provider":"...","source":"...","scope":"..."}  — termina contexto
+  //   data: {"type":"done"}                       — fim
+  //   data: {"type":"error","message":"..."}     — erro tratado
+  fastify.post('/ask/stream', {
+    onRequest: [fastify.requireAuth],
+    schema: {
+      body: {
+        type: 'object',
+        required: ['question'],
+        properties: { question: { type: 'string', minLength: 5 } },
+      },
+    },
+  }, async (request, reply) => {
+    const { tenantId } = request.user as any
+    const { question } = request.body as { question: string }
+
+    reply.raw.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+    reply.raw.setHeader('Cache-Control', 'no-cache, no-transform')
+    reply.raw.setHeader('Connection', 'keep-alive')
+    reply.raw.setHeader('X-Accel-Buffering', 'no')
+    reply.raw.flushHeaders?.()
+
+    const send = (obj: unknown) => {
+      reply.raw.write(`data: ${JSON.stringify(obj)}\n\n`)
+    }
+    const end = () => { reply.raw.end() }
+
+    // Filtro de escopo antes de qualquer coisa.
+    const scope = isInScope(question)
+    if (!scope.inScope) {
+      send({ type: 'token', content: buildOutOfScopeAnswer(scope.reason) })
+      send({
+        type: 'meta',
+        provider: 'scope-filter',
+        source: 'Filtro local — sem chamada LLM',
+        scope: 'out_of_scope',
+        reason: scope.reason,
+        supportedTopics: SUPPORTED_TOPICS,
+      })
+      send({ type: 'done' })
+      end()
+      return reply
+    }
+
+    const tenant = await fastify.prisma.tenant.findUnique({ where: { id: tenantId } })
+    if (!tenant) {
+      send({ type: 'error', message: 'Tenant não encontrado.' })
+      end()
+      return reply
+    }
+
+    const tenantContext = await PromptBuilder.buildContext(fastify.prisma, tenantId)
+    const systemPrompt = PromptBuilder.buildSystemPrompt(tenantContext)
+    const sourceAttribution = PromptBuilder.buildSourceAttribution(tenantContext)
+
+    const STREAM_TIMEOUT_MS = 60_000
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), STREAM_TIMEOUT_MS)
+
+    // Stream OpenAI
+    async function streamOpenAI(apiKey: string, model: string): Promise<boolean> {
+      try {
+        const res = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+          body: JSON.stringify({
+            model,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: question },
+            ],
+            max_tokens: 1000,
+            stream: true,
+          }),
+          signal: controller.signal,
+        })
+        if (!res.ok || !res.body) return false
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+        // OpenAI emite linhas SSE "data: {json}\n\n" + "data: [DONE]\n\n"
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          const { value, done } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
+          const parts = buffer.split('\n\n')
+          buffer = parts.pop() ?? ''
+          for (const part of parts) {
+            const line = part.trim()
+            if (!line.startsWith('data:')) continue
+            const payload = line.slice(5).trim()
+            if (payload === '[DONE]') continue
+            try {
+              const json = JSON.parse(payload)
+              const content = json.choices?.[0]?.delta?.content
+              if (content) send({ type: 'token', content })
+            } catch { /* ignora chunk parcial */ }
+          }
+        }
+        return true
+      } catch {
+        return false
+      }
+    }
+
+    // Stream Anthropic
+    async function streamAnthropic(apiKey: string, model: string): Promise<boolean> {
+      try {
+        const res = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify({
+            model, max_tokens: 1000, system: systemPrompt,
+            messages: [{ role: 'user', content: question }],
+            stream: true,
+          }),
+          signal: controller.signal,
+        })
+        if (!res.ok || !res.body) return false
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+        // Anthropic emite "event: <name>\ndata: {json}\n\n"
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          const { value, done } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
+          const parts = buffer.split('\n\n')
+          buffer = parts.pop() ?? ''
+          for (const part of parts) {
+            for (const ln of part.split('\n')) {
+              const line = ln.trim()
+              if (!line.startsWith('data:')) continue
+              const payload = line.slice(5).trim()
+              try {
+                const json = JSON.parse(payload)
+                if (json.type === 'content_block_delta' && json.delta?.type === 'text_delta') {
+                  send({ type: 'token', content: json.delta.text })
+                }
+              } catch { /* ignora chunk parcial */ }
+            }
+          }
+        }
+        return true
+      } catch {
+        return false
+      }
+    }
+
+    // Fallback não-streaming: pega resposta completa e emite como 1 token.
+    async function nonStreamFallback(): Promise<{ ok: boolean; provider?: string }> {
+      try {
+        if (tenant?.geminiKey) {
+          const r = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${tenant.geminiKey}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: `${systemPrompt}\n\nPergunta: ${question}` }] }],
+              }),
+              signal: controller.signal,
+            },
+          )
+          const data = await r.json() as any
+          const txt = data.candidates?.[0]?.content?.parts?.[0]?.text
+          if (txt) { send({ type: 'token', content: txt }); return { ok: true, provider: 'gemini' } }
+        }
+        if (tenant?.groqKey) {
+          const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tenant.groqKey}` },
+            body: JSON.stringify({
+              model: 'llama-3.3-70b-versatile',
+              messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: question },
+              ],
+              max_tokens: 1000,
+            }),
+            signal: controller.signal,
+          })
+          const data = await r.json() as any
+          const txt = data.choices?.[0]?.message?.content
+          if (txt) { send({ type: 'token', content: txt }); return { ok: true, provider: 'groq' } }
+        }
+      } catch { /* ignore */ }
+      return { ok: false }
+    }
+
+    let provider: string | null = null
+    try {
+      // Provider explícito
+      if (tenant.llmProvider === 'openai' && tenant.openaiKey) {
+        if (await streamOpenAI(tenant.openaiKey, tenant.llmModel || 'gpt-4o-mini')) provider = 'openai'
+      } else if (tenant.llmProvider === 'anthropic' && tenant.anthropicKey) {
+        if (await streamAnthropic(tenant.anthropicKey, tenant.llmModel || 'claude-sonnet-4-20250514')) provider = 'anthropic'
+      } else if (tenant.llmProvider === 'gemini' || tenant.llmProvider === 'groq') {
+        const fb = await nonStreamFallback()
+        if (fb.ok) provider = fb.provider!
+      } else {
+        // Fallback chain stream-first
+        if (!provider && tenant.openaiKey) {
+          if (await streamOpenAI(tenant.openaiKey, 'gpt-4o-mini')) provider = 'openai'
+        }
+        if (!provider && tenant.anthropicKey) {
+          if (await streamAnthropic(tenant.anthropicKey, 'claude-sonnet-4-20250514')) provider = 'anthropic'
+        }
+        if (!provider) {
+          const fb = await nonStreamFallback()
+          if (fb.ok) provider = fb.provider!
+        }
+      }
+    } finally {
+      clearTimeout(timer)
+    }
+
+    if (!provider) {
+      send({
+        type: 'error',
+        message: 'Nenhuma LLM configurada ou disponível. Configure chave de API nas Configurações do Tenant.',
+      })
+      end()
+      return reply
+    }
+
+    send({ type: 'meta', provider, source: sourceAttribution, scope: 'in_scope' })
+    send({ type: 'done' })
+    end()
+    return reply
+  })
 }
 
 export default predict

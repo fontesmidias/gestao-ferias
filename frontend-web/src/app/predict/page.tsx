@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState, useCallback, useRef } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import {
   BrainCircuit,
   TrendingDown,
@@ -101,41 +101,12 @@ export default function AIPredictDashboard() {
   const [forecast, setForecast] = useState<ForecastMonth[]>([])
   const [loading, setLoading] = useState(true)
 
-  // Chat state
+  // Chat state — Story 4.5 / L2 (streaming SSE substitui timer local).
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
   const [llmUnavailable, setLlmUnavailable] = useState(false)
-  const [typingText, setTypingText] = useState('')
   const [isTyping, setIsTyping] = useState(false)
-  const typingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-
-  // ── Typing animation helper ────────────────────────────────────────
-  const animateTyping = useCallback((fullText: string, provider?: string) => {
-    setIsTyping(true)
-    setTypingText('')
-    let index = 0
-    typingIntervalRef.current = setInterval(() => {
-      index++
-      setTypingText(fullText.slice(0, index))
-      if (index >= fullText.length) {
-        if (typingIntervalRef.current) clearInterval(typingIntervalRef.current)
-        typingIntervalRef.current = null
-        setIsTyping(false)
-        setTypingText('')
-        setChatMessages((prev) => [
-          ...prev,
-          { role: 'assistant', content: fullText, provider },
-        ])
-      }
-    }, 30)
-  }, [])
-
-  useEffect(() => {
-    return () => {
-      if (typingIntervalRef.current) clearInterval(typingIntervalRef.current)
-    }
-  }, [])
 
   // ── Data fetching ──────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
@@ -164,8 +135,8 @@ export default function AIPredictDashboard() {
   }, [fetchData])
 
   // ── Chat handler ───────────────────────────────────────────────────
-  async function handleAskQuestion() {
-    const question = chatInput.trim()
+  async function handleAskQuestion(override?: string) {
+    const question = (override ?? chatInput).trim()
     if (!question || chatLoading) return
 
     setChatMessages((prev) => [...prev, { role: 'user', content: question }])
@@ -174,27 +145,99 @@ export default function AIPredictDashboard() {
     setLlmUnavailable(false)
 
     try {
-      const data = await HttpClient.post('/predict/ask', { question })
-      animateTyping(data.answer, data.provider)
-    } catch (err: any) {
-      const msg = err.message || ''
-      if (msg.toLowerCase().includes('llm') || msg.toLowerCase().includes('provider') || msg.toLowerCase().includes('key')) {
-        setLlmUnavailable(true)
-        setChatMessages((prev) => [
-          ...prev,
-          {
-            role: 'assistant',
-            content:
-              'Nenhum provedor de IA configurado. Acesse as configurações e adicione sua chave de API (OpenAI, Anthropic, etc.) para usar o chat.',
-          },
-        ])
-      } else {
-        toast.error(msg || 'Erro ao consultar a IA')
-        setChatMessages((prev) => [
-          ...prev,
-          { role: 'assistant', content: 'Desculpe, ocorreu um erro ao processar sua pergunta. Tente novamente.' },
-        ])
+      // Story 4.5 / L2 — streaming SSE real (substitui typing animation local).
+      const apiBase = process.env.NEXT_PUBLIC_API_URL ?? ''
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+      const res = await fetch(`${apiBase}/predict/ask/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ question }),
+      })
+      if (!res.ok || !res.body) {
+        throw new Error(`Stream falhou (${res.status})`)
       }
+
+      // Inicializa mensagem assistant vazia que vai sendo preenchida.
+      let acc = ''
+      let provider: string | undefined
+      let errorMsg: string | null = null
+      const messageIndex = chatMessages.length + 1 // +1 pois user já foi adicionada
+      setChatMessages((prev) => [...prev, { role: 'assistant', content: '' }])
+      setIsTyping(true)
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const parts = buffer.split('\n\n')
+        buffer = parts.pop() ?? ''
+        for (const part of parts) {
+          for (const ln of part.split('\n')) {
+            const line = ln.trim()
+            if (!line.startsWith('data:')) continue
+            const payload = line.slice(5).trim()
+            try {
+              const json = JSON.parse(payload)
+              if (json.type === 'token' && typeof json.content === 'string') {
+                acc += json.content
+                setChatMessages((prev) => {
+                  const next = [...prev]
+                  next[messageIndex] = { role: 'assistant', content: acc, provider }
+                  return next
+                })
+              } else if (json.type === 'meta') {
+                provider = json.provider
+                if (json.scope === 'out_of_scope') {
+                  // Já recebemos o token único do filtro; nada a fazer aqui.
+                }
+              } else if (json.type === 'error') {
+                errorMsg = json.message
+              }
+            } catch { /* ignora chunk parcial */ }
+          }
+        }
+      }
+      setIsTyping(false)
+
+      if (errorMsg) {
+        const msg = errorMsg.toLowerCase()
+        if (msg.includes('llm') || msg.includes('provider') || msg.includes('key') || msg.includes('configurada')) {
+          setLlmUnavailable(true)
+        } else {
+          toast.error(errorMsg)
+        }
+        setChatMessages((prev) => {
+          const next = [...prev]
+          next[messageIndex] = {
+            role: 'assistant',
+            content: errorMsg!.includes('LLM') || errorMsg!.includes('configurada')
+              ? 'Nenhum provedor de IA configurado. Acesse as configurações e adicione sua chave de API (OpenAI, Anthropic, etc.) para usar o chat.'
+              : 'Desculpe, ocorreu um erro ao processar sua pergunta. Tente novamente.',
+          }
+          return next
+        })
+      } else if (provider) {
+        // Final commit com provider attached.
+        setChatMessages((prev) => {
+          const next = [...prev]
+          next[messageIndex] = { role: 'assistant', content: acc, provider }
+          return next
+        })
+      }
+    } catch (err: any) {
+      setIsTyping(false)
+      toast.error(err?.message || 'Erro ao consultar a IA')
+      setChatMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: 'Desculpe, ocorreu um erro ao processar sua pergunta. Tente novamente.' },
+      ])
     } finally {
       setChatLoading(false)
     }
@@ -331,18 +374,11 @@ export default function AIPredictDashboard() {
                     </div>
                   </div>
                 ))}
-                {isTyping && typingText && (
+                {isTyping && (
                   <div className="flex justify-start">
-                    <div className="max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed bg-slate-800 text-slate-200 border border-white/5">
-                      <div className="whitespace-pre-wrap" dangerouslySetInnerHTML={{
-                        __html: typingText
-                          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                          .replace(/\*(.*?)\*/g, '<em>$1</em>')
-                          .replace(/^- /gm, '&bull; ')
-                          .replace(/^(\d+)\. /gm, '<strong>$1.</strong> ')
-                          .replace(/\n/g, '<br/>')
-                      }} />
-                      <span className="inline-block w-0.5 h-4 bg-indigo-400 animate-pulse ml-0.5 align-middle" />
+                    <div className="rounded-2xl px-3 py-2 text-xs text-indigo-300 bg-slate-800/60 border border-white/5">
+                      <span className="inline-block w-1.5 h-1.5 bg-indigo-400 rounded-full animate-pulse mr-1" />
+                      Digitando...
                     </div>
                   </div>
                 )}
@@ -368,35 +404,8 @@ export default function AIPredictDashboard() {
                     key={chip}
                     type="button"
                     onClick={() => {
-                      setChatInput(chip)
-                      // Auto-submit after setting input
-                      setTimeout(() => {
-                        setChatMessages((prev) => [...prev, { role: 'user', content: chip }])
-                        setChatLoading(true)
-                        setLlmUnavailable(false)
-                        HttpClient.post('/predict/ask', { question: chip })
-                          .then((data) => {
-                            animateTyping(data.answer, data.provider)
-                          })
-                          .catch((err: any) => {
-                            const msg = err.message || ''
-                            if (msg.toLowerCase().includes('llm') || msg.toLowerCase().includes('provider') || msg.toLowerCase().includes('key')) {
-                              setLlmUnavailable(true)
-                              setChatMessages((prev) => [
-                                ...prev,
-                                { role: 'assistant', content: 'Nenhum provedor de IA configurado. Acesse as configurações e adicione sua chave de API (OpenAI, Anthropic, etc.) para usar o chat.' },
-                              ])
-                            } else {
-                              toast.error(msg || 'Erro ao consultar a IA')
-                              setChatMessages((prev) => [
-                                ...prev,
-                                { role: 'assistant', content: 'Desculpe, ocorreu um erro ao processar sua pergunta. Tente novamente.' },
-                              ])
-                            }
-                          })
-                          .finally(() => setChatLoading(false))
-                        setChatInput('')
-                      }, 0)
+                      // Reusa handleAskQuestion (com streaming SSE).
+                      void handleAskQuestion(chip)
                     }}
                     className="px-3 py-2 text-xs font-medium bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 rounded-xl hover:bg-indigo-500/20 hover:border-indigo-500/40 transition-all"
                   >

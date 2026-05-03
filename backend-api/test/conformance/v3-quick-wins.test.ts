@@ -406,6 +406,29 @@ test('V3 conformance — quick wins Q1-Q7', async (t) => {
     assert.ok(typeof body.avgIntermitenteSalary === 'number')
   })
 
+  // ===== L2 (Story 4.5): /predict/ask/stream emite SSE =====
+  await t.test('L2: POST /predict/ask/stream out-of-scope → SSE com tokens + meta + done', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/api/v1/predict/ask/stream',
+      headers: { ...auth(tokenAdmin), 'Content-Type': 'application/json' },
+      payload: { question: 'Qual a previsão do tempo amanhã?' },
+    })
+    assert.equal(res.statusCode, 200)
+    assert.match(String(res.headers['content-type'] ?? ''), /text\/event-stream/)
+    const events = res.payload
+      .split('\n\n')
+      .map((p) => p.trim())
+      .filter((p) => p.startsWith('data:'))
+      .map((p) => JSON.parse(p.slice(5).trim()))
+    const types = events.map((e) => e.type)
+    assert.ok(types.includes('token'), 'deve haver pelo menos 1 token')
+    assert.ok(types.includes('meta'), 'deve haver evento meta')
+    assert.ok(types.includes('done'), 'deve haver evento done no fim')
+    const meta = events.find((e) => e.type === 'meta')
+    assert.equal(meta.scope, 'out_of_scope')
+    assert.equal(meta.provider, 'scope-filter')
+  })
+
   await t.test('M3: POST /predict/ask com cumprimento → 200, scope=out_of_scope, reason=greeting', async () => {
     const res = await app.inject({
       method: 'POST', url: '/api/v1/predict/ask',
