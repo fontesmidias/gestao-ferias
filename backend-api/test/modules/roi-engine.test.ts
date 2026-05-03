@@ -71,3 +71,55 @@ test('ROIEngine - Financial Impact Calculation', async (t) => {
     assert.strictEqual(impact.totalContingency, ROIEngine['round'](expectedTotal))
   })
 })
+
+// Story 4.3 / M4 — splitCoverage: ferista efetivo (custo zero) vs intermitente
+test('ROIEngine.splitCoverage', async (t) => {
+  await t.test('pool de feristas cobre tudo → 0 intermitentes, custo intermitente 0', () => {
+    const r = ROIEngine.splitCoverage({
+      uncoveredCount: 3,
+      feristaEfetivoPool: 5,
+      avgIntermitenteSalary: 3000,
+      avgDaysPerCoverage: 30,
+    })
+    assert.equal(r.feristaEfetivoCovers, 3)
+    assert.equal(r.intermitentesNeeded, 0)
+    assert.equal(r.estimatedIntermitenteCost, 0)
+    // 3 coberturas × 100/dia × 30 dias = 9000 economizado
+    assert.equal(r.estimatedSavedCost, 9000)
+  })
+
+  await t.test('pool insuficiente → diferença vai para intermitentes', () => {
+    const r = ROIEngine.splitCoverage({
+      uncoveredCount: 5,
+      feristaEfetivoPool: 2,
+      avgIntermitenteSalary: 3000,
+      avgDaysPerCoverage: 15,
+    })
+    assert.equal(r.feristaEfetivoCovers, 2)
+    assert.equal(r.intermitentesNeeded, 3)
+    // 3 × 100/dia × 15 = 4500
+    assert.equal(r.estimatedIntermitenteCost, 4500)
+    // 2 × 100/dia × 15 = 3000 economizado
+    assert.equal(r.estimatedSavedCost, 3000)
+  })
+
+  await t.test('uncovered = 0 → tudo zero', () => {
+    const r = ROIEngine.splitCoverage({
+      uncoveredCount: 0, feristaEfetivoPool: 10,
+      avgIntermitenteSalary: 5000, avgDaysPerCoverage: 30,
+    })
+    assert.equal(r.feristaEfetivoCovers, 0)
+    assert.equal(r.intermitentesNeeded, 0)
+    assert.equal(r.estimatedIntermitenteCost, 0)
+    assert.equal(r.estimatedSavedCost, 0)
+  })
+
+  await t.test('avgIntermitenteSalary = 0 → custo intermitente 0 mesmo com necessidade', () => {
+    const r = ROIEngine.splitCoverage({
+      uncoveredCount: 5, feristaEfetivoPool: 0,
+      avgIntermitenteSalary: 0, avgDaysPerCoverage: 30,
+    })
+    assert.equal(r.intermitentesNeeded, 5)
+    assert.equal(r.estimatedIntermitenteCost, 0)
+  })
+})

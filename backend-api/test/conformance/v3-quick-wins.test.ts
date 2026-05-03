@@ -343,6 +343,69 @@ test('V3 conformance — quick wins Q1-Q7', async (t) => {
     assert.match(body.answer, /fora do escopo/i)
   })
 
+  // ===== M2 (Story 6.3): POST /vacation-reminders/run dryRun =====
+  // Cria 1 employee com hireDate 2 anos atrás → CONCESSIVO próximo do vencimento.
+  const empReminder = await prisma.employee.create({
+    data: {
+      tenantId: tenant.id, name: 'Reminder Target',
+      cpf: uniqCpf(),
+      hireDate: new Date(Date.now() - 24 * 30 * 24 * 60 * 60 * 1000),
+      employeeType: 'EFETIVO', isFerista: false, salary: 3000,
+      status: 'ATIVO',
+    },
+  })
+
+  await t.test('M2: POST /vacation-reminders/run dryRun=true não envia email mas detecta hits', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/api/v1/vacation-reminders/run',
+      headers: auth(tokenAdmin),
+      payload: { dryRun: true, windowDays: 60 },
+    })
+    assert.equal(res.statusCode, 200, `Expected 200, got ${res.statusCode}: ${res.payload}`)
+    const body = JSON.parse(res.payload)
+    assert.ok(typeof body.scanned === 'number' && body.scanned >= 1)
+    assert.equal(body.emailsSent, 0, 'dryRun não envia')
+    assert.equal(body.emailsFailed, 0)
+    assert.ok(Array.isArray(body.hits))
+  })
+
+  await t.test('M2: POST /vacation-reminders/run como EMPLOYEE → 403', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/api/v1/vacation-reminders/run',
+      headers: auth(tokenEmployee),
+      payload: { dryRun: true },
+    })
+    assert.equal(res.statusCode, 403)
+  })
+
+  await prisma.employee.delete({ where: { id: empReminder.id } }).catch(() => {})
+
+  // ===== M4 (Story 4.3): /predict/coverage-forecast diferencia ferista efetivo =====
+  await t.test('M4: GET /predict/coverage-forecast retorna split ferista efetivo / intermitente', async () => {
+    const res = await app.inject({
+      method: 'GET', url: '/api/v1/predict/coverage-forecast',
+      headers: auth(tokenAdmin),
+    })
+    assert.equal(res.statusCode, 200)
+    const body = JSON.parse(res.payload)
+    assert.ok(Array.isArray(body.forecast))
+    assert.equal(body.forecast.length, 6, 'forecast cobre 6 meses')
+    for (const m of body.forecast) {
+      assert.ok(typeof m.feristaEfetivoPool === 'number')
+      assert.ok(typeof m.feristaEfetivoCovers === 'number')
+      assert.ok(typeof m.intermitentesNeeded === 'number')
+      assert.ok(typeof m.estimatedIntermitenteCost === 'number')
+      assert.ok(typeof m.estimatedSavedCost === 'number')
+      // Invariante: covers + needed = uncovered
+      assert.equal(
+        m.feristaEfetivoCovers + m.intermitentesNeeded,
+        m.uncoveredVacations,
+        `covers + needed deve igualar uncovered no mes ${m.month}`,
+      )
+    }
+    assert.ok(typeof body.avgIntermitenteSalary === 'number')
+  })
+
   await t.test('M3: POST /predict/ask com cumprimento → 200, scope=out_of_scope, reason=greeting', async () => {
     const res = await app.inject({
       method: 'POST', url: '/api/v1/predict/ask',

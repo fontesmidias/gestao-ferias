@@ -43,11 +43,42 @@ async function triggerWebhooks(fastify: any, tenantId: string, event: string, da
 
 /**
  * Envia email de notificacao para o colaborador via SMTP do tenant.
+ * Story 6.3 / M2: registra falhas de SMTP no AuditLog (NFR-REL-002, AC linha 844-846).
  */
-async function sendNotificationEmail(prisma: any, tenantId: string, employeeEmail: string | null, subject: string, html: string) {
+async function sendNotificationEmail(
+  prisma: any,
+  tenantId: string,
+  employeeEmail: string | null,
+  subject: string,
+  html: string,
+  context?: { userId?: string; resourceId?: string; resourceType?: string }
+) {
   if (!employeeEmail) return
-  EmailService.sendMail(tenantId, employeeEmail, subject, html, prisma)
-    .catch((err: any) => console.error(`[EMAIL] Falha ao enviar para ${employeeEmail}:`, err))
+  try {
+    const ok = await EmailService.sendMail(tenantId, employeeEmail, subject, html, prisma)
+    if (!ok && context?.userId) {
+      await AuditService.log(prisma, {
+        tenantId,
+        userId: context.userId,
+        action: 'EMAIL_NOTIFICATION_FAILED',
+        resourceId: context.resourceId ?? employeeEmail,
+        resourceType: context.resourceType ?? 'NOTIFICATION',
+        reason: `Falha SMTP ao enviar "${subject}" para ${employeeEmail}`,
+      }).catch(() => {/* best-effort */})
+    }
+  } catch (err: any) {
+    console.error(`[EMAIL] Falha ao enviar para ${employeeEmail}:`, err)
+    if (context?.userId) {
+      await AuditService.log(prisma, {
+        tenantId,
+        userId: context.userId,
+        action: 'EMAIL_NOTIFICATION_FAILED',
+        resourceId: context.resourceId ?? employeeEmail,
+        resourceType: context.resourceType ?? 'NOTIFICATION',
+        reason: `Exception SMTP: ${err?.message ?? 'unknown'}`,
+      }).catch(() => {/* best-effort */})
+    }
+  }
 }
 
 const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
@@ -236,7 +267,7 @@ const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   fastify.patch('/:id', {
     onRequest: [fastify.requireAuth, fastify.requireAdmin]
   }, async (request, reply) => {
-    const { tenantId } = request.user as any
+    const { tenantId, userId } = request.user as any
     const { id } = request.params as any
     const { status, dispatchNote, startDate, endDate, coverageEmployeeId } = request.body as any
 
@@ -311,7 +342,6 @@ const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     }
 
     // Audit log
-    const { userId } = request.user as any
     await AuditService.log(fastify.prisma as any, {
       tenantId, userId,
       action: status === 'APPROVED' ? 'VACATION_APPROVED' : status === 'REJECTED' ? 'VACATION_REJECTED' : `VACATION_${status}`,
@@ -358,19 +388,22 @@ const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         if (employee) {
           const startFormatted = format(updated.startDate, 'dd/MM/yyyy')
           const endFormatted = format(updated.endDate, 'dd/MM/yyyy')
+          const emailContext = { userId, resourceId: existing.id, resourceType: 'VACATION_REQUEST' }
           if (updated.status === 'APPROVED') {
             const coverageInfo = coverageCreated ? '<br><strong>Cobertura definida</strong> para o seu posto.' : ''
             sendNotificationEmail(
               fastify.prisma, tenantId, employeeEmail,
               'Férias Aprovadas',
-              `<p>Olá ${employee.name},</p><p>Suas férias de <strong>${startFormatted}</strong> a <strong>${endFormatted}</strong> (${updated.days} dias) foram <strong style="color:green">APROVADAS</strong>.${coverageInfo}</p>`
+              `<p>Olá ${employee.name},</p><p>Suas férias de <strong>${startFormatted}</strong> a <strong>${endFormatted}</strong> (${updated.days} dias) foram <strong style="color:green">APROVADAS</strong>.${coverageInfo}</p>`,
+              emailContext,
             )
           } else {
             const motivo = updated.dispatchNote || 'Não informado'
             sendNotificationEmail(
               fastify.prisma, tenantId, employeeEmail,
               'Férias Reprovadas',
-              `<p>Olá ${employee.name},</p><p>Sua solicitação de férias foi <strong style="color:red">REPROVADA</strong>.</p><p>Motivo: ${motivo}</p>`
+              `<p>Olá ${employee.name},</p><p>Sua solicitação de férias foi <strong style="color:red">REPROVADA</strong>.</p><p>Motivo: ${motivo}</p>`,
+              emailContext,
             )
           }
         }

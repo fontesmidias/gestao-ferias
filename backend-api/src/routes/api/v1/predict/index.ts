@@ -65,13 +65,23 @@ const predict: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     }
   })
 
-  // Previsão de demanda de cobertura por mês
+  // Previsão de demanda de cobertura por mês — Story 4.3 / M4
+  // Diferencia ferista EFETIVO (custo zero, já no payroll) de intermitente (custo).
   fastify.get('/coverage-forecast', {
     onRequest: [fastify.requireAuth]
   }, async (request) => {
     const { tenantId } = request.user as any
     const today = new Date()
     const months: any[] = []
+
+    // Salário médio dos intermitentes do tenant (para estimativa de custo).
+    const intermitentesSal = await fastify.prisma.employee.aggregate({
+      where: { tenantId, employeeType: 'INTERMITENTE', status: 'ATIVO' },
+      _avg: { salary: true },
+    })
+    const avgIntermitenteSalary = intermitentesSal._avg.salary
+      ? Number(intermitentesSal._avg.salary)
+      : 0
 
     for (let i = 0; i < 6; i++) {
       const monthStart = startOfMonth(addMonths(today, i))
@@ -105,16 +115,49 @@ const predict: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         if (alloc) affectedWorkplaces.add(alloc.workplacePosition.workplace.name)
       })
 
+      // Pool de feristas EFETIVO disponíveis (sem cobertura sobreposta ao mês).
+      const feristaEfetivoPool = await fastify.prisma.employee.count({
+        where: {
+          tenantId,
+          status: 'ATIVO',
+          employeeType: 'EFETIVO',
+          isFerista: true,
+          coveragesAsReplacement: {
+            none: {
+              startDate: { lte: monthEnd },
+              endDate: { gte: monthStart },
+              status: { in: ['PLANNED', 'ACTIVE'] },
+            },
+          },
+        },
+      })
+
+      // Média de dias por férias do mês (para estimativa de custo).
+      const avgDaysPerCoverage = uncovered.length > 0
+        ? Math.round(uncovered.reduce((acc, v) => acc + (v.days ?? 0), 0) / uncovered.length)
+        : 0
+
+      const split = ROIEngine.splitCoverage({
+        uncoveredCount: uncovered.length,
+        feristaEfetivoPool,
+        avgIntermitenteSalary,
+        avgDaysPerCoverage,
+      })
+
       months.push({
         month: format(monthStart, 'yyyy-MM'),
         totalVacations: vacations.length,
         uncoveredVacations: uncovered.length,
         affectedWorkplaces: Array.from(affectedWorkplaces),
-        intermitentesNeeded: uncovered.length,
+        feristaEfetivoPool,
+        feristaEfetivoCovers: split.feristaEfetivoCovers,
+        intermitentesNeeded: split.intermitentesNeeded,
+        estimatedIntermitenteCost: split.estimatedIntermitenteCost,
+        estimatedSavedCost: split.estimatedSavedCost,
       })
     }
 
-    return { forecast: months }
+    return { forecast: months, avgIntermitenteSalary }
   })
 
   // Chat com LLM — pergunta em linguagem natural

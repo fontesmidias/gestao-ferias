@@ -39,6 +39,37 @@ export class ROIEngine {
     }
   }
 
+  /**
+   * Story 4.3 / M4 — distribui N coberturas pendentes entre pool de feristas
+   * efetivos (custo zero) e intermitentes pagos.
+   *
+   * Premissa: ferista EFETIVO já está no payroll (cobertura tem custo zero
+   * marginal). Apenas o excesso requer intermitente, cujo custo médio é
+   * estimado a partir do salário médio dos intermitentes do tenant.
+   */
+  static splitCoverage(input: {
+    uncoveredCount: number
+    feristaEfetivoPool: number
+    avgIntermitenteSalary: number
+    avgDaysPerCoverage: number
+  }): {
+    feristaEfetivoCovers: number
+    intermitentesNeeded: number
+    estimatedIntermitenteCost: number
+    estimatedSavedCost: number
+  } {
+    const feristaEfetivoCovers = Math.min(input.feristaEfetivoPool, input.uncoveredCount)
+    const intermitentesNeeded = Math.max(0, input.uncoveredCount - feristaEfetivoCovers)
+    const dailyCost = input.avgIntermitenteSalary > 0 ? input.avgIntermitenteSalary / 30 : 0
+    const perCoverageCost = dailyCost * input.avgDaysPerCoverage
+    return {
+      feristaEfetivoCovers,
+      intermitentesNeeded,
+      estimatedIntermitenteCost: this.round(intermitentesNeeded * perCoverageCost),
+      estimatedSavedCost: this.round(feristaEfetivoCovers * perCoverageCost),
+    }
+  }
+
   private static round(value: number): number {
     return Math.round(value * 100) / 100
   }
