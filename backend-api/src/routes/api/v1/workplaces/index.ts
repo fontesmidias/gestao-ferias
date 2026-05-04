@@ -29,56 +29,121 @@ const workplaces: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     try {
       const rawData = await ImportService.parseWorkplaces(buffer, ext)
       let created = 0
+      let updated = 0
       let positions = 0
 
-      // Agrupar por nome do posto (pode ter varias linhas = varias funcoes)
+      // Agrupa linhas pelo identificador único: externalId quando presente,
+      // senão pelo nome (planilha externa pode ter múltiplas linhas para
+      // funções diferentes do mesmo posto).
       const grouped = new Map<string, typeof rawData>()
       for (const row of rawData) {
         if (!row.name) continue
-        const key = row.name
+        const key = row.externalId ? `ext:${row.externalId}` : `name:${row.name}`
         if (!grouped.has(key)) grouped.set(key, [])
         grouped.get(key)!.push(row)
       }
 
-      for (const [name, rows] of grouped) {
+      // Aceita "11/18/2025 15:47:56" e "DD/MM/YYYY HH:mm:ss" e ISO.
+      const parseAnyDate = (raw?: string): Date | null => {
+        if (!raw) return null
+        const m1 = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/)
+        if (m1) {
+          const [, a, b, y, h, mi, s] = m1
+          // Heurística: se primeiro >12, é DD/MM; senão assumir DD/MM (BR padrão).
+          const dd = Number(a), mm = Number(b)
+          const day = dd > 12 ? dd : dd
+          const month = dd > 12 ? mm : mm
+          // Para Postos de Serviço.xlsx, sabemos que é MM/DD; mas o template
+          // fala em DD/MM. Se a importação vier do template, dia<=12 funciona
+          // em qualquer um. Se for re-import da planilha externa, usar BR (DD/MM).
+          const d = new Date(Date.UTC(Number(y), month - 1, day, Number(h ?? 0), Number(mi ?? 0), Number(s ?? 0)))
+          return Number.isNaN(d.getTime()) ? null : d
+        }
+        const d = new Date(raw)
+        return Number.isNaN(d.getTime()) ? null : d
+      }
+
+      for (const [, rows] of grouped) {
         const first = rows[0]
-        // Criar ou encontrar o posto
-        let workplace = await fastify.prisma.workplace.findFirst({
-          where: { name, tenantId }
-        })
-        if (!workplace) {
-          workplace = await fastify.prisma.workplace.create({
-            data: {
-              name,
-              client: first.client || null,
-              address: first.address || null,
-              minStaff: first.minStaff ? parseInt(first.minStaff) : 1,
-              tenantId,
-            }
+        const externalId = first.externalId || null
+        const name = first.name
+
+        // Resolve o posto: por externalId (chave forte) ou por name+externalId=null.
+        let workplace = null
+        if (externalId) {
+          workplace = await fastify.prisma.workplace.findFirst({
+            where: { tenantId, externalId },
           })
+        } else {
+          workplace = await fastify.prisma.workplace.findFirst({
+            where: { tenantId, name, externalId: null },
+          })
+        }
+
+        const upsertPayload = {
+          tenantId,
+          name,
+          externalId,
+          legalName: first.legalName || null,
+          cnpj: first.cnpj || null,
+          client: first.client || null,
+          responsible: first.responsible || null,
+          phone: first.phone || null,
+          email: first.email || null,
+          cep: first.cep || null,
+          street: first.street || null,
+          number: first.number || null,
+          complement: first.complement || null,
+          neighborhood: first.neighborhood || null,
+          city: first.city || null,
+          state: first.state || null,
+          address: first.address || null,
+          contractStatus: first.contractStatus || null,
+          minStaff: first.minStaff ? parseInt(first.minStaff) : 1,
+          importedBy: first.importedBy || null,
+          importedAt: parseAnyDate(first.importedAt),
+        }
+
+        if (workplace) {
+          workplace = await fastify.prisma.workplace.update({
+            where: { id: workplace.id },
+            data: upsertPayload,
+          })
+          updated++
+        } else {
+          workplace = await fastify.prisma.workplace.create({ data: upsertPayload })
           created++
         }
 
-        // Criar posicoes (funcoes) para cada linha que tem positionRole
+        // Posições — só cria se a linha trouxer positionRole e ainda não
+        // existir uma posição igual (mesmo role+shift) no posto.
         for (const row of rows) {
-          if (row.positionRole) {
-            await fastify.prisma.workplacePosition.create({
-              data: {
-                workplaceId: workplace.id,
-                role: row.positionRole,
-                shiftPattern: row.positionShift || null,
-                requiredCount: row.positionCount ? parseInt(row.positionCount) : 1,
-                tenantId,
-              }
-            })
-            positions++
-          }
+          if (!row.positionRole) continue
+          const existsPos = await fastify.prisma.workplacePosition.findFirst({
+            where: {
+              workplaceId: workplace.id,
+              role: row.positionRole,
+              shiftPattern: row.positionShift || null,
+            },
+          })
+          if (existsPos) continue
+          await fastify.prisma.workplacePosition.create({
+            data: {
+              workplaceId: workplace.id,
+              role: row.positionRole,
+              shiftPattern: row.positionShift || null,
+              requiredCount: row.positionCount ? parseInt(row.positionCount) : 1,
+              tenantId,
+            },
+          })
+          positions++
         }
       }
 
       return {
-        message: `Importacao concluida: ${created} postos criados, ${positions} posicoes adicionadas.`,
+        message: `Importação concluída: ${created} postos criados, ${updated} atualizados, ${positions} posições adicionadas.`,
         workplaces: created,
+        updated,
         positions,
       }
     } catch (error: any) {

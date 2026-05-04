@@ -13,6 +13,14 @@ export interface RawEmployee {
 export interface RawWorkplace {
   name: string; client?: string; address?: string; city?: string;
   minStaff?: string; positionRole?: string; positionShift?: string; positionCount?: string;
+  // Schema expandido (importação completa de Postos de Serviço — 2026-05-04)
+  externalId?: string;
+  legalName?: string; cnpj?: string;
+  responsible?: string; phone?: string; email?: string;
+  cep?: string; street?: string; number?: string; complement?: string;
+  neighborhood?: string; state?: string;
+  contractStatus?: string;
+  importedBy?: string; importedAt?: string;
 }
 
 export interface RawAllocation {
@@ -41,12 +49,35 @@ const EMPLOYEE_MAP: Record<string, keyof RawEmployee> = {
 }
 
 const WORKPLACE_MAP: Record<string, keyof RawWorkplace> = {
+  // Identificação
+  'ID': 'externalId', 'externalId': 'externalId',
   'name': 'name', 'nome': 'name', 'Nome': 'name', 'Nome do Posto': 'name', 'Posto': 'name',
+  'Nome / Apelido': 'name', 'Nome/Apelido': 'name',
+  'Razão Social': 'legalName', 'Razao Social': 'legalName', 'legalName': 'legalName',
+  'CNPJ': 'cnpj', 'cnpj': 'cnpj',
   'client': 'client', 'cliente': 'client', 'Cliente': 'client', 'Contratante': 'client',
+  // Contato
+  'Responsável': 'responsible', 'Responsavel': 'responsible', 'responsible': 'responsible',
+  'Telefone': 'phone', 'phone': 'phone',
+  'E-mail': 'email', 'Email': 'email', 'email': 'email',
+  // Endereço estruturado (planilha Postos de Serviço)
+  'CEP': 'cep', 'cep': 'cep',
+  'Logradouro': 'street', 'street': 'street',
+  'Número': 'number', 'Numero': 'number', 'number': 'number',
+  'Complemento': 'complement', 'complement': 'complement',
+  'Bairro': 'neighborhood', 'neighborhood': 'neighborhood',
+  'UF': 'state', 'state': 'state',
+  'Cidade': 'city', 'city': 'city', 'cidade': 'city',
+  // Endereço único (legado)
   'address': 'address', 'endereco': 'address', 'Endereco': 'address',
-  'city': 'city', 'cidade': 'city', 'Cidade': 'city',
-  'minStaff': 'minStaff', 'equipe_minima': 'minStaff', 'Equipe Minima': 'minStaff',
-  'positionRole': 'positionRole', 'funcao': 'positionRole', 'Funcao': 'positionRole', 'Cargo no Posto': 'positionRole',
+  // Operação
+  'minStaff': 'minStaff', 'equipe_minima': 'minStaff', 'Equipe Minima': 'minStaff', 'Equipe Mínima': 'minStaff',
+  'Status Contrato': 'contractStatus', 'contractStatus': 'contractStatus',
+  // Auditoria
+  'Usuário': 'importedBy', 'Usuario': 'importedBy', 'importedBy': 'importedBy',
+  'Data Atualização': 'importedAt', 'Data Atualizacao': 'importedAt', 'importedAt': 'importedAt',
+  // Posições filhas (1 linha por posição, agrupadas pelo Nome)
+  'positionRole': 'positionRole', 'funcao': 'positionRole', 'Funcao': 'positionRole', 'Cargo no Posto': 'positionRole', 'Função': 'positionRole',
   'positionShift': 'positionShift', 'escala': 'positionShift', 'Escala': 'positionShift',
   'positionCount': 'positionCount', 'quantidade': 'positionCount', 'Quantidade': 'positionCount', 'Vagas': 'positionCount',
 }
@@ -146,29 +177,64 @@ export class ImportService {
 
   static generateWorkplaceTemplate(): Buffer {
     const wb = XLSX.utils.book_new()
+    // Colunas alinhadas com a planilha "Postos de Serviço.xlsx" exportada do
+    // sistema externo. Apenas as colunas que persistimos (Lat/Lng/Cerca km e
+    // os flags operacionais ficam de fora — vide auditoria 2026-05-04).
+    const headers = [
+      'ID', 'Nome / Apelido', 'Razão Social', 'CNPJ',
+      'Responsável', 'Telefone', 'E-mail',
+      'CEP', 'Logradouro', 'Número', 'Complemento', 'Bairro', 'Cidade', 'UF',
+      'Status Contrato', 'Equipe Minima', 'Cliente',
+      'Função', 'Escala', 'Vagas',
+    ]
     const data = [
-      ['Nome do Posto', 'Cliente', 'Endereco', 'Cidade', 'Equipe Minima', 'Funcao', 'Escala', 'Vagas'],
-      ['INEP - Sede', 'INEP/MEC', 'SIG Quadra 6, Brasilia-DF', 'Brasilia', '4', 'Agente de Portaria', '12x36', '2'],
-      ['INEP - Sede', 'INEP/MEC', 'SIG Quadra 6, Brasilia-DF', 'Brasilia', '4', 'Recepcionista', '8h', '2'],
-      ['TRF 1a Regiao', 'TRF', 'SGAS 600, Brasilia-DF', 'Brasilia', '6', 'Vigilante', '12x36', '4'],
+      headers,
+      ['', 'INEP - Sede', 'INEP - Sede LTDA', '12.345.678/0001-99',
+        'João Silva', '(61) 99999-9999', 'joao@inep.gov.br',
+        '70073-000', 'SIG Quadra 6', '100', 'Bloco A', 'Asa Sul', 'Brasília', 'DF',
+        'Ativo', '4', 'INEP/MEC',
+        'Agente de Portaria', '12x36', '2'],
+      ['', 'INEP - Sede', 'INEP - Sede LTDA', '12.345.678/0001-99',
+        'João Silva', '(61) 99999-9999', 'joao@inep.gov.br',
+        '70073-000', 'SIG Quadra 6', '100', 'Bloco A', 'Asa Sul', 'Brasília', 'DF',
+        'Ativo', '4', 'INEP/MEC',
+        'Recepcionista', '8h', '2'],
+      ['', 'TRF 1ª Região', 'Tribunal Regional Federal', '00.000.000/0001-00',
+        '', '', '',
+        '70297-400', 'SGAS 600', '', '', 'Asa Sul', 'Brasília', 'DF',
+        'Ativo', '6', 'TRF',
+        'Vigilante', '12x36', '4'],
     ]
     const ws = XLSX.utils.aoa_to_sheet(data)
-    ws['!cols'] = data[0].map(() => ({ wch: 22 }))
+    ws['!cols'] = headers.map(() => ({ wch: 18 }))
     XLSX.utils.book_append_sheet(wb, ws, 'Postos')
     addInstructionSheet(wb, [
       ['Campo', 'Descricao'],
-      ['Nome do Posto', 'Nome do local de trabalho (obrigatorio)'],
-      ['Cliente', 'Empresa contratante do servico (opcional)'],
-      ['Endereco', 'Endereco fisico do posto (opcional)'],
-      ['Cidade', 'Cidade do posto (opcional)'],
-      ['Equipe Minima', 'Minimo de colaboradores necessarios (padrao: 1)'],
-      ['Funcao', 'Cargo/funcao neste posto (ex: Vigilante, Recepcionista)'],
-      ['Escala', 'Padrao de jornada (8h, 12x36, etc)'],
-      ['Vagas', 'Quantidade de vagas para esta funcao (padrao: 1)'],
+      ['ID', 'Identificador externo (opcional). Útil para idempotência em re-imports.'],
+      ['Nome / Apelido', 'Nome curto de identificação do posto (obrigatório)'],
+      ['Razão Social', 'Nome jurídico oficial da contratante (opcional)'],
+      ['CNPJ', 'CNPJ formatado ou numérico (opcional)'],
+      ['Responsável', 'Pessoa de contato no posto (opcional)'],
+      ['Telefone', 'Telefone de contato (opcional)'],
+      ['E-mail', 'E-mail de contato (opcional)'],
+      ['CEP', 'CEP do posto (opcional)'],
+      ['Logradouro', 'Rua / Avenida (opcional)'],
+      ['Número', 'Número do logradouro (opcional)'],
+      ['Complemento', 'Bloco, sala, etc (opcional)'],
+      ['Bairro', 'Bairro (opcional)'],
+      ['Cidade', 'Cidade (opcional)'],
+      ['UF', 'Sigla do estado, 2 letras (opcional)'],
+      ['Status Contrato', 'Ativo / Inativo / Suspenso (padrão: Ativo)'],
+      ['Equipe Minima', 'Minimo de colaboradores necessários no posto (padrão: 1)'],
+      ['Cliente', 'Empresa/órgão contratante (opcional, alternativo à Razão Social)'],
+      ['Função', 'Cargo neste posto (Vigilante, Recepcionista, etc) - opcional'],
+      ['Escala', 'Padrão de jornada (8h, 12x36, 6x1, etc) - opcional'],
+      ['Vagas', 'Quantidade de vagas para esta função (padrão: 1)'],
       ['', ''],
       ['REGRAS', ''],
-      ['Mesmo posto', 'Varias linhas com o mesmo Nome criam funcoes diferentes no mesmo posto'],
-      ['Posto existente', 'Se o posto ja existir, apenas novas funcoes sao adicionadas'],
+      ['Mesmo posto', 'Várias linhas com o mesmo Nome criam funções diferentes no mesmo posto'],
+      ['Posto existente', 'Se o ID externo ou Nome já existir, atualiza dados; cria apenas novas funções'],
+      ['Idempotência', 'Re-importar a mesma planilha NÃO duplica registros'],
     ])
     return Buffer.from(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }))
   }
