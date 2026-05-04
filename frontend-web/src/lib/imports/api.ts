@@ -56,7 +56,9 @@ export const importsApi = {
   },
 
   async getStatus(mode: ImportMode, jobId: string): Promise<ImportJobStatusResponse> {
-    const env = await HttpClient.get(`${basePath(mode)}/${jobId}/status`)
+    // Backend é GET /:jobId (sem sufixo /status). O sufixo errado causava 404
+    // silencioso: upload OK + parse OK, mas a UI nunca via PREVIEW_READY.
+    const env = await HttpClient.get(`${basePath(mode)}/${jobId}`)
     return unwrap<ImportJobStatusResponse>(env)
   },
 
