@@ -319,10 +319,39 @@ model RefreshToken {
 model Workplace {
   id        String   @id @default(uuid()) @db.Uuid
   name      String
+  // Endereço único (legado, mantido para retrocompat). Os novos forms usam
+  // os campos estruturados abaixo.
   address   String?
   client    String?
   minStaff  Int      @default(1) @map("min_staff")
   tenantId  String   @map("tenant_id") @db.Uuid
+
+  // Identificação fiscal (importação Postos de Serviço — 2026-05-04)
+  legalName       String?  @map("legal_name")          // Razão Social
+  cnpj            String?  @map("cnpj")
+  externalId      String?  @map("external_id")         // ID na planilha de origem
+
+  // Contato
+  responsible     String?  @map("responsible")
+  phone           String?  @map("phone")
+  email           String?  @map("email")
+
+  // Endereço estruturado
+  cep             String?  @map("cep")
+  street          String?  @map("street")              // Logradouro
+  number          String?  @map("number")              // Número
+  complement      String?  @map("complement")          // Complemento
+  neighborhood    String?  @map("neighborhood")        // Bairro
+  city            String?  @map("city")
+  state           String?  @map("state")               // UF
+
+  // Contrato / status
+  contractStatus  String?  @map("contract_status")     // Ex: Ativo / Inativo
+
+  // Auditoria de import (quem cadastrou + quando, vindo da planilha externa)
+  importedBy      String?    @map("imported_by")
+  importedAt      DateTime?  @map("imported_at")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -330,6 +359,7 @@ model Workplace {
   positions WorkplacePosition[]
   employees Employee[]
 
+  @@index([tenantId, cnpj], name: "workplaces_tenant_cnpj_idx")
   @@map("workplaces")
 }
 

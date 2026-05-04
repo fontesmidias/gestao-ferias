@@ -87,32 +87,66 @@ const workplaces: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     }
   })
 
-  // Criar posto de trabalho
+  // Criar posto de trabalho — schema expandido em 2026-05-04
+  const workplaceBodyProps = {
+    name: { type: 'string', minLength: 2 },
+    address: { type: 'string' },
+    client: { type: 'string' },
+    minStaff: { type: 'integer', minimum: 1 },
+    // identificação fiscal
+    legalName: { type: 'string' },
+    cnpj: { type: 'string' },
+    externalId: { type: 'string' },
+    // contato
+    responsible: { type: 'string' },
+    phone: { type: 'string' },
+    email: { type: 'string' },
+    // endereço estruturado
+    cep: { type: 'string' },
+    street: { type: 'string' },
+    number: { type: 'string' },
+    complement: { type: 'string' },
+    neighborhood: { type: 'string' },
+    city: { type: 'string' },
+    state: { type: 'string' },
+    // contrato / auditoria de import
+    contractStatus: { type: 'string' },
+    importedBy: { type: 'string' },
+    importedAt: { type: 'string' },
+  } as const
+
   fastify.post('/', {
     onRequest: [fastify.requireAuth, fastify.requireAdmin],
     schema: {
-      body: {
-        type: 'object',
-        required: ['name'],
-        properties: {
-          name: { type: 'string', minLength: 2 },
-          address: { type: 'string' },
-          client: { type: 'string' },
-          minStaff: { type: 'integer', minimum: 1 }
-        }
-      }
+      body: { type: 'object', required: ['name'], properties: workplaceBodyProps }
     }
   }, async (request, reply) => {
     const { tenantId } = request.user as any
-    const { name, address, client, minStaff } = request.body as any
+    const data = request.body as any
 
     const workplace = await fastify.prisma.workplace.create({
       data: {
-        name,
-        address: address || null,
-        client: client || null,
-        minStaff: minStaff || 1,
-        tenantId
+        name: data.name,
+        address: data.address || null,
+        client: data.client || null,
+        minStaff: data.minStaff || 1,
+        legalName: data.legalName || null,
+        cnpj: data.cnpj || null,
+        externalId: data.externalId || null,
+        responsible: data.responsible || null,
+        phone: data.phone || null,
+        email: data.email || null,
+        cep: data.cep || null,
+        street: data.street || null,
+        number: data.number || null,
+        complement: data.complement || null,
+        neighborhood: data.neighborhood || null,
+        city: data.city || null,
+        state: data.state || null,
+        contractStatus: data.contractStatus || null,
+        importedBy: data.importedBy || null,
+        importedAt: data.importedAt ? new Date(data.importedAt) : null,
+        tenantId,
       }
     })
 
@@ -193,7 +227,7 @@ const workplaces: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     return workplace
   })
 
-  // Atualizar posto
+  // Atualizar posto — aceita todos os campos novos
   fastify.patch('/:id', {
     onRequest: [fastify.requireAuth, fastify.requireAdmin],
     schema: {
@@ -201,15 +235,7 @@ const workplaces: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         type: 'object',
         properties: { id: { type: 'string', format: 'uuid' } }
       },
-      body: {
-        type: 'object',
-        properties: {
-          name: { type: 'string', minLength: 2 },
-          address: { type: 'string' },
-          client: { type: 'string' },
-          minStaff: { type: 'integer', minimum: 1 }
-        }
-      }
+      body: { type: 'object', properties: workplaceBodyProps }
     }
   }, async (request, reply) => {
     const { tenantId } = request.user as any
@@ -221,14 +247,24 @@ const workplaces: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       return reply.code(404).send({ error: 'Not Found', message: 'Posto não encontrado.' })
     }
 
+    const patch: Record<string, unknown> = {}
+    const passthrough = [
+      'name', 'address', 'client', 'minStaff',
+      'legalName', 'cnpj', 'externalId',
+      'responsible', 'phone', 'email',
+      'cep', 'street', 'number', 'complement', 'neighborhood', 'city', 'state',
+      'contractStatus', 'importedBy',
+    ]
+    for (const k of passthrough) {
+      if (data[k] !== undefined) patch[k] = data[k] === '' ? null : data[k]
+    }
+    if (data.importedAt !== undefined) {
+      patch.importedAt = data.importedAt ? new Date(data.importedAt) : null
+    }
+
     const updated = await fastify.prisma.workplace.update({
       where: { id: existing.id },
-      data: {
-        name: data.name !== undefined ? data.name : undefined,
-        address: data.address !== undefined ? data.address : undefined,
-        client: data.client !== undefined ? data.client : undefined,
-        minStaff: data.minStaff !== undefined ? data.minStaff : undefined,
-      }
+      data: patch,
     })
 
     return updated
