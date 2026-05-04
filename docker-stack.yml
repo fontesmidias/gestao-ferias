@@ -50,6 +50,14 @@ services:
       REDIS_HOST: "cache"
       REDIS_PORT: "6379"
       JWT_SECRET: "${JWT_SECRET:?Erro: JWT_SECRET obrigatorio em producao}"
+      # Storage de arquivos de import (planilhas Tirvu/Postos). Volume abaixo persiste o conteúdo.
+      IMPORT_FILE_STORAGE_PATH: "/var/imports"
+      # Chave AES-256-GCM (base64) que cifra dados bancários no DB.
+      # Gere uma vez com: node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+      # CRÍTICO: NÃO trocar/perder essa chave após dados bancários cifrados existirem em prod.
+      BANK_DATA_ENCRYPTION_KEY: "${BANK_DATA_ENCRYPTION_KEY:?Erro: BANK_DATA_ENCRYPTION_KEY obrigatorio em producao}"
+    volumes:
+      - imports_data_prod:/var/imports
     networks:
       - ferias_backend_network
       - ferias_traefik_public
@@ -113,3 +121,4 @@ networks:
 volumes:
   postgres_data_prod:
   redis_data_prod:
+  imports_data_prod:
