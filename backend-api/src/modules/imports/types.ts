@@ -156,6 +156,11 @@ export interface PreviewSummary {
   sampleRows: Array<{
     rowIndex: number
     status: RowCategory
+    // Campos de identificação para a tabela do preview (Story 4.1 fix).
+    // Antes só rowIndex+status iam — UI mostrava "—" em Nome/CPF/Lotação.
+    name?: string | null
+    cpf?: string | null
+    workplace?: string | null
     diff?: Diff
     errors?: string[]
   }>

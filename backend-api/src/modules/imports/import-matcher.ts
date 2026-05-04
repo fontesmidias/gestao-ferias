@@ -286,29 +286,41 @@ export function matchAll(inputs: MatchAllInputs): MatchResult {
 export function buildPreviewSummary(
   result: MatchResult,
   totalRows: number,
-  sampleSize = 50,
+  // Default 2000: cobre 99% dos tenants sem truncar; payload JSON aceitável.
+  // Antes era 50 → frontend mostrava só 50 linhas mesmo com 1045+ no arquivo.
+  sampleSize = 2000,
 ): PreviewSummary {
   const all: Array<{
     rowIndex: number
     status: RowCategory
+    name?: string | null
+    cpf?: string | null
+    workplace?: string | null
     diff?: Diff
     errors?: string[]
   }> = []
 
+  // Helper: pega campos de identificação da TirvuRow para o preview UI.
+  const id = (row: { name?: string | null; cpf?: string | null; lotacao?: string | null }) => ({
+    name: row.name ?? null,
+    cpf: row.cpf ?? null,
+    workplace: row.lotacao ?? null,
+  })
+
   for (const e of result.create) {
-    all.push({ rowIndex: e.row.rowIndex, status: 'create' })
+    all.push({ rowIndex: e.row.rowIndex, status: 'create', ...id(e.row) })
   }
   for (const e of result.update) {
-    all.push({ rowIndex: e.row.rowIndex, status: 'update', diff: e.diff })
+    all.push({ rowIndex: e.row.rowIndex, status: 'update', diff: e.diff, ...id(e.row) })
   }
   for (const e of result.unchanged) {
-    all.push({ rowIndex: e.row.rowIndex, status: 'unchanged' })
+    all.push({ rowIndex: e.row.rowIndex, status: 'unchanged', ...id(e.row) })
   }
   for (const e of result.reactivation) {
-    all.push({ rowIndex: e.row.rowIndex, status: 'reactivation', diff: e.diff })
+    all.push({ rowIndex: e.row.rowIndex, status: 'reactivation', diff: e.diff, ...id(e.row) })
   }
   for (const e of result.invalid) {
-    all.push({ rowIndex: e.row.rowIndex, status: 'invalid', errors: e.errors })
+    all.push({ rowIndex: e.row.rowIndex, status: 'invalid', errors: e.errors, ...id(e.row) })
   }
 
   all.sort((a, b) => a.rowIndex - b.rowIndex)
