@@ -164,6 +164,16 @@ export interface PreviewSummary {
     diff?: Diff
     errors?: string[]
   }>
+  /**
+   * Delta de relações que será aplicado ao grafo relacional (V3.3).
+   * Opcional para retrocompat com previews persistidos antes da Story 2.2.
+   */
+  relationalDelta?: {
+    allocationsCreated: number
+    allocationsClosed: number
+    workplacesCreated: number
+    unmatchedEmployees: number
+  }
 }
 
 export class InvalidStateTransitionError extends Error {

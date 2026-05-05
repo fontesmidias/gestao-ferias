@@ -357,3 +357,100 @@ test('buildPreviewSummary — sampleRows respeita sampleSize', () => {
   )
   assert.strictEqual(summary.sampleRows.length, 50)
 })
+
+// ──────────────────────────────────────────────────────────────────────
+// Story 2.2: relationalDelta no PreviewSummary (FR25)
+// ──────────────────────────────────────────────────────────────────────
+
+test('Story 2.2 — relationalDelta: planilha só com novos (3 rows, 2 workplaces inexistentes)', () => {
+  const r1 = makeRow({ rowIndex: 1, cpf: '11111111111', tirvuId: 'A', lotacao: 'ANATEL' })
+  const r2 = makeRow({ rowIndex: 2, cpf: '22222222222', tirvuId: 'B', lotacao: 'INEP - Sede' })
+  const r3 = makeRow({ rowIndex: 3, cpf: '33333333333', tirvuId: 'C', lotacao: 'STJ' })
+  const result = matchAll({
+    rows: [r1, r2, r3],
+    validRowSet: new Set([1, 2, 3]),
+    invalidRowsFromValidator: [],
+    ctx: {
+      tenantId: 'tenant-1',
+      existingEmployees: [],
+      existingWorkplaces: [{ name: 'ANATEL' }],
+    },
+  })
+  const summary = buildPreviewSummary(result, 3)
+  assert.ok(summary.relationalDelta, 'relationalDelta deve estar presente')
+  assert.strictEqual(summary.relationalDelta.allocationsCreated, 3)
+  assert.strictEqual(summary.relationalDelta.allocationsClosed, 0)
+  assert.strictEqual(summary.relationalDelta.workplacesCreated, 2, 'INEP-Sede e STJ são novos')
+  assert.strictEqual(summary.relationalDelta.unmatchedEmployees, 0)
+})
+
+test('Story 2.2 — relationalDelta: transições + unmatched', () => {
+  // 2 employees existentes (com workplaceId) cuja lotação muda + 1 row sem lotação
+  const empA = makeEmployee({
+    id: 'emp-A',
+    cpf: '11111111111',
+    tirvuId: 'A',
+    workplace: 'ANATEL',
+    workplaceId: 'wp-anatel',
+  })
+  const empB = makeEmployee({
+    id: 'emp-B',
+    cpf: '22222222222',
+    tirvuId: 'B',
+    workplace: 'INEP',
+    workplaceId: 'wp-inep',
+  })
+  const empC = makeEmployee({
+    id: 'emp-C',
+    cpf: '33333333333',
+    tirvuId: 'C',
+    workplace: null,
+    workplaceId: null,
+  })
+  const r1 = makeRow({
+    rowIndex: 1, cpf: '11111111111', tirvuId: 'A', lotacao: 'STJ', // muda ANATEL→STJ
+  })
+  const r2 = makeRow({
+    rowIndex: 2, cpf: '22222222222', tirvuId: 'B', lotacao: 'TRT', // muda INEP→TRT
+  })
+  const r3 = makeRow({
+    rowIndex: 3, cpf: '33333333333', tirvuId: 'C', lotacao: null, // sem lotação
+  })
+  const result = matchAll({
+    rows: [r1, r2, r3],
+    validRowSet: new Set([1, 2, 3]),
+    invalidRowsFromValidator: [],
+    ctx: {
+      tenantId: 'tenant-1',
+      existingEmployees: [empA, empB, empC],
+      existingWorkplaces: [{ name: 'ANATEL' }, { name: 'INEP' }],
+    },
+  })
+  const summary = buildPreviewSummary(result, 3)
+  assert.ok(summary.relationalDelta)
+  assert.strictEqual(summary.relationalDelta.allocationsCreated, 2, 'A e B em transição criam novas')
+  assert.strictEqual(summary.relationalDelta.allocationsClosed, 2, 'A e B encerram antigas')
+  assert.strictEqual(summary.relationalDelta.unmatchedEmployees, 1, 'C sem lotação')
+})
+
+test('Story 2.2 — relationalDelta: normalize collisions não duplicam workplacesCreated', () => {
+  // 2 rows com variações da mesma lotação que matcha workplace existente — 0 novos
+  const r1 = makeRow({ rowIndex: 1, cpf: '11111111111', tirvuId: 'A', lotacao: 'INEP - Sede' })
+  const r2 = makeRow({ rowIndex: 2, cpf: '22222222222', tirvuId: 'B', lotacao: 'INEP   -   Sede   ' })
+  const result = matchAll({
+    rows: [r1, r2],
+    validRowSet: new Set([1, 2]),
+    invalidRowsFromValidator: [],
+    ctx: {
+      tenantId: 'tenant-1',
+      existingEmployees: [],
+      // matcher existente compara via .trim() (sem normalize completo).
+      // Para o teste, exigimos que ambas variações batam com 'INEP - Sede'.
+      existingWorkplaces: [{ name: 'INEP - Sede' }, { name: 'INEP   -   Sede   ' }],
+    },
+  })
+  const summary = buildPreviewSummary(result, 2)
+  assert.ok(summary.relationalDelta)
+  assert.strictEqual(summary.relationalDelta.allocationsCreated, 2)
+  assert.strictEqual(summary.relationalDelta.workplacesCreated, 0, 'workplaces existentes — 0 novos')
+})

@@ -140,6 +140,7 @@ export async function previewEntrypoint(
         rows,
         counts: summary.counts,
         newWorkplaces: summary.newWorkplaces,
+        relationalDelta: summary.relationalDelta ?? null,
       },
       null,
       { pagination: { page, limit, total, totalPages } },

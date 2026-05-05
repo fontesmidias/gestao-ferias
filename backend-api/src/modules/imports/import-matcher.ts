@@ -283,6 +283,90 @@ export function matchAll(inputs: MatchAllInputs): MatchResult {
   return result
 }
 
+export interface RelationalDelta {
+  allocationsCreated: number
+  allocationsClosed: number
+  workplacesCreated: number
+  unmatchedEmployees: number
+}
+
+/**
+ * Story 2.2 (FR25): conta o impacto do apply nas tabelas relacionais
+ * (WorkplaceAllocation + Workplace) baseado no MatchResult, sem tocar o banco.
+ *
+ * Allocations criadas:
+ * - cada row em `create` com lotação truthy.
+ * - cada row em `update`/`reactivation` que: (a) `diff.workplace` mudou OU
+ *   (b) employee não tinha `workplaceId` mas patch traz lotação.
+ *
+ * Allocations encerradas:
+ * - cada `update`/`reactivation` em transição (workplace mudou) E o employee
+ *   já tinha `workplaceId` (havia allocation a encerrar).
+ *
+ * Workplaces criados:
+ * - `result.newWorkplaces.length` (já calculado pelo matcher).
+ *
+ * Unmatched employees:
+ * - cada row válida (create/update/reactivation) cuja lotação é vazia/null.
+ */
+export function computeRelationalDelta(result: MatchResult): RelationalDelta {
+  let allocationsCreated = 0
+  let allocationsClosed = 0
+  let unmatchedEmployees = 0
+
+  for (const e of result.create) {
+    const lotacao = e.row.lotacao?.trim() ?? ''
+    if (lotacao) allocationsCreated++
+    else unmatchedEmployees++
+  }
+
+  for (const e of result.update) {
+    const lotacao = e.row.lotacao?.trim() ?? ''
+    if (!lotacao) {
+      unmatchedEmployees++
+      continue
+    }
+    const workplaceChanged = 'workplace' in e.diff
+    const hadFk = !!e.employee.workplaceId
+    if (workplaceChanged) {
+      allocationsCreated++
+      if (hadFk) allocationsClosed++
+    } else if (!hadFk) {
+      allocationsCreated++
+    }
+  }
+
+  for (const e of result.reactivation) {
+    const lotacao = e.row.lotacao?.trim() ?? ''
+    if (!lotacao) {
+      unmatchedEmployees++
+      continue
+    }
+    const workplaceChanged = 'workplace' in e.diff
+    const hadFk = !!e.employee.workplaceId
+    if (workplaceChanged) {
+      allocationsCreated++
+      if (hadFk) allocationsClosed++
+    } else if (!hadFk) {
+      allocationsCreated++
+    }
+  }
+
+  // unchanged rows ainda contam como unmatched se a planilha veio sem lotação
+  // (employees ATIVOs sem vínculo continuam pendentes para reconciliação manual).
+  for (const e of result.unchanged) {
+    const lotacao = e.row.lotacao?.trim() ?? ''
+    if (!lotacao) unmatchedEmployees++
+  }
+
+  return {
+    allocationsCreated,
+    allocationsClosed,
+    workplacesCreated: result.newWorkplaces.length,
+    unmatchedEmployees,
+  }
+}
+
 export function buildPreviewSummary(
   result: MatchResult,
   totalRows: number,
@@ -337,5 +421,6 @@ export function buildPreviewSummary(
     },
     newWorkplaces: [...result.newWorkplaces],
     sampleRows: all.slice(0, sampleSize),
+    relationalDelta: computeRelationalDelta(result),
   }
 }
