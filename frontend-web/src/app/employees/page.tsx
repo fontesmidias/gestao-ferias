@@ -39,7 +39,7 @@ export default function EmployeesPage() {
   const [search, setSearch] = useState('')
   const [filterBranch, setFilterBranch] = useState('')
   const [filterWorkplace, setFilterWorkplace] = useState('')
-  const [filterStatus, setFilterStatus] = useState('ATIVOS')
+  const [filterStatus, setFilterStatus] = useState('TODOS')
 
   // Edit modal state
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null)
@@ -68,12 +68,18 @@ export default function EmployeesPage() {
   // Derived filter options
   const branches = useMemo(() => Array.from(new Set(employees.map(e => e.branch).filter(Boolean))), [employees])
   const workplaces = useMemo(() => Array.from(new Set(employees.map(e => e.workplace).filter(Boolean))), [employees])
+  // Status dinâmico — qualquer valor vindo da planilha (Tirvu pode trazer
+  // ATESTADO MÉDICO, LICENÇA MATERNIDADE, etc além dos canônicos).
+  const statusOptions = useMemo(
+    () => Array.from(new Set(employees.map(e => e.status).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'pt-BR')),
+    [employees],
+  )
 
   // Apply filters
   const filtered = useMemo(() => {
     return employees.filter(e => {
       // 1. Text Search (Name or Registration)
-      if (search && !e.name.toLowerCase().includes(search.toLowerCase()) && 
+      if (search && !e.name.toLowerCase().includes(search.toLowerCase()) &&
           !(e.registration && e.registration.toLowerCase().includes(search.toLowerCase()))
       ) return false
 
@@ -83,22 +89,18 @@ export default function EmployeesPage() {
       // 3. Workplace Filter
       if (filterWorkplace && e.workplace !== filterWorkplace) return false
 
-      // 4. Status Filter
-      if (filterStatus !== 'TODOS') {
-        if (filterStatus === 'ATIVOS' && e.status !== 'ATIVO') return false
-        if (filterStatus === 'FÉRIAS' && e.status !== 'FERIAS') return false
-        if (filterStatus === 'AFASTADOS' && e.status !== 'AFASTADO') return false
-        if (filterStatus === 'INATIVOS' && e.status !== 'INATIVO') return false
-      }
+      // 4. Status Filter — comparação direta (lista é dinâmica agora)
+      if (filterStatus !== 'TODOS' && e.status !== filterStatus) return false
 
       return true
     })
   }, [employees, search, filterBranch, filterWorkplace, filterStatus])
 
-  // KPIs
-  const totalActives = employees.filter(e => e.status === 'ATIVO').length
-  const totalOnVacation = employees.filter(e => e.status === 'FERIAS').length
-  const totalLeaves = employees.filter(e => e.status === 'AFASTADO').length
+  // KPIs — agora cobrem os status reais do Tirvu (LICENÇA MATERNIDADE,
+  // ATESTADO MÉDICO, AFASTADO INSS contam como "Afastados").
+  const totalActives = employees.filter(e => (e.status ?? '').toUpperCase() === 'ATIVO').length
+  const totalOnVacation = employees.filter(e => /^F[EÉ]RIAS$/.test((e.status ?? '').toUpperCase())).length
+  const totalLeaves = employees.filter(e => /AFASTAD|LICEN[ÇC]A|ATESTAD/.test((e.status ?? '').toUpperCase())).length
 
   const handleExportCSV = () => {
     const headers = ['ID/Matricula', 'Colaborador', 'CPF', 'Status', 'Empresa/Filial', 'Lotação', 'Cargo', 'Admissão', 'Jornada/Escala']
@@ -162,13 +164,21 @@ export default function EmployeesPage() {
     }
   }
 
+  // Status agora é campo livre (Tirvu: ATESTADO MÉDICO, LICENÇA MATERNIDADE,
+  // AFASTADO INSS, etc). Mapeamos exatos primeiro; fallback por keyword.
   const renderStatusBadge = (status: string) => {
-    switch(status) {
-      case 'ATIVO': return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-tight bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1 w-max"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500"/>ATIVO</span>
-      case 'FERIAS': return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-tight bg-sky-500/20 text-sky-400 border border-sky-500/30 flex items-center gap-1 w-max"><div className="w-1.5 h-1.5 rounded-full bg-sky-500"/>FÉRIAS</span>
-      case 'AFASTADO': return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-tight bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center gap-1 w-max"><div className="w-1.5 h-1.5 rounded-full bg-amber-500"/>AFASTADO</span>
-      default: return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-tight bg-slate-800 text-slate-400 border border-slate-700 w-max">{status}</span>
+    const dot = (color: string) => <div className={`w-1.5 h-1.5 rounded-full ${color}`}/>
+    const base = 'px-2 py-0.5 rounded-full text-[10px] font-bold tracking-tight border flex items-center gap-1 w-max max-w-full'
+    const upper = (status ?? '').toUpperCase().trim()
+    // Exatos
+    if (upper === 'ATIVO') return <span className={`${base} bg-emerald-500/20 text-emerald-400 border-emerald-500/30`}>{dot('bg-emerald-500')}ATIVO</span>
+    if (upper === 'FERIAS' || upper === 'FÉRIAS') return <span className={`${base} bg-sky-500/20 text-sky-400 border-sky-500/30`}>{dot('bg-sky-500')}FÉRIAS</span>
+    if (upper === 'INATIVO' || upper === 'DEMITIDO') return <span className={`${base} bg-rose-500/15 text-rose-300 border-rose-500/30`}>{dot('bg-rose-500')}<span className="truncate">{upper}</span></span>
+    // Por keyword (cobre LICENÇA MATERNIDADE, ATESTADO MÉDICO, AFASTADO INSS, etc)
+    if (/AFASTAD|LICEN[ÇC]A|ATESTAD/.test(upper)) {
+      return <span className={`${base} bg-amber-500/15 text-amber-300 border-amber-500/30`} title={status}>{dot('bg-amber-500')}<span className="truncate">{upper}</span></span>
     }
+    return <span className={`${base} bg-slate-800 text-slate-400 border-slate-700`} title={status}><span className="truncate">{upper || '—'}</span></span>
   }
 
   return (
@@ -238,15 +248,14 @@ export default function EmployeesPage() {
 
               <div className="flex-1 min-w-[150px]">
                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1">Status Base <InfoTooltip text="Situação atual do colaborador: Ativo (trabalhando), Férias, Afastado ou Inativo (desligado)." /></label>
-                <select 
+                <select
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-primary font-bold focus:outline-none focus:ring-1 focus:ring-primary/50"
                   value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
                 >
                   <option value="TODOS">[ TODOS ]</option>
-                  <option value="ATIVOS">ATIVOS</option>
-                  <option value="FÉRIAS">FÉRIAS</option>
-                  <option value="AFASTADOS">AFASTADOS</option>
-                  <option value="INATIVOS">INATIVOS</option>
+                  {statusOptions.map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
                 </select>
               </div>
 
@@ -322,17 +331,19 @@ export default function EmployeesPage() {
               </div>
             </div>
 
-            {/* Datagrid */}
+            {/* Datagrid — UX P0 (Sally 2026-05-04):
+                - Coluna Colaborador (sticky left): nome + matrícula + empresa
+                - Empresa removida (era redundante: 100% Green House)
+                - Matrícula removida da grade (vai no card de Colaborador)
+                - Coluna ⋯ sticky right, sempre visível (não mais hover-only) */}
             <div className="overflow-auto flex-1 relative">
               <table className="w-full text-left text-sm whitespace-nowrap">
-                <thead className="sticky top-0 z-10">
+                <thead className="sticky top-0 z-20">
                   <tr className="bg-slate-900 border-b border-white/5 text-slate-400 uppercase text-[10px] tracking-wider font-bold shadow-sm">
-                    <th className="px-6 py-3 w-16"><div className="flex items-center gap-1">Matrícula <InfoTooltip text="Número de registro interno do colaborador na empresa." /></div></th>
-                    <th className="px-6 py-3"><div className="flex items-center gap-1">Colaborador <InfoTooltip text="Nome completo do colaborador." /></div></th>
-                    <th className="px-6 py-3"><div className="flex items-center gap-1">Status <InfoTooltip text="Situação atual: verde=ativo, azul=férias, amarelo=afastado." /></div></th>
-                    <th className="px-6 py-3">
-                      <div className="flex items-center gap-1.5"><Building2 className="w-3 h-3"/> Empresa <InfoTooltip text="Empresa ou filial onde o colaborador é registrado." /></div>
+                    <th className="px-6 py-3 sticky left-0 z-30 bg-slate-900 border-r border-white/5 min-w-[260px]">
+                      <div className="flex items-center gap-1">Colaborador <InfoTooltip text="Nome completo, matrícula e empresa de registro." /></div>
                     </th>
+                    <th className="px-6 py-3"><div className="flex items-center gap-1">Status <InfoTooltip text="Situação atual: verde=ativo, azul=férias, amarelo=afastado, etc." /></div></th>
                     <th className="px-6 py-3">
                       <div className="flex items-center gap-1.5"><MapPin className="w-3 h-3"/> Lotação <InfoTooltip text="Posto de serviço/local de trabalho atual do colaborador." /></div>
                     </th>
@@ -346,7 +357,9 @@ export default function EmployeesPage() {
                       <div className="flex items-center gap-1.5"><Phone className="w-3 h-3"/> Telefone <InfoTooltip text="Número de telefone de contato do colaborador." /></div>
                     </th>
                     <th className="px-6 py-3 text-right"><div className="flex items-center justify-end gap-1">Admissão <InfoTooltip text="Data em que o colaborador foi contratado pela empresa." /></div></th>
-                    <th className="px-4 py-3 text-center"></th>
+                    <th className="px-4 py-3 text-center sticky right-0 z-30 bg-slate-900 border-l border-white/5 w-12">
+                      <span className="sr-only">Ações</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/[0.03]">
@@ -354,57 +367,59 @@ export default function EmployeesPage() {
                     <>
                       {[1, 2, 3, 4, 5].map((i) => (
                         <tr key={i} className="animate-pulse">
-                          <td className="px-6 py-3"><div className="h-4 bg-slate-800/50 rounded w-12" /></td>
-                          <td className="px-6 py-3">
+                          <td className="px-6 py-3 sticky left-0 z-10 bg-slate-950 border-r border-white/5">
                             <div className="flex items-center gap-3">
                               <div className="w-8 h-8 rounded-full bg-slate-800/50 shrink-0" />
-                              <div className="h-4 bg-slate-800/50 rounded w-32" />
+                              <div className="space-y-1.5">
+                                <div className="h-4 bg-slate-800/50 rounded w-40" />
+                                <div className="h-3 bg-slate-800/50 rounded w-24" />
+                              </div>
                             </div>
                           </td>
                           <td className="px-6 py-3"><div className="h-4 bg-slate-800/50 rounded w-16" /></td>
-                          <td className="px-6 py-3"><div className="h-4 bg-slate-800/50 rounded w-28" /></td>
                           <td className="px-6 py-3"><div className="h-4 bg-slate-800/50 rounded w-24" /></td>
                           <td className="px-6 py-3"><div className="h-4 bg-slate-800/50 rounded w-20" /></td>
                           <td className="px-6 py-3"><div className="h-4 bg-slate-800/50 rounded w-16" /></td>
                           <td className="px-6 py-3"><div className="h-4 bg-slate-800/50 rounded w-24" /></td>
                           <td className="px-6 py-3"><div className="h-4 bg-slate-800/50 rounded w-20 ml-auto" /></td>
-                          <td className="px-4 py-3" />
+                          <td className="px-4 py-3 sticky right-0 z-10 bg-slate-950 border-l border-white/5" />
                         </tr>
                       ))}
                     </>
                   ) : filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="px-6 py-12 text-center text-slate-500">
+                      <td colSpan={8} className="px-6 py-12 text-center text-slate-500">
                         Nenhum colaborador corresponde aos filtros de busca aplicados.
                       </td>
                     </tr>
                   ) : (
                     filtered.map((emp) => (
-                      <tr key={emp.id} className="hover:bg-white/[0.02] transition-colors group">
-                        <td className="px-6 py-3 font-mono text-xs text-sky-400">
-                          {emp.registration || '---'}
-                        </td>
-                        <td className="px-6 py-3">
+                      <tr key={emp.id} className="hover:bg-white/[0.03] transition-colors group">
+                        <td className="px-6 py-3 sticky left-0 z-10 bg-slate-950 group-hover:bg-[#0d1827] border-r border-white/5">
                           <div className="flex items-center gap-3">
                             <div className="w-8 h-8 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center font-bold text-xs border border-white/5 shrink-0">
                               {emp.name.charAt(0)}
                             </div>
-                            <p className="font-bold text-white text-[13px]">{emp.name}</p>
+                            <div className="min-w-0">
+                              <p className="font-bold text-white text-[13px] truncate">{emp.name}</p>
+                              <p className="text-[11px] text-slate-500 font-mono mt-0.5">
+                                <span className="text-sky-400/80">{emp.registration || 'S/N'}</span>
+                                {emp.branch ? <span className="text-slate-600"> · </span> : null}
+                                {emp.branch ? <span className="truncate">{emp.branch.split(' ').slice(0, 2).join(' ')}</span> : null}
+                              </p>
+                            </div>
                           </div>
                         </td>
                         <td className="px-6 py-3">
                           {renderStatusBadge(emp.status)}
                         </td>
-                        <td className="px-6 py-3 text-[13px] text-slate-300 max-w-[200px] truncate" title={emp.branch || ''}>
-                          {emp.branch || <span className="text-slate-600">-</span>}
-                        </td>
-                        <td className="px-6 py-3 text-[13px] text-slate-300 max-w-[200px] truncate" title={emp.workplace || ''}>
+                        <td className="px-6 py-3 text-[13px] text-slate-300 max-w-[220px] truncate" title={emp.workplace || ''}>
                           {emp.workplace || <span className="text-slate-600">-</span>}
                         </td>
-                        <td className="px-6 py-3 text-[13px] text-slate-400 max-w-[200px] truncate">
+                        <td className="px-6 py-3 text-[13px] text-slate-400 max-w-[200px] truncate" title={emp.position || ''}>
                           {emp.position || <span className="text-slate-600">-</span>}
                         </td>
-                        <td className="px-6 py-3 text-[12px] text-slate-400 max-w-[150px] truncate">
+                        <td className="px-6 py-3 text-[12px] text-slate-400 max-w-[150px] truncate" title={emp.shift || ''}>
                           {emp.shift || <span className="text-slate-600">-</span>}
                         </td>
                         <td className="px-6 py-3 text-[12px] text-slate-400">
@@ -413,10 +428,11 @@ export default function EmployeesPage() {
                         <td className="px-6 py-3 text-right text-[12px] text-slate-400">
                           {format(parseISO(emp.hireDate), 'dd/MM/yyyy')}
                         </td>
-                        <td className="px-4 py-3 text-center">
+                        <td className="px-4 py-3 text-center sticky right-0 z-10 bg-slate-950 group-hover:bg-[#0d1827] border-l border-white/5">
                           <button
                             onClick={() => openEditModal(emp)}
-                            className="p-1.5 text-slate-500 hover:text-white hover:bg-white/10 rounded-md transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                            aria-label={`Ações para ${emp.name}`}
+                            className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                           >
                             <MoreHorizontal className="w-4 h-4" />
                           </button>
