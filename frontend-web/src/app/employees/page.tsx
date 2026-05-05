@@ -404,8 +404,10 @@ export default function EmployeesPage() {
                               <p className="font-bold text-white text-[13px] truncate">{emp.name}</p>
                               <p className="text-[11px] text-slate-500 font-mono mt-0.5">
                                 <span className="text-sky-400/80">{emp.registration || 'S/N'}</span>
-                                {emp.branch ? <span className="text-slate-600"> · </span> : null}
-                                {emp.branch ? <span className="truncate">{emp.branch.split(' ').slice(0, 2).join(' ')}</span> : null}
+                                {/* Branch só aparece quando há mais de uma — em tenant single-branch
+                                    é redundância pura (Sally code review 2026-05-04). */}
+                                {branches.length > 1 && emp.branch ? <span className="text-slate-600"> · </span> : null}
+                                {branches.length > 1 && emp.branch ? <span className="truncate">{emp.branch.split(' ').slice(0, 2).join(' ')}</span> : null}
                               </p>
                             </div>
                           </div>
