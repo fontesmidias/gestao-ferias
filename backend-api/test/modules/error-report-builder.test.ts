@@ -32,14 +32,21 @@ test('error-report-builder', async (t) => {
     await rm(TMP_ROOT, { recursive: true, force: true })
   })
 
-  await t.test('fixture com 5 inválidos → invalidCount=5 e header em pt-BR', async () => {
+  await t.test('fixture com 4 inválidos → invalidCount=4 e header em pt-BR', async () => {
+    // Fixture tem 5 linhas problemáticas, mas após a decisão de 2026-05-04
+    // (status como campo livre + idade implausível aceita), a linha com
+    // status="INVALIDO" passou a ser considerada válida. Restam 4:
+    //   - CPF DV inválido (11111111111)
+    //   - Admissão futura (2099)
+    //   - Nome vazio
+    //   - Admissão fora do formato dd/MM/yyyy (2024-01-15)
     const tenantId = randomUUID()
     const jobId = randomUUID()
     const fileHash = persistFixture(tenantId, jobId, 'tirvu-mixed-errors.xlsx')
 
     const r = await builder.buildErrorReportXlsx({ tenantId, jobId, fileHash })
 
-    assert.strictEqual(r.invalidCount, 5)
+    assert.strictEqual(r.invalidCount, 4)
     assert.ok(Buffer.isBuffer(r.buffer))
     assert.ok(r.buffer.length > 0)
 
@@ -50,7 +57,7 @@ test('error-report-builder', async (t) => {
       header: 1,
       defval: null,
     })
-    assert.strictEqual(rows.length, 6) // header + 5 invalid
+    assert.strictEqual(rows.length, 5) // header + 4 invalid
     assert.deepStrictEqual(rows[0], [
       'Linha',
       'Motivo',

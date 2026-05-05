@@ -60,6 +60,14 @@ export function ImportPreviewTable({ rows, pagination, loading, onPageChange }: 
     overscan: 8,
   })
 
+  // Quando alguma linha expande/colapsa, o virtualizer precisa recalcular
+  // posições — senão a linha de cima sobrepõe a de baixo (relato do usuário
+  // 2026-05-04: "ERROS sobreposto ao nome JOSE ALVES PRIMO").
+  useEffect(() => {
+    virtualizer.measure()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded, rows.length])
+
   function toggle(rowIndex: number) {
     setExpanded((prev) => {
       const next = new Set(prev)
