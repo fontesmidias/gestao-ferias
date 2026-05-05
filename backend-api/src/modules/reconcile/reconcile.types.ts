@@ -57,3 +57,23 @@ export const ReconcileAuditAction = {
 
 export type ReconcileAuditActionValue =
   (typeof ReconcileAuditAction)[keyof typeof ReconcileAuditAction]
+
+/**
+ * Outcome do `ReconcileService.runSingle` — discriminated union.
+ * Story 1.5.
+ */
+export type RunSingleOutcome =
+  | {
+      outcome: 'matched_deterministic'
+      workplaceId: string
+      allocationKind: 'noop' | 'created' | 'replaced'
+    }
+  | { outcome: 'queued_ambiguous' }
+  | { outcome: 'queued_low_confidence' }
+  | { outcome: 'queued_no_match' }
+  | { outcome: 'skipped' }
+  | { outcome: 'skipped_inactive' }
+  | { outcome: 'no_legacy' }
+
+/** Score mínimo para considerar uma sugestão fuzzy "low confidence" (vs. "no match"). */
+export const FUZZY_LOW_CONFIDENCE_THRESHOLD = 0.7
