@@ -4,8 +4,21 @@
 import type { TirvuRow, ValidationResult } from './types'
 import { isCpfValid, parseCpfNoMask } from './utils'
 
-const ALLOWED_STATUSES = new Set(['ATIVO', 'DEMITIDO', 'AFASTADO'])
+// Status aceitos da planilha Tirvu. Inclui variações comuns que aparecem na
+// exportação real (INATIVO, FERIAS, FÉRIAS) — fix 2026-05-04 após RH reportar
+// 55 linhas inválidas em produção.
+const ALLOWED_STATUSES = new Set([
+  'ATIVO', 'INATIVO', 'DEMITIDO', 'AFASTADO',
+  'FERIAS', 'FÉRIAS',
+])
 const FOURTEEN_YEARS_MS = 14 * 365.25 * 24 * 60 * 60 * 1000
+const HUNDRED_TWENTY_YEARS_MS = 120 * 365.25 * 24 * 60 * 60 * 1000
+
+function fmtDate(d: Date): string {
+  const dd = String(d.getUTCDate()).padStart(2, '0')
+  const mm = String(d.getUTCMonth() + 1).padStart(2, '0')
+  return `${dd}/${mm}/${d.getUTCFullYear()}`
+}
 
 function endOfTodayUtc(): Date {
   const now = new Date()
@@ -41,18 +54,33 @@ export function validate(row: TirvuRow): ValidationResult {
 
   // status
   const statusUpper = row.status ? row.status.toUpperCase().trim() : null
-  if (!statusUpper || !ALLOWED_STATUSES.has(statusUpper)) {
-    errors.push('Status do colaborador inválido (esperado: ATIVO, DEMITIDO ou AFASTADO)')
+  if (!statusUpper) {
+    errors.push('Status do colaborador ausente')
+  } else if (!ALLOWED_STATUSES.has(statusUpper)) {
+    errors.push(
+      `Status do colaborador "${row.status}" não é aceito ` +
+      `(esperado: ${[...ALLOWED_STATUSES].join(', ')})`,
+    )
   }
 
-  // birthDate (nascimento) — opcional
+  // birthDate (nascimento) — opcional. Valida intervalo plausível (14-120 anos).
+  // Mensagem inclui a data parseada para facilitar diagnose pelo RH.
   if (row.nascimento !== null) {
     if (typeof row.nascimento === 'string') {
-      errors.push('Data de nascimento inválida')
+      errors.push(`Data de nascimento "${row.nascimento}" não está em formato dd/MM/yyyy`)
     } else if (row.nascimento instanceof Date) {
       const ageMs = Date.now() - row.nascimento.getTime()
+      const dateStr = fmtDate(row.nascimento)
       if (ageMs < FOURTEEN_YEARS_MS) {
-        errors.push('Data de nascimento implausível')
+        errors.push(
+          `Data de nascimento ${dateStr} resulta em idade < 14 anos ` +
+          `(possível erro de digitação ou ano com 2 dígitos)`,
+        )
+      } else if (ageMs > HUNDRED_TWENTY_YEARS_MS) {
+        errors.push(
+          `Data de nascimento ${dateStr} resulta em idade > 120 anos ` +
+          `(possível erro de digitação)`,
+        )
       }
     }
   }

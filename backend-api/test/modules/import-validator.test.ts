@@ -108,8 +108,19 @@ test('Status fora do enum', () => {
   const r = validate(makeRow({ status: 'INVALIDO' }))
   assert.strictEqual(r.status, 'invalid')
   assert.ok(
-    r.errors.includes('Status do colaborador inválido (esperado: ATIVO, DEMITIDO ou AFASTADO)'),
+    r.errors.some((e) => e.includes('Status do colaborador "INVALIDO"')),
+    `Esperava erro mencionando o status recebido. Recebeu: ${r.errors.join(' | ')}`,
   )
+})
+
+test('Status INATIVO aceito (Tirvu real)', () => {
+  const r = validate(makeRow({ status: 'INATIVO' }))
+  assert.strictEqual(r.status, 'valid')
+})
+
+test('Status FÉRIAS aceito', () => {
+  const r = validate(makeRow({ status: 'FÉRIAS' }))
+  assert.strictEqual(r.status, 'valid')
 })
 
 test('Status case-insensitive ativo', () => {
@@ -144,13 +155,28 @@ test('Múltiplos erros simultâneos', () => {
 test('birthDate implausível (criança)', () => {
   const r = validate(makeRow({ nascimento: new Date(Date.UTC(2020, 0, 1)) }))
   assert.strictEqual(r.status, 'invalid')
-  assert.ok(r.errors.includes('Data de nascimento implausível'))
+  assert.ok(
+    r.errors.some((e) => e.includes('idade < 14 anos') && e.includes('01/01/2020')),
+    `Esperava erro com data parseada. Recebeu: ${r.errors.join(' | ')}`,
+  )
+})
+
+test('birthDate implausível (idade > 120 anos)', () => {
+  const r = validate(makeRow({ nascimento: new Date(Date.UTC(1850, 0, 1)) }))
+  assert.strictEqual(r.status, 'invalid')
+  assert.ok(
+    r.errors.some((e) => e.includes('idade > 120 anos')),
+    `Esperava erro idade > 120. Recebeu: ${r.errors.join(' | ')}`,
+  )
 })
 
 test('birthDate como string raw', () => {
   const r = validate(makeRow({ nascimento: '13-04-1990' }))
   assert.strictEqual(r.status, 'invalid')
-  assert.ok(r.errors.includes('Data de nascimento inválida'))
+  assert.ok(
+    r.errors.some((e) => e.includes('"13-04-1990"') && e.includes('dd/MM/yyyy')),
+    `Esperava erro mencionando formato esperado. Recebeu: ${r.errors.join(' | ')}`,
+  )
 })
 
 test('demissão como string raw', () => {
