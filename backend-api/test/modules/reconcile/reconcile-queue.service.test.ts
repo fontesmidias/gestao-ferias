@@ -94,6 +94,10 @@ function makeMocks(initialQueue: QueueRow[] = []) {
               (!where.reconcileJobId || q.reconcileJobId === where.reconcileJobId),
           )
           .slice(skip, skip + take)
+          .map((q) => ({
+            ...q,
+            employee: { id: q.employeeId, name: `Employee ${q.employeeId}` },
+          }))
       },
       async count({ where }: { where: Partial<QueueRow> }) {
         return queue.filter(

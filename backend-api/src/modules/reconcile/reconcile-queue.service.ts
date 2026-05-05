@@ -102,7 +102,7 @@ export class ReconcileQueueService {
   }
 
   async list(input: ListInput): Promise<{
-    items: WorkplaceReconcileQueue[]
+    items: Array<WorkplaceReconcileQueue & { employee: { id: string; name: string } }>
     total: number
     page: number
     pageSize: number
@@ -122,6 +122,7 @@ export class ReconcileQueueService {
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * pageSize,
         take: pageSize,
+        include: { employee: { select: { id: true, name: true } } },
       }),
       this.prisma.workplaceReconcileQueue.count({ where }),
     ])

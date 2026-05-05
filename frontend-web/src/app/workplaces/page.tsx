@@ -1,11 +1,12 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { HttpClient } from '@/lib/api-client'
 import { Building2, MapPin, Users, Plus, ChevronDown, ChevronRight, X, FileSpreadsheet, Upload } from 'lucide-react'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { toast } from 'sonner'
 import { ReconcileBanner } from '@/components/reconcile/ReconcileBanner'
+import { PendingBindingsTab } from '@/components/reconcile/PendingBindingsTab'
 
 interface Allocation {
   id: string
@@ -60,6 +61,44 @@ const EMPTY_FORM = {
 }
 
 export default function WorkplacesPage() {
+  const [activeTab, setActiveTab] = useState<'workplaces' | 'pending'>('workplaces')
+  const [pendingCount, setPendingCount] = useState<number>(0)
+
+  // Lê tab da URL no mount (evita useSearchParams para não exigir Suspense boundary).
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const tab = new URLSearchParams(window.location.search).get('tab')
+    setActiveTab(tab === 'pending' ? 'pending' : 'workplaces')
+  }, [])
+
+  const reloadPendingCount = useCallback(async () => {
+    try {
+      const [pending, deferred] = await Promise.all([
+        HttpClient.get('/admin/workplace-reconcile-queue?state=PENDING&pageSize=1'),
+        HttpClient.get('/admin/workplace-reconcile-queue?state=DEFERRED&pageSize=1'),
+      ])
+      const a = pending?.meta?.total ?? 0
+      const b = deferred?.meta?.total ?? 0
+      setPendingCount(a + b)
+    } catch {
+      /* silencioso — pode falhar se backend offline ou usuário sem permissão */
+    }
+  }, [])
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      void reloadPendingCount()
+    })
+  }, [reloadPendingCount])
+
+  const switchTab = (next: 'workplaces' | 'pending') => {
+    setActiveTab(next)
+    if (typeof window !== 'undefined') {
+      const url = next === 'pending' ? `${window.location.pathname}?tab=pending` : window.location.pathname
+      window.history.replaceState({}, '', url)
+    }
+  }
+
   const [workplaces, setWorkplaces] = useState<Workplace[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -250,6 +289,31 @@ export default function WorkplacesPage() {
       {/* Banner de reconciliação V3.3 (Story 1.6) */}
       <ReconcileBanner />
 
+      {/* Tabs (Story 1.7) */}
+      <div className="flex items-center gap-1 border-b border-slate-200 dark:border-slate-700 mb-4 text-[13px]">
+        <button
+          onClick={() => switchTab('workplaces')}
+          className={`px-3 py-2 -mb-px border-b-2 ${activeTab === 'workplaces' ? 'border-primary text-primary' : 'border-transparent text-slate-500'}`}
+        >
+          Postos
+        </button>
+        <button
+          onClick={() => switchTab('pending')}
+          className={`px-3 py-2 -mb-px border-b-2 inline-flex items-center gap-2 ${activeTab === 'pending' ? 'border-primary text-primary' : 'border-transparent text-slate-500'}`}
+        >
+          Pendências de Vínculo
+          {pendingCount > 0 && (
+            <span className="bg-yellow-500 text-white text-[10px] rounded-full px-1.5 py-0.5">
+              {pendingCount}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {activeTab === 'pending' ? (
+        <PendingBindingsTab onCountChange={reloadPendingCount} />
+      ) : (
+      <>
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
@@ -697,6 +761,8 @@ export default function WorkplacesPage() {
             </div>
           </div>
         </div>
+      )}
+      </>
       )}
     </div>
   )
