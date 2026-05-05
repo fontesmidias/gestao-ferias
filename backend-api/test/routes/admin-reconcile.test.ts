@@ -33,10 +33,21 @@ interface RouteSpec {
   handler: Handler
 }
 
-async function buildHarness(initialJobs: JobRow[] = []) {
+interface EmployeeRow {
+  id: string
+  tenantId: string
+  workplace: string | null
+  workplaceId: string | null
+  status: string
+}
+
+async function buildHarness(
+  initialJobs: JobRow[] = [],
+  initialEmployees: EmployeeRow[] = [],
+) {
   const jobs: JobRow[] = [...initialJobs]
   const audit: Array<{ action: string; resourceId: string }> = []
-  const employees: Array<{ id: string; tenantId: string; status: string }> = []
+  const employees: EmployeeRow[] = [...initialEmployees]
 
   const prisma = {
     reconcileJob: {
@@ -119,8 +130,25 @@ async function buildHarness(initialJobs: JobRow[] = []) {
       },
     },
     employee: {
-      async count() {
-        return employees.length
+      async count({
+        where,
+      }: {
+        where: {
+          tenantId?: string
+          workplace?: { not: null }
+          workplaceId?: null
+          status?: { not?: string } | string
+        }
+      }) {
+        return employees.filter((e) => {
+          if (where.tenantId && e.tenantId !== where.tenantId) return false
+          if (where.workplace && e.workplace === null) return false
+          if (where.workplaceId === null && e.workplaceId !== null) return false
+          if (where.status && typeof where.status === 'object' && 'not' in where.status) {
+            if (e.status === where.status.not) return false
+          }
+          return true
+        }).length
       },
       async findMany() {
         return []
@@ -268,6 +296,40 @@ test('admin/reconcile route', async (t) => {
     assert.strictEqual(r.statusCode, 404)
     const body = r.payload as { error: { code: string } }
     assert.strictEqual(body.error.code, 'NOT_FOUND')
+  })
+
+  await t.test('AC-1: GET /preview retorna pendingEmployees + hasRunningJob', async () => {
+    const employeesData: EmployeeRow[] = [
+      { id: 'e1', tenantId: TENANT, workplace: 'INEP', workplaceId: null, status: 'ATIVO' },
+      { id: 'e2', tenantId: TENANT, workplace: 'INEP', workplaceId: null, status: 'ATIVO' },
+      { id: 'e3', tenantId: TENANT, workplace: 'INEP', workplaceId: 'wp-1', status: 'ATIVO' },
+      { id: 'e4', tenantId: TENANT, workplace: null, workplaceId: null, status: 'ATIVO' },
+      { id: 'e5', tenantId: TENANT, workplace: 'INEP', workplaceId: null, status: 'INATIVO' },
+    ]
+    const runningJob: JobRow = {
+      id: 'job-running',
+      tenantId: TENANT,
+      status: 'RUNNING',
+      totalEmployees: 2, matched: 0, queued: 0, ignored: 0, errors: 0,
+      createdAt: new Date(),
+      startedAt: new Date(),
+      completedAt: null, durationMs: null, failureReason: null,
+      triggeredBy: 'ADMIN', operatorUserId: USER,
+      parserVersion: 'reconcile-v1', batchParentId: null,
+    }
+    const { find, makeReply } = await buildHarness([runningJob], employeesData)
+    const getPreview = find('GET', '/preview')
+    const r = makeReply()
+    const result = await getPreview(
+      { user: { tenantId: TENANT, role: 'ADMIN' } },
+      r.reply,
+    )
+    const body = result as {
+      data: { pendingEmployees: number; hasRunningJob: boolean; runningJobId?: string }
+    }
+    assert.strictEqual(body.data.pendingEmployees, 2, 'só conta workplace!=null && workplaceId=null && status!=INATIVO')
+    assert.strictEqual(body.data.hasRunningJob, true)
+    assert.strictEqual(body.data.runningJobId, 'job-running')
   })
 
   await t.test('AC-17: GET /jobs lista paginada respeita filtros e roles', async () => {

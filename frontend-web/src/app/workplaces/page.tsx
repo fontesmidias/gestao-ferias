@@ -5,6 +5,7 @@ import { HttpClient } from '@/lib/api-client'
 import { Building2, MapPin, Users, Plus, ChevronDown, ChevronRight, X, FileSpreadsheet, Upload } from 'lucide-react'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { toast } from 'sonner'
+import { ReconcileBanner } from '@/components/reconcile/ReconcileBanner'
 
 interface Allocation {
   id: string
@@ -246,6 +247,9 @@ export default function WorkplacesPage() {
 
   return (
     <div className="flex-1 p-8 overflow-auto">
+      {/* Banner de reconciliação V3.3 (Story 1.6) */}
+      <ReconcileBanner />
+
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>

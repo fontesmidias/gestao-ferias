@@ -22,6 +22,55 @@ const route: FastifyPluginAsync = async (fastify) => {
   )
   const runner = new ReconcileRunner(fastify.prisma, service)
 
+  // GET /api/v1/admin/reconcile/preview
+  fastify.get(
+    '/preview',
+    { onRequest: [fastify.requireAuth] },
+    async (request, reply) => {
+      const user = request.user as { tenantId?: string; role: string }
+      if (!user.tenantId) {
+        return reply.code(400).send({
+          data: null,
+          error: { code: 'TENANT_REQUIRED', message: 'Operação requer tenant.' },
+        })
+      }
+      if (!['ADMIN', 'AUDITOR', 'SUPERADMIN'].includes(user.role)) {
+        return reply.code(403).send({
+          data: null,
+          error: { code: 'FORBIDDEN', message: 'Acesso restrito.' },
+        })
+      }
+
+      const [pendingEmployees, runningJob] = await Promise.all([
+        fastify.prisma.employee.count({
+          where: {
+            tenantId: user.tenantId,
+            workplace: { not: null },
+            workplaceId: null,
+            status: { not: 'INATIVO' },
+          },
+        }),
+        fastify.prisma.reconcileJob.findFirst({
+          where: {
+            tenantId: user.tenantId,
+            status: { in: ['PENDING', 'RUNNING'] },
+          },
+          orderBy: { createdAt: 'desc' },
+        }),
+      ])
+
+      return {
+        data: {
+          pendingEmployees,
+          hasRunningJob: !!runningJob,
+          runningJobId: runningJob?.id,
+        },
+        error: null,
+        meta: null,
+      }
+    },
+  )
+
   // POST /api/v1/admin/reconcile
   fastify.post(
     '/',
