@@ -87,6 +87,28 @@ export function ImportEmployeesFlow({ mode }: ImportEmployeesFlowProps) {
       .finally(() => setTenantsLoading(false))
   }, [mode])
 
+  // Modo tenant: hidrata tenantName via GET /tenants/me. Sem isso, o modal
+  // de confirmação aparece com nome vazio (relato 2026-05-04). Roda só uma
+  // vez quando entra na página com user logado.
+  const [resolvedTenantName, setResolvedTenantName] = useState<string>('')
+  useEffect(() => {
+    if (mode !== 'tenant') return
+    if (!user?.tenantId) return
+    if (resolvedTenantName) return
+    HttpClient.get('/tenants/me')
+      .then((data: unknown) => {
+        const name = (data as { name?: string } | null)?.name ?? ''
+        if (name) {
+          setResolvedTenantName(name)
+          actions.setTenant(user.tenantId!, name)
+        }
+      })
+      .catch((err) => {
+        console.error('Falha ao resolver tenant atual', err)
+      })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, user?.tenantId])
+
   // Polling enquanto job está em preview, applying ou done (status completo
   // ainda é necessário no done view para sumário/failure reason).
   const pollJobId = state.kind === 'preview' || state.kind === 'applying' || state.kind === 'done'
@@ -260,7 +282,13 @@ export function ImportEmployeesFlow({ mode }: ImportEmployeesFlowProps) {
 
   // -- Render helpers --
 
-  const tenantNameForBanner = state.kind !== 'upload' ? state.tenantName : ''
+  // Em modo tenant o state.tenantName pode estar vazio se o upload aconteceu
+  // antes do GET /tenants/me hidratar. Cai pro resolvedTenantName local nesse caso.
+  const effectiveTenantName =
+    state.kind !== 'upload' && state.tenantName
+      ? state.tenantName
+      : resolvedTenantName
+  const tenantNameForBanner = state.kind !== 'upload' ? effectiveTenantName : ''
   const showBanner = mode === 'admin' && state.kind !== 'upload'
 
   const counts = previewData?.counts ?? jobStatus?.previewSummary?.counts ?? {
@@ -293,7 +321,7 @@ export function ImportEmployeesFlow({ mode }: ImportEmployeesFlowProps) {
             tenants={tenants}
             tenantsLoading={tenantsLoading}
             tenantId={state.tenantId}
-            tenantNameForTenantMode={user?.name ? user?.tenantId ?? '' : ''}
+            tenantNameForTenantMode={resolvedTenantName}
             uploading={uploading}
             uploadProgress={uploadProgress}
             uploadError={state.uploadError}
@@ -380,7 +408,7 @@ export function ImportEmployeesFlow({ mode }: ImportEmployeesFlowProps) {
         <ImportConfirmApplyModal
           open={showApplyModal}
           mode={mode}
-          tenantName={state.tenantName}
+          tenantName={effectiveTenantName}
           counts={counts}
           newWorkplaces={newWorkplaces}
           newWorkplacesMode={state.newWorkplacesMode}
