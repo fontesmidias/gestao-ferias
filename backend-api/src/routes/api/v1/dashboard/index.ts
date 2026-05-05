@@ -8,20 +8,33 @@ const dashboard: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     const whereClause = role === 'SUPERADMIN' ? {} : { tenantId }
 
     // 1. Employee Composition KPIs (Active vs Leaves)
+    // Status é free-form (Tirvu escreve "FÉRIAS", "AFASTADO INSS", "LICENÇA
+    // MATERNIDADE", "ATESTADO MÉDICO", etc). Classificamos em buckets para
+    // que o frontend possa contar corretamente sem dependência de string exata.
     const employeesAggr = await fastify.prisma.employee.groupBy({
       by: ['status'],
       where: whereClause,
       _count: { id: true }
     })
-    
-    let totalEmployees = 0;
-    
-    // Convert to dictionary format
-    const composition = employeesAggr.reduce((acc, curr) => {
-      acc[curr.status] = curr._count.id
-      totalEmployees += curr._count.id;
-      return acc
-    }, {} as Record<string, number>)
+
+    let totalEmployees = 0
+    const composition: Record<string, number> = { ATIVO: 0, FERIAS: 0, AFASTADO: 0, INATIVO: 0 }
+
+    for (const row of employeesAggr) {
+      const count = row._count.id
+      totalEmployees += count
+      const upper = (row.status ?? '').toUpperCase().trim()
+      let bucket: string
+      if (upper === 'ATIVO') bucket = 'ATIVO'
+      else if (/^F[EÉ]RIAS$/.test(upper)) bucket = 'FERIAS'
+      else if (/AFASTAD|LICEN[ÇC]A|ATESTAD/.test(upper)) bucket = 'AFASTADO'
+      else if (upper === 'INATIVO' || upper === 'DEMITIDO') bucket = 'INATIVO'
+      else bucket = 'INATIVO'
+      composition[bucket] = (composition[bucket] ?? 0) + count
+      // Mantém também a chave bruta para debug/relatórios sem quebrar API.
+      if (upper && !(upper in composition)) composition[upper] = count
+      else if (upper && upper !== bucket) composition[upper] = (composition[upper] ?? 0) + count
+    }
 
     // 2. Pending Requests Metrics
     const pendingRequestsCount = await fastify.prisma.vacationRequest.count({
