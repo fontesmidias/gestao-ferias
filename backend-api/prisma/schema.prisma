@@ -2,7 +2,7 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider        = "prisma-client-js"
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -10,62 +10,64 @@ datasource db {
 }
 
 model Tenant {
-  id        String   @id @default(uuid()) @db.Uuid
-  name      String
-  cnpj      String   @unique
-  email     String?
-  phone     String?
-  address   String?
-  city      String?
-  state     String?
+  id          String  @id @default(uuid()) @db.Uuid
+  name        String
+  cnpj        String  @unique
+  email       String?
+  phone       String?
+  address     String?
+  city        String?
+  state       String?
   responsible String?
-  uf        String?  @db.Char(2)
-  smtpHost  String?  @map("smtp_host")
-  smtpPort  Int?     @map("smtp_port")
-  smtpUser  String?  @map("smtp_user")
-  smtpPass  String?  @map("smtp_pass")
-  smtpFrom  String?  @map("smtp_from")
+  uf          String? @db.Char(2)
+  smtpHost    String? @map("smtp_host")
+  smtpPort    Int?    @map("smtp_port")
+  smtpUser    String? @map("smtp_user")
+  smtpPass    String? @map("smtp_pass")
+  smtpFrom    String? @map("smtp_from")
 
-  lastLoginAt DateTime? @map("last_login_at")
-  openaiKey    String?  @map("openai_key")
-  anthropicKey String?  @map("anthropic_key")
-  geminiKey    String?  @map("gemini_key")
-  llmProvider  String?  @map("llm_provider")
-  llmModel     String?  @map("llm_model")
-  groqKey      String?  @map("groq_key")
+  lastLoginAt  DateTime? @map("last_login_at")
+  openaiKey    String?   @map("openai_key")
+  anthropicKey String?   @map("anthropic_key")
+  geminiKey    String?   @map("gemini_key")
+  llmProvider  String?   @map("llm_provider")
+  llmModel     String?   @map("llm_model")
+  groqKey      String?   @map("groq_key")
 
-  evoApiUrl       String?  @map("evo_api_url")
-  evoApiKey       String?  @map("evo_api_key")
-  evoInstanceName String?  @map("evo_instance_name")
-  whatsappEnabled Boolean  @default(false) @map("whatsapp_enabled")
+  evoApiUrl       String? @map("evo_api_url")
+  evoApiKey       String? @map("evo_api_key")
+  evoInstanceName String? @map("evo_instance_name")
+  whatsappEnabled Boolean @default(false) @map("whatsapp_enabled")
 
-  zapSignToken    String?  @map("zapsign_token")
+  zapSignToken String? @map("zapsign_token")
 
   // Story 7.2: Theming por tenant
-  brandName          String?  @map("brand_name")
-  brandPrimaryColor  String?  @map("brand_primary_color")
+  brandName           String? @map("brand_name")
+  brandPrimaryColor   String? @map("brand_primary_color")
   brandSecondaryColor String? @map("brand_secondary_color")
-  brandLogoUrl       String?  @map("brand_logo_url")
+  brandLogoUrl        String? @map("brand_logo_url")
 
-  isActive  Boolean  @default(true) @map("is_active")
+  isActive              Boolean  @default(true) @map("is_active")
   // Master Key generation mode (FR-V31-SES-002)
-  masterKeyCreationMode String @default("MANUAL") @map("master_key_creation_mode") // AUTOMATIC | MANUAL
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  masterKeyCreationMode String   @default("MANUAL") @map("master_key_creation_mode") // AUTOMATIC | MANUAL
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
-  users              User[]
-  employees          Employee[]
-  auditLogs          AuditLog[]
-  vacationRequests   VacationRequest[]
-  signatures         Signature[]
-  refreshTokens      RefreshToken[]
-  webhooks           Webhook[]
-  workplaces         Workplace[]
-  workplacePositions WorkplacePosition[]
-  workplaceAllocations WorkplaceAllocation[]
-  coverageAssignments  CoverageAssignment[]
-  holidays             TenantHoliday[]
-  importJobs           ImportJob[]
+  users                        User[]
+  employees                    Employee[]
+  auditLogs                    AuditLog[]
+  vacationRequests             VacationRequest[]
+  signatures                   Signature[]
+  refreshTokens                RefreshToken[]
+  webhooks                     Webhook[]
+  workplaces                   Workplace[]
+  workplacePositions           WorkplacePosition[]
+  workplaceAllocations         WorkplaceAllocation[]
+  coverageAssignments          CoverageAssignment[]
+  holidays                     TenantHoliday[]
+  importJobs                   ImportJob[]
+  reconcileJobs                ReconcileJob[]
+  workplaceReconcileQueueItems WorkplaceReconcileQueue[]
 
   @@map("tenants")
 }
@@ -79,14 +81,14 @@ model EmailCredential {
   name        String
   description String?
   scope       String   @default("SPECIFIC") // ALL | SPECIFIC
-  isActive    Boolean  @default(true)       @map("is_active")
+  isActive    Boolean  @default(true) @map("is_active")
   smtpHost    String   @map("smtp_host")
   smtpPort    Int      @map("smtp_port")
   smtpUser    String   @map("smtp_user")
   smtpPass    String   @map("smtp_pass")
   smtpFrom    String?  @map("smtp_from")
-  createdAt   DateTime @default(now())     @map("created_at")
-  updatedAt   DateTime @updatedAt           @map("updated_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   tenantAssignments EmailCredentialTenant[]
 
@@ -94,8 +96,8 @@ model EmailCredential {
 }
 
 model EmailCredentialTenant {
-  credentialId String @map("credential_id") @db.Uuid
-  tenantId     String @map("tenant_id") @db.Uuid
+  credentialId String   @map("credential_id") @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
   createdAt    DateTime @default(now()) @map("created_at")
 
   credential EmailCredential @relation(fields: [credentialId], references: [id], onDelete: Cascade)
@@ -111,12 +113,12 @@ model WhatsappCredential {
   name            String
   description     String?
   scope           String   @default("SPECIFIC") // ALL | SPECIFIC
-  isActive        Boolean  @default(true)       @map("is_active")
+  isActive        Boolean  @default(true) @map("is_active")
   evoApiUrl       String   @map("evo_api_url")
   evoApiKey       String   @map("evo_api_key")
   evoInstanceName String   @map("evo_instance_name")
-  createdAt       DateTime @default(now())      @map("created_at")
-  updatedAt       DateTime @updatedAt           @map("updated_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
   tenantAssignments WhatsappCredentialTenant[]
 
@@ -124,8 +126,8 @@ model WhatsappCredential {
 }
 
 model WhatsappCredentialTenant {
-  credentialId String @map("credential_id") @db.Uuid
-  tenantId     String @map("tenant_id") @db.Uuid
+  credentialId String   @map("credential_id") @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
   createdAt    DateTime @default(now()) @map("created_at")
 
   credential WhatsappCredential @relation(fields: [credentialId], references: [id], onDelete: Cascade)
@@ -141,10 +143,10 @@ model TenantHoliday {
   date      DateTime @db.Date
   name      String
   source    String   @default("MANUAL") // LIB | MANUAL
-  action    String   @default("ADD")    // ADD (cria/garante feriado) | REMOVE (cancela feriado oficial)
+  action    String   @default("ADD") // ADD (cria/garante feriado) | REMOVE (cancela feriado oficial)
   createdAt DateTime @default(now()) @map("created_at")
 
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id])
 
   @@unique([tenantId, date])
   @@index([tenantId, date])
@@ -152,84 +154,87 @@ model TenantHoliday {
 }
 
 model User {
-  id           String   @id @default(uuid()) @db.Uuid
-  email        String
-  name         String?
-  passwordHash String?  @map("password_hash")
-  role         String   @default("USER") // SUPERADMIN, ADMIN, USER, AUDITOR
-  isActive     Boolean  @default(true) @map("is_active")
-  colorScheme  String   @default("SYSTEM") @map("color_scheme") // LIGHT | DARK | SYSTEM (FR-V31-BRAND-004)
-  preferredLocale String @default("pt-BR") @map("preferred_locale") // FR-V31-I18N-001
-  tenantId     String?  @map("tenant_id") @db.Uuid // nullable para SUPERADMIN
-  passwordResetToken  String?   @unique @map("password_reset_token")
+  id                   String    @id @default(uuid()) @db.Uuid
+  email                String
+  name                 String?
+  passwordHash         String?   @map("password_hash")
+  role                 String    @default("USER") // SUPERADMIN, ADMIN, USER, AUDITOR
+  isActive             Boolean   @default(true) @map("is_active")
+  colorScheme          String    @default("SYSTEM") @map("color_scheme") // LIGHT | DARK | SYSTEM (FR-V31-BRAND-004)
+  preferredLocale      String    @default("pt-BR") @map("preferred_locale") // FR-V31-I18N-001
+  tenantId             String?   @map("tenant_id") @db.Uuid // nullable para SUPERADMIN
+  passwordResetToken   String?   @unique @map("password_reset_token")
   passwordResetExpires DateTime? @map("password_reset_expires")
-  emailVerifiedAt     DateTime? @map("email_verified_at")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  emailVerifiedAt      DateTime? @map("email_verified_at")
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
-  tenant        Tenant?  @relation(fields: [tenantId], references: [id])
-  auditLogs     AuditLog[]
-  refreshTokens RefreshToken[]
-  employee      Employee?
-  importJobs    ImportJob[]
+  tenant                             Tenant?                   @relation(fields: [tenantId], references: [id])
+  auditLogs                          AuditLog[]
+  refreshTokens                      RefreshToken[]
+  employee                           Employee?
+  importJobs                         ImportJob[]
+  reconcileJobsOperated              ReconcileJob[]            @relation("ReconcileJobOperator")
+  workplaceReconcileQueueResolutions WorkplaceReconcileQueue[] @relation("WorkplaceQueueResolvedBy")
 
   @@unique([email, tenantId])
   @@map("users")
 }
 
 model Employee {
-  id            String   @id @default(uuid()) @db.Uuid
-  name          String
-  cpf           String
-  registration  String?  @map("registration")
-  birthDate     DateTime? @map("birth_date")
-  position      String?  @default("Colaborador")
-  employeeType  String   @default("EFETIVO") @map("employee_type") // EFETIVO, INTERMITENTE
-  isFerista     Boolean  @default(false) @map("is_ferista")
+  id           String    @id @default(uuid()) @db.Uuid
+  name         String
+  cpf          String
+  registration String?   @map("registration")
+  birthDate    DateTime? @map("birth_date")
+  position     String?   @default("Colaborador")
+  employeeType String    @default("EFETIVO") @map("employee_type") // EFETIVO, INTERMITENTE
+  isFerista    Boolean   @default(false) @map("is_ferista")
 
-  status        String   @default("ATIVO") // ATIVO, FERIAS, AFASTADO, INATIVO
-  branch        String?  // Empresa/Filial
-  department    String?  // Contrato / CC
-  workplace     String?  // Posto de Serviço (texto legado, será deprecado)
-  workplaceId   String?  @map("workplace_id") @db.Uuid
-  shift         String?  // Jornada / Escala
+  status      String  @default("ATIVO") // ATIVO, FERIAS, AFASTADO, INATIVO
+  branch      String? // Empresa/Filial
+  department  String? // Contrato / CC
+  workplace   String? // Posto de Serviço (texto legado, será deprecado)
+  workplaceId String? @map("workplace_id") @db.Uuid
+  shift       String? // Jornada / Escala
 
   phone         String?
   salary        Decimal? @default(0) @db.Decimal(10, 2)
   hireDate      DateTime @map("hire_date")
-  balanceOffset Int     @default(0) @map("balance_offset")
+  balanceOffset Int      @default(0) @map("balance_offset")
   userId        String?  @unique @map("user_id") @db.Uuid
   tenantId      String   @map("tenant_id") @db.Uuid
 
   // ============ NOVO: Tirvu external ID (Story 2.1) ============
-  tirvuId        String?  @map("tirvu_id")
+  tirvuId String? @map("tirvu_id")
 
   // ============ NOVO: dados pessoais expandidos ============
-  personalData   Json?    @map("personal_data")
+  personalData Json? @map("personal_data")
 
   // ============ NOVO: endereço estruturado ============
-  address        Json?
+  address Json?
 
   // ============ NOVO: dados bancários CRIPTOGRAFADOS (AES-256-GCM, ver Story 5.1) ============
-  bankDataEnc    Bytes?   @map("bank_data_enc")
-  bankDataIv     Bytes?   @map("bank_data_iv")
-  bankDataTag    Bytes?   @map("bank_data_tag")
+  bankDataEnc Bytes? @map("bank_data_enc")
+  bankDataIv  Bytes? @map("bank_data_iv")
+  bankDataTag Bytes? @map("bank_data_tag")
 
   // ============ NOVO: misc ============
-  unionName        String?   @map("union_name")
-  geofencingFlags  Json?     @map("geofencing_flags")
-  inactivePending  Boolean   @default(false) @map("inactive_pending")
-  terminationDate  DateTime? @map("termination_date")
+  unionName       String?   @map("union_name")
+  geofencingFlags Json?     @map("geofencing_flags")
+  inactivePending Boolean   @default(false) @map("inactive_pending")
+  terminationDate DateTime? @map("termination_date")
 
-  createdAt     DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  user          User?      @relation(fields: [userId], references: [id])
-  tenant        Tenant     @relation(fields: [tenantId], references: [id])
-  workplaceRef  Workplace? @relation(fields: [workplaceId], references: [id])
-  requests      VacationRequest[]
-  allocations   WorkplaceAllocation[]
-  coveragesAsReplacement CoverageAssignment[] @relation("CoverageReplacement")
+  user                         User?                     @relation(fields: [userId], references: [id])
+  tenant                       Tenant                    @relation(fields: [tenantId], references: [id])
+  workplaceRef                 Workplace?                @relation(fields: [workplaceId], references: [id])
+  requests                     VacationRequest[]
+  allocations                  WorkplaceAllocation[]
+  coveragesAsReplacement       CoverageAssignment[]      @relation("CoverageReplacement")
+  workplaceReconcileQueueItems WorkplaceReconcileQueue[]
 
   @@unique([cpf, tenantId])
   @@unique([tenantId, tirvuId], name: "tenant_tirvu_unique", map: "employees_tenant_tirvu_unique_idx")
@@ -243,7 +248,7 @@ model AuditLog {
   id           String   @id @default(uuid()) @db.Uuid
   tenantId     String   @map("tenant_id") @db.Uuid
   userId       String   @map("user_id") @db.Uuid
-  action       String   // e.g., "MANUAL_BALANCE_ADJUSTMENT"
+  action       String // e.g., "MANUAL_BALANCE_ADJUSTMENT"
   resourceId   String   @map("resource_id") @db.Uuid
   resourceType String   @map("resource_type") // e.g., "EMPLOYEE"
   previousData Json?    @map("previous_data")
@@ -253,51 +258,51 @@ model AuditLog {
   userAgent    String?  @map("user_agent")
   createdAt    DateTime @default(now())
 
-  tenant       Tenant   @relation(fields: [tenantId], references: [id])
-  user         User     @relation(fields: [userId], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
 
   @@map("audit_logs")
 }
 
 model VacationRequest {
-  id           String   @id @default(uuid()) @db.Uuid
-  tenantId     String   @map("tenant_id") @db.Uuid
-  employeeId   String   @map("employee_id") @db.Uuid
-  startDate    DateTime @map("start_date")
-  endDate      DateTime @map("end_date")
+  id                String    @id @default(uuid()) @db.Uuid
+  tenantId          String    @map("tenant_id") @db.Uuid
+  employeeId        String    @map("employee_id") @db.Uuid
+  startDate         DateTime  @map("start_date")
+  endDate           DateTime  @map("end_date")
   days              Int
-  status            String   @default("PENDING") // PENDING, APPROVED, REJECTED, RETURNED, SIGNED, COMPLETED
-  dispatchNote      String?  @map("dispatch_note")
+  status            String    @default("PENDING") // PENDING, APPROVED, REJECTED, RETURNED, SIGNED, COMPLETED
+  dispatchNote      String?   @map("dispatch_note")
   originalStartDate DateTime? @map("original_start_date")
   originalEndDate   DateTime? @map("original_end_date")
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  tenant       Tenant   @relation(fields: [tenantId], references: [id])
-  employee     Employee @relation(fields: [employeeId], references: [id])
-  signature    Signature?
-  coverages    CoverageAssignment[]
+  tenant    Tenant               @relation(fields: [tenantId], references: [id])
+  employee  Employee             @relation(fields: [employeeId], references: [id])
+  signature Signature?
+  coverages CoverageAssignment[]
 
   @@map("vacation_requests")
 }
 
 model Signature {
-  id                String   @id @default(uuid()) @db.Uuid
-  tenantId          String   @map("tenant_id") @db.Uuid
-  vacationRequestId String   @unique @map("vacation_request_id") @db.Uuid
-  hash              String   // SHA-256 of the document
-  pdfUrl            String?  @map("pdf_url")
-  evidenceDossier   Json?    @map("evidence_dossier")
-  otpCode           String?  @map("otp_code")
-  otpExpiresAt      DateTime? @map("otp_expires_at")
-  zapSignDocToken   String?  @map("zapsign_doc_token")
-  zapSignSignerToken String? @map("zapsign_signer_token")
-  signUrl           String?  @map("sign_url")
-  signedAt          DateTime? @map("signed_at")
-  createdAt         DateTime @default(now())
+  id                 String    @id @default(uuid()) @db.Uuid
+  tenantId           String    @map("tenant_id") @db.Uuid
+  vacationRequestId  String    @unique @map("vacation_request_id") @db.Uuid
+  hash               String // SHA-256 of the document
+  pdfUrl             String?   @map("pdf_url")
+  evidenceDossier    Json?     @map("evidence_dossier")
+  otpCode            String?   @map("otp_code")
+  otpExpiresAt       DateTime? @map("otp_expires_at")
+  zapSignDocToken    String?   @map("zapsign_doc_token")
+  zapSignSignerToken String?   @map("zapsign_signer_token")
+  signUrl            String?   @map("sign_url")
+  signedAt           DateTime? @map("signed_at")
+  createdAt          DateTime  @default(now())
 
-  tenant            Tenant          @relation(fields: [tenantId], references: [id])
-  vacationRequest   VacationRequest @relation(fields: [vacationRequestId], references: [id])
+  tenant          Tenant          @relation(fields: [tenantId], references: [id])
+  vacationRequest VacationRequest @relation(fields: [vacationRequestId], references: [id])
 
   @@map("signatures")
 }
@@ -310,54 +315,55 @@ model RefreshToken {
   expiresAt DateTime @map("expires_at")
   createdAt DateTime @default(now()) @map("created_at")
 
-  user      User     @relation(fields: [userId], references: [id])
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id])
 
   @@map("refresh_tokens")
 }
 
 model Workplace {
-  id        String   @id @default(uuid()) @db.Uuid
-  name      String
+  id       String  @id @default(uuid()) @db.Uuid
+  name     String
   // Endereço único (legado, mantido para retrocompat). Os novos forms usam
   // os campos estruturados abaixo.
-  address   String?
-  client    String?
-  minStaff  Int      @default(1) @map("min_staff")
-  tenantId  String   @map("tenant_id") @db.Uuid
+  address  String?
+  client   String?
+  minStaff Int     @default(1) @map("min_staff")
+  tenantId String  @map("tenant_id") @db.Uuid
 
   // Identificação fiscal (importação Postos de Serviço — 2026-05-04)
-  legalName       String?  @map("legal_name")          // Razão Social
-  cnpj            String?  @map("cnpj")
-  externalId      String?  @map("external_id")         // ID na planilha de origem
+  legalName  String? @map("legal_name") // Razão Social
+  cnpj       String? @map("cnpj")
+  externalId String? @map("external_id") // ID na planilha de origem
 
   // Contato
-  responsible     String?  @map("responsible")
-  phone           String?  @map("phone")
-  email           String?  @map("email")
+  responsible String? @map("responsible")
+  phone       String? @map("phone")
+  email       String? @map("email")
 
   // Endereço estruturado
-  cep             String?  @map("cep")
-  street          String?  @map("street")              // Logradouro
-  number          String?  @map("number")              // Número
-  complement      String?  @map("complement")          // Complemento
-  neighborhood    String?  @map("neighborhood")        // Bairro
-  city            String?  @map("city")
-  state           String?  @map("state")               // UF
+  cep          String? @map("cep")
+  street       String? @map("street") // Logradouro
+  number       String? @map("number") // Número
+  complement   String? @map("complement") // Complemento
+  neighborhood String? @map("neighborhood") // Bairro
+  city         String? @map("city")
+  state        String? @map("state") // UF
 
   // Contrato / status
-  contractStatus  String?  @map("contract_status")     // Ex: Ativo / Inativo
+  contractStatus String? @map("contract_status") // Ex: Ativo / Inativo
 
   // Auditoria de import (quem cadastrou + quando, vindo da planilha externa)
-  importedBy      String?    @map("imported_by")
-  importedAt      DateTime?  @map("imported_at")
+  importedBy String?   @map("imported_by")
+  importedAt DateTime? @map("imported_at")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
-  positions WorkplacePosition[]
-  employees Employee[]
+  tenant                    Tenant                    @relation(fields: [tenantId], references: [id])
+  positions                 WorkplacePosition[]
+  employees                 Employee[]
+  reconcileQueueResolutions WorkplaceReconcileQueue[] @relation("WorkplaceQueueResolvedTo")
 
   @@index([tenantId, cnpj], name: "workplaces_tenant_cnpj_idx")
   @@map("workplaces")
@@ -373,8 +379,8 @@ model WorkplacePosition {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  workplace   Workplace @relation(fields: [workplaceId], references: [id])
-  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  workplace   Workplace             @relation(fields: [workplaceId], references: [id])
+  tenant      Tenant                @relation(fields: [tenantId], references: [id])
   allocations WorkplaceAllocation[]
   coverages   CoverageAssignment[]
 
@@ -406,7 +412,7 @@ model CoverageAssignment {
   workplacePositionId   String   @map("workplace_position_id") @db.Uuid
   startDate             DateTime @map("start_date")
   endDate               DateTime @map("end_date")
-  type                  String   // INTERMITENTE, FERISTA
+  type                  String // INTERMITENTE, FERISTA
   status                String   @default("PLANNED") // PLANNED, ACTIVE, COMPLETED
   cost                  Decimal? @db.Decimal(10, 2)
   tenantId              String   @map("tenant_id") @db.Uuid
@@ -422,14 +428,14 @@ model CoverageAssignment {
 }
 
 model Webhook {
-  id        String   @id @default(uuid())
-  url       String
-  secret    String
-  events    String[] // e.g. ["VACATION_SIGNED", "EMPLOYEE_CREATED"]
-  isActive  Boolean  @default(true) @map("is_active")
-  
-  tenantId  String   @map("tenant_id") @db.Uuid
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  id       String   @id @default(uuid())
+  url      String
+  secret   String
+  events   String[] // e.g. ["VACATION_SIGNED", "EMPLOYEE_CREATED"]
+  isActive Boolean  @default(true) @map("is_active")
+
+  tenantId String @map("tenant_id") @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -451,21 +457,21 @@ model MasterKeyLog {
 }
 
 model SystemConfig {
-  id        String   @id @default("singleton")
-  masterKey String?  @map("master_key")
-  masterKeyEnabled Boolean @default(false) @map("master_key_enabled")
+  id                 String    @id @default("singleton")
+  masterKey          String?   @map("master_key")
+  masterKeyEnabled   Boolean   @default(false) @map("master_key_enabled")
   masterKeyUpdatedAt DateTime? @map("master_key_updated_at")
-  smtpHost  String?  @map("smtp_host")
-  smtpPort  Int?     @map("smtp_port")
-  smtpUser  String?  @map("smtp_user")
-  smtpPass  String?  @map("smtp_pass")
-  smtpFrom  String?  @map("smtp_from")
+  smtpHost           String?   @map("smtp_host")
+  smtpPort           Int?      @map("smtp_port")
+  smtpUser           String?   @map("smtp_user")
+  smtpPass           String?   @map("smtp_pass")
+  smtpFrom           String?   @map("smtp_from")
   // Evolution (WhatsApp) global — Super Admin only
-  evoApiUrl       String?  @map("evo_api_url")
-  evoApiKey       String?  @map("evo_api_key")
-  evoInstanceName String?  @map("evo_instance_name")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  evoApiUrl          String?   @map("evo_api_url")
+  evoApiKey          String?   @map("evo_api_key")
+  evoInstanceName    String?   @map("evo_instance_name")
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   @@map("system_config")
 }
@@ -474,40 +480,40 @@ model SystemConfig {
 // State machine: PENDING → PARSING → PREVIEW_READY → APPLYING → COMPLETED|FAILED|CANCELLED|TIMED_OUT
 // Ver _evo-output/planning-artifacts/v3-2-import-tirvu/architecture.md#D5
 model ImportJob {
-  id                  String    @id @default(uuid()) @db.Uuid
-  tenantId            String    @map("tenant_id") @db.Uuid
-  operatorUserId      String    @map("operator_user_id") @db.Uuid
+  id             String @id @default(uuid()) @db.Uuid
+  tenantId       String @map("tenant_id") @db.Uuid
+  operatorUserId String @map("operator_user_id") @db.Uuid
 
-  status              ImportJobStatus @default(PENDING)
-  parserVersion       String    @default("tirvu-v1") @map("parser_version")
+  status        ImportJobStatus @default(PENDING)
+  parserVersion String          @default("tirvu-v1") @map("parser_version")
 
-  filename            String
-  fileSize            Int       @map("file_size")
-  fileHash            String    @map("file_hash")
-  storagePath         String    @map("storage_path")
+  filename    String
+  fileSize    Int    @map("file_size")
+  fileHash    String @map("file_hash")
+  storagePath String @map("storage_path")
 
-  totalRows           Int?      @map("total_rows")
-  rowsProcessed       Int       @default(0) @map("rows_processed")
-  rowsCreated         Int       @default(0) @map("rows_created")
-  rowsUpdated         Int       @default(0) @map("rows_updated")
-  rowsInvalid         Int       @default(0) @map("rows_invalid")
-  rowsAbsent          Int       @default(0) @map("rows_absent")
-  workplacesCreated   Int       @default(0) @map("workplaces_created")
+  totalRows         Int? @map("total_rows")
+  rowsProcessed     Int  @default(0) @map("rows_processed")
+  rowsCreated       Int  @default(0) @map("rows_created")
+  rowsUpdated       Int  @default(0) @map("rows_updated")
+  rowsInvalid       Int  @default(0) @map("rows_invalid")
+  rowsAbsent        Int  @default(0) @map("rows_absent")
+  workplacesCreated Int  @default(0) @map("workplaces_created")
 
-  previewSummary      Json?     @map("preview_summary")
-  errorReportPath     String?   @map("error_report_path")
+  previewSummary  Json?   @map("preview_summary")
+  errorReportPath String? @map("error_report_path")
 
-  failureReason       String?   @map("failure_reason")
-  ipAddress           String?   @map("ip_address")
-  userAgent           String?   @map("user_agent")
+  failureReason String? @map("failure_reason")
+  ipAddress     String? @map("ip_address")
+  userAgent     String? @map("user_agent")
 
-  createdAt           DateTime  @default(now()) @map("created_at")
-  parsedAt            DateTime? @map("parsed_at")
-  appliedAt           DateTime? @map("applied_at")
-  completedAt         DateTime? @map("completed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  parsedAt    DateTime? @map("parsed_at")
+  appliedAt   DateTime? @map("applied_at")
+  completedAt DateTime? @map("completed_at")
 
-  tenant              Tenant    @relation(fields: [tenantId], references: [id])
-  operator            User      @relation(fields: [operatorUserId], references: [id])
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+  operator User   @relation(fields: [operatorUserId], references: [id])
 
   @@index([tenantId, status, createdAt], name: "import_jobs_tenant_status_created_idx")
   @@map("import_jobs")
@@ -522,4 +528,72 @@ enum ImportJobStatus {
   FAILED
   CANCELLED
   TIMED_OUT
+}
+
+// V3.3 — Reconciliação Postos×Funcionários (Story 1.1)
+// Ver _evo-output/planning-artifacts/v3-3-reconciliacao-postos/architecture.md#D1
+
+enum ReconcileJobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum ReconcileQueueState {
+  PENDING
+  DEFERRED
+  RESOLVED
+  IGNORED
+}
+
+model ReconcileJob {
+  id             String             @id @default(uuid()) @db.Uuid
+  tenantId       String             @map("tenant_id") @db.Uuid
+  operatorUserId String             @map("operator_user_id") @db.Uuid
+  status         ReconcileJobStatus @default(PENDING)
+  parserVersion  String             @default("reconcile-v1") @map("parser_version")
+  totalEmployees Int?               @map("total_employees")
+  matched        Int                @default(0)
+  queued         Int                @default(0)
+  ignored        Int                @default(0)
+  errors         Int                @default(0)
+  durationMs     Int?               @map("duration_ms")
+  failureReason  String?            @map("failure_reason")
+  triggeredBy    String             @default("ADMIN") @map("triggered_by") // ADMIN | SUPERADMIN_BATCH
+  batchParentId  String?            @map("batch_parent_id") @db.Uuid
+  createdAt      DateTime           @default(now()) @map("created_at")
+  startedAt      DateTime?          @map("started_at")
+  completedAt    DateTime?          @map("completed_at")
+
+  tenant     Tenant                    @relation(fields: [tenantId], references: [id])
+  operator   User                      @relation("ReconcileJobOperator", fields: [operatorUserId], references: [id])
+  queueItems WorkplaceReconcileQueue[]
+
+  @@index([tenantId, status, createdAt], name: "reconcile_jobs_tenant_status_created_idx")
+  @@map("reconcile_jobs")
+}
+
+model WorkplaceReconcileQueue {
+  id                    String              @id @default(uuid()) @db.Uuid
+  tenantId              String              @map("tenant_id") @db.Uuid
+  reconcileJobId        String              @map("reconcile_job_id") @db.Uuid
+  employeeId            String              @map("employee_id") @db.Uuid
+  workplaceNameRaw      String              @map("workplace_name_raw")
+  state                 ReconcileQueueState @default(PENDING)
+  suggestions           Json?
+  resolvedToWorkplaceId String?             @map("resolved_to_workplace_id") @db.Uuid
+  resolvedByUserId      String?             @map("resolved_by_user_id") @db.Uuid
+  resolvedAt            DateTime?           @map("resolved_at")
+  createdAt             DateTime            @default(now()) @map("created_at")
+
+  tenant              Tenant       @relation(fields: [tenantId], references: [id])
+  reconcileJob        ReconcileJob @relation(fields: [reconcileJobId], references: [id])
+  employee            Employee     @relation(fields: [employeeId], references: [id])
+  resolvedToWorkplace Workplace?   @relation("WorkplaceQueueResolvedTo", fields: [resolvedToWorkplaceId], references: [id])
+  resolvedByUser      User?        @relation("WorkplaceQueueResolvedBy", fields: [resolvedByUserId], references: [id])
+
+  @@unique([tenantId, employeeId, state], name: "workplace_reconcile_queue_unique_active")
+  @@index([tenantId, state, createdAt], name: "workplace_reconcile_queue_tenant_state_created_idx")
+  @@map("workplace_reconcile_queue")
 }
