@@ -10,6 +10,7 @@ import { read as storageRead } from './import-storage'
 import { applyItem, type ApplyItem, type ApplyOptions, type ApplyResult } from './import-applier'
 import { InvalidStateTransitionError, type TirvuRow } from './types'
 import type { PipelineLogger } from './worker-pipeline'
+import { WorkplaceAllocationService } from '../workplaces/workplace-allocation.service'
 
 const CHUNK_SIZE = Number(process.env.IMPORT_CHUNK_SIZE ?? 100)
 
@@ -126,7 +127,8 @@ export async function runApplyPipeline(
     })
 
     const items = buildItems(matchResult, options)
-    const ctx = { tenantId, jobId, userId, options }
+    const allocationService = new WorkplaceAllocationService(prisma)
+    const ctx = { tenantId, jobId, userId, options, allocationService }
     const result: ApplyResult = {
       created: 0,
       updated: 0,
@@ -142,6 +144,9 @@ export async function runApplyPipeline(
         for (const item of chunk) {
           const r = await applyItem(tx as unknown as PrismaClient, item, ctx)
           if (r.delta) result[r.delta]++
+          if (r.extraDeltas) {
+            for (const d of r.extraDeltas) result[d]++
+          }
         }
       })
       await prisma.importJob.update({

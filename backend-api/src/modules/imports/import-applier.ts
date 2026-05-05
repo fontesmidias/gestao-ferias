@@ -11,6 +11,8 @@ import type {
   EmployeePatch,
   TirvuRow,
 } from './types'
+import { ensureWorkplaceFromImport } from './workplace-resolver'
+import type { WorkplaceAllocationService } from '../workplaces/workplace-allocation.service'
 
 export interface ApplyOptions {
   createWorkplaces: string[]
@@ -23,6 +25,11 @@ export interface ApplyContext {
   jobId: string
   userId: string
   options: ApplyOptions
+  /**
+   * Story 2.1: usado por applyCreate/applyUpdate para gravar
+   * WorkplaceAllocation via ponto único de escrita (Enforcement #1).
+   */
+  allocationService: WorkplaceAllocationService
 }
 
 export type ApplyItem =
@@ -110,19 +117,20 @@ async function applyCreate(
   tx: TxClient,
   item: Extract<ApplyItem, { kind: 'create' }>,
   ctx: ApplyContext,
-): Promise<{ employeeId: string }> {
+): Promise<{ employeeId: string; workplaceCreated: boolean }> {
   const cpfDigits = parseCpfNoMask(item.row.cpf)
   if (!cpfDigits) {
     throw new Error('CPF ausente em row passada para applyCreate (validator deveria ter filtrado)')
   }
   const { data, hasBankData } = patchWithBankData(item.row, item.patch, ctx.tenantId)
 
+  const hireDate = (item.patch.hireDate as Date) ?? new Date()
   const employee = await tx.employee.create({
     data: {
       ...(data as Prisma.EmployeeUncheckedCreateInput),
       tenantId: ctx.tenantId,
       cpf: cpfDigits,
-      hireDate: (item.patch.hireDate as Date) ?? new Date(),
+      hireDate,
       name: (item.patch.name as string) ?? cpfDigits,
     },
   })
@@ -138,14 +146,60 @@ async function applyCreate(
     },
   })
 
-  return { employeeId: employee.id }
+  // Story 2.1: resolver workplace + gravar allocation se a planilha trouxe lotação.
+  const workplaceCreated = await applyAllocationFromImport(
+    tx,
+    ctx,
+    employee.id,
+    hireDate,
+    item.patch.workplace ?? null,
+  )
+
+  return { employeeId: employee.id, workplaceCreated }
+}
+
+/**
+ * Story 2.1: ponto único de escrita de WorkplaceAllocation a partir de import.
+ * Resolve/cria Workplace via lotação string, garante WorkplacePosition padrão,
+ * delega gravação de allocation ao WorkplaceAllocationService (Enforcement #1)
+ * e atualiza Employee.workplaceId (FK).
+ *
+ * Retorna `true` quando um Workplace novo foi criado (alimenta workplacesCreated).
+ */
+async function applyAllocationFromImport(
+  tx: TxClient,
+  ctx: ApplyContext,
+  employeeId: string,
+  startDate: Date,
+  workplaceRaw: string | null,
+): Promise<boolean> {
+  if (!workplaceRaw || !workplaceRaw.trim()) return false
+
+  const resolved = await ensureWorkplaceFromImport(tx, ctx.tenantId, workplaceRaw)
+
+  await ctx.allocationService.upsertFromImport({
+    tx,
+    tenantId: ctx.tenantId,
+    employeeId,
+    operatorUserId: ctx.userId,
+    workplacePositionId: resolved.positionId,
+    startDate,
+    source: 'IMPORT_TIRVU_ALLOCATE',
+  })
+
+  await tx.employee.update({
+    where: { id: employeeId },
+    data: { workplaceId: resolved.workplaceId },
+  })
+
+  return resolved.created
 }
 
 async function applyUpdate(
   tx: TxClient,
   item: Extract<ApplyItem, { kind: 'update' }>,
   ctx: ApplyContext,
-): Promise<void> {
+): Promise<{ workplaceCreated: boolean }> {
   const { data, hasBankData } = patchWithBankData(item.row, item.patch, ctx.tenantId)
   // Atualiza apenas campos do diff + bank fields (se houver)
   const diffOnlyData: Record<string, unknown> = {}
@@ -183,6 +237,25 @@ async function applyUpdate(
       newData: { ...newData, hasBankData } as never,
     },
   })
+
+  // Story 2.1: se a lotação mudou OU o employee não tinha workplaceId mas
+  // patch.workplace agora trouxe valor, resolve + grava allocation.
+  const workplaceChanged = 'workplace' in item.diff
+  const hadNoFk = !item.employee.workplaceId
+  const patchHasWorkplace = !!item.patch.workplace
+  let workplaceCreated = false
+  if (workplaceChanged || (hadNoFk && patchHasWorkplace)) {
+    const startDate =
+      (item.patch.hireDate as Date | undefined) ?? item.employee.hireDate ?? new Date()
+    workplaceCreated = await applyAllocationFromImport(
+      tx,
+      ctx,
+      item.employee.id,
+      startDate,
+      item.patch.workplace ?? null,
+    )
+  }
+  return { workplaceCreated }
 }
 
 async function applyReactivation(
@@ -287,14 +360,23 @@ export async function applyItem(
   ctx: ApplyContext,
 ): Promise<{
   delta: keyof ApplyResult | null
+  extraDeltas?: Array<keyof ApplyResult>
 }> {
   switch (item.kind) {
-    case 'create':
-      await applyCreate(tx, item, ctx)
-      return { delta: 'created' }
-    case 'update':
-      await applyUpdate(tx, item, ctx)
-      return { delta: 'updated' }
+    case 'create': {
+      const r = await applyCreate(tx, item, ctx)
+      return {
+        delta: 'created',
+        ...(r.workplaceCreated ? { extraDeltas: ['workplacesCreated'] } : {}),
+      }
+    }
+    case 'update': {
+      const r = await applyUpdate(tx, item, ctx)
+      return {
+        delta: 'updated',
+        ...(r.workplaceCreated ? { extraDeltas: ['workplacesCreated'] } : {}),
+      }
+    }
     case 'reactivation':
       await applyReactivation(tx, item, ctx)
       return { delta: ctx.options.reactivateAll ? 'reactivated' : null }
