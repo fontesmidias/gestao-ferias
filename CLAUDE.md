@@ -83,6 +83,26 @@ npx prisma studio         # UI para inspecionar banco
 3. **Seguranca:** Todos endpoints (exceto /auth/setup e /auth/login) exigem JWT.
 4. **isFerista:** Ferista NAO e tipo contratual. E uma flag boolean no Employee. Tipos sao EFETIVO e INTERMITENTE.
 
+## Regras V3.3 — Importadores e Reconciliação
+
+**Princípio:** Importadores escrevem no GRAFO RELACIONAL. Nunca apenas em campos legados (string).
+
+1. **Único point-of-write para WorkplaceAllocation:** `WorkplaceAllocationService.upsertFromImport()` em `backend-api/src/modules/workplaces/workplace-allocation.service.ts`. Toda gravação de `WorkplaceAllocation` originada de import ou reconcile DEVE passar por aqui (Enforcement #1). Não usar `prisma.workplaceAllocation.create()` direto em importers.
+
+2. **Resolver lotação string → grafo:** importers usam `ensureWorkplaceFromImport(tx, tenantId, rawName)` (`src/modules/imports/workplace-resolver.ts`) para resolver/criar `Workplace` (com `importedBy='AUTO_TIRVU'`) + `WorkplacePosition` padrão. Aplicam `normalize()` (`src/modules/reconcile/matchers/normalize.ts`).
+
+3. **Idempotência forte:** UNIQUE partial index `workplace_allocations_unique_active_per_position` (status=ACTIVE) + check aplicacional + catch P2002. Re-import 2× = mesmo estado final.
+
+4. **Encerrar+criar, nunca DELETE:** transição de posto encerra allocation antiga (`status='ENDED'`) e cria nova. Preserva CLT (NFR-COMP-2).
+
+5. **Reconciliação retroativa:** `POST /v1/admin/reconcile` (ADMIN/SUPERADMIN) dispara batch in-process. Não-matches viram `WorkplaceReconcileQueue` PENDING para resolução manual via `/workplaces?tab=pending`.
+
+6. **AuditLog actions V3.3:** `V3.3_RECONCILE`, `IMPORT_TIRVU_ALLOCATE`, `RECONCILE_QUEUE_RESOLVE`, `RECONCILE_QUEUE_DEFER`, `RECONCILE_QUEUE_IGNORE`. AUDITOR pode consultar `/v1/audit-logs?action=V3.3_RECONCILE` (FR39).
+
+7. **LGPD:** itens RESOLVED/IGNORED há >90d são purgados via cron in-process (`registerReconcileQueuePurge`, env `RECONCILE_QUEUE_PURGE_ENABLED=true`). AuditLog é preservado.
+
+**Artefatos V3.3:** `_evo-output/planning-artifacts/v3-3-reconciliacao-postos/{prd,architecture,epics}.md`. Stories implementadas em `_evo-output/implementation-artifacts/v3-3-reconciliacao-postos/`.
+
 ## V3 — Status atual
 
 Fase de implementacao. Os artefatos de planejamento estao completos em:
