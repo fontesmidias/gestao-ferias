@@ -2,6 +2,7 @@ import { join } from 'node:path'
 import AutoLoad, { AutoloadPluginOptions } from '@fastify/autoload'
 import { FastifyPluginAsync, FastifyServerOptions } from 'fastify'
 import { LOG_REDACT_PATHS, logRedactCensor } from './lib/log-redact'
+import { registerReconcileQueuePurge } from './modules/reconcile/reconcile-queue.purge'
 
 export interface AppOptions extends FastifyServerOptions, Partial<AutoloadPluginOptions> {
 
@@ -46,6 +47,12 @@ const app: FastifyPluginAsync<AppOptions> = async (
   void fastify.register(AutoLoad, {
     dir: join(__dirname, 'routes'),
     options: opts
+  })
+
+  // Story 3.2: cron in-process de purge LGPD (90d) — ativo apenas com
+  // RECONCILE_QUEUE_PURGE_ENABLED=true (no-op em dev/test).
+  fastify.ready(() => {
+    registerReconcileQueuePurge(fastify)
   })
 }
 
