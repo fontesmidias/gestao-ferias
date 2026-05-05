@@ -96,6 +96,11 @@ CREATE UNIQUE INDEX "workplace_allocations_unique_active_per_position"
 -- D6: Extension pg_trgm para fuzzy matching (similarity operator % e função similarity())
 CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 
--- D6: Índice GIN trigram para fuzzy matching escalável
+-- D6: Extension btree_gin para permitir tenant_id (UUID) em índice GIN multi-coluna.
+-- Sem isso, Postgres rejeita o índice abaixo com "data type uuid has no default operator class".
+CREATE EXTENSION IF NOT EXISTS "btree_gin";
+
+-- D6: Índice GIN trigram para fuzzy matching escalável (multi-tenant strict).
+-- tenant_id usa btree_gin; name usa gin_trgm_ops para similaridade.
 CREATE INDEX "workplaces_tenant_name_trgm_idx"
   ON "workplaces" USING gin ("tenant_id", "name" gin_trgm_ops);
