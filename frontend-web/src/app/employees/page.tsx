@@ -120,7 +120,7 @@ export default function EmployeesPage() {
   const totalLeaves = summary?.kpis.leave ?? 0
 
   const handleExportCSV = () => {
-    const headers = ['ID/Matricula', 'Colaborador', 'CPF', 'Status', 'Empresa/Filial', 'Lotação', 'Cargo', 'Admissão', 'Jornada/Escala']
+    const headers = ['ID/Matricula', 'Colaborador', 'CPF', 'Status', 'Empresa/Filial', 'Posto', 'Cargo', 'Admissão', 'Jornada/Escala']
     const csvContent = [
       headers.join(';'),
       ...filtered.map(e => [
@@ -299,7 +299,7 @@ export default function EmployeesPage() {
               </div>
               
               <div className="flex-1 min-w-[200px]">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1">Posto de Serviço <InfoTooltip text="Local físico onde o colaborador exerce suas funções (ex: INEP, Tribunal)." /></label>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1">Posto <InfoTooltip text="Local físico onde o colaborador exerce suas funções (ex: INEP, Tribunal)." /></label>
                 <select 
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary/50"
                   value={filterWorkplace} onChange={e => setFilterWorkplace(e.target.value)}
@@ -416,7 +416,7 @@ export default function EmployeesPage() {
                     </th>
                     <th className="px-6 py-3"><div className="flex items-center gap-1">Status <InfoTooltip text="Situação atual: verde=ativo, azul=férias, amarelo=afastado, etc." /></div></th>
                     <th className="px-6 py-3">
-                      <div className="flex items-center gap-1.5"><MapPin className="w-3 h-3"/> Lotação <InfoTooltip text="Posto de serviço/local de trabalho atual do colaborador." /></div>
+                      <div className="flex items-center gap-1.5"><MapPin className="w-3 h-3"/> Posto <InfoTooltip text="Posto de trabalho atual do colaborador." /></div>
                     </th>
                     <th className="px-6 py-3">
                       <div className="flex items-center gap-1.5"><Briefcase className="w-3 h-3"/> Cargo <InfoTooltip text="Função exercida pelo colaborador no posto de trabalho." /></div>
@@ -602,7 +602,7 @@ export default function EmployeesPage() {
                 <input type="text" value={editForm.department} onChange={e => setEditForm({...editForm, department: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary/50" />
               </div>
               <div>
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1">Posto de Serviço <InfoTooltip text="Local físico onde o colaborador exerce suas funções." /></label>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1">Posto <InfoTooltip text="Local físico onde o colaborador exerce suas funções." /></label>
                 <input type="text" value={editForm.workplace} onChange={e => setEditForm({...editForm, workplace: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary/50" />
               </div>
               <div>

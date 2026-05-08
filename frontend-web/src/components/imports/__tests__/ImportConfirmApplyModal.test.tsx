@@ -26,7 +26,7 @@ describe('ImportConfirmApplyModal', () => {
     expect(screen.getByText(/Criar 47 colaboradores/)).toBeTruthy()
     expect(screen.getByText(/Atualizar 3 colaboradores/)).toBeTruthy()
     expect(screen.getByText(/Reativar 1 colaborador/)).toBeTruthy()
-    expect(screen.getByText(/Criar 1 lotação \(ANATEL\)/)).toBeTruthy()
+    expect(screen.getByText(/Criar 1 posto \(ANATEL\)/)).toBeTruthy()
     expect(screen.getByText(/Ignorar 2 linhas inválidas/)).toBeTruthy()
   })
 

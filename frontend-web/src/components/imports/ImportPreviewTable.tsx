@@ -88,7 +88,7 @@ export function ImportPreviewTable({ rows, pagination, loading, onPageChange }: 
         <div role="columnheader">#</div>
         <div role="columnheader">Nome</div>
         <div role="columnheader">CPF</div>
-        <div role="columnheader">Lotação</div>
+        <div role="columnheader">Posto</div>
         <div role="columnheader">Status</div>
         <div role="columnheader" className="sr-only">Expandir</div>
       </div>

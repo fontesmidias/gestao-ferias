@@ -350,7 +350,7 @@ export default function EmployeeDashboard() {
               {employee?.workplace && (
                 <div className="flex items-center gap-2 bg-slate-900/60 border border-white/5 rounded-xl px-4 py-2 mb-4 mx-2">
                   <Building2 className="w-4 h-4 text-indigo-400" />
-                  <span className="text-xs text-slate-400">Posto de Serviço:</span>
+                  <span className="text-xs text-slate-400">Posto:</span>
                   <span className="text-xs font-bold text-white">{employee.workplace}</span>
                   <InfoTooltip text="Local onde você está alocado atualmente. Informado pelo RH." />
                 </div>

@@ -87,9 +87,9 @@ export function ImportConfirmApplyModal({
   if (counts.reactivation > 0) operations.push(`↻ Reativar ${counts.reactivation} colaborador${counts.reactivation === 1 ? '' : 'es'}`)
   if (newWorkplaces.length > 0) {
     if (newWorkplacesMode === 'create-all') {
-      operations.push(`🆕 Criar ${newWorkplaces.length} lotaç${newWorkplaces.length === 1 ? 'ão' : 'ões'} (${newWorkplaces.join(', ')})`)
+      operations.push(`🆕 Criar ${newWorkplaces.length} ${newWorkplaces.length === 1 ? 'posto' : 'postos'} (${newWorkplaces.join(', ')})`)
     } else {
-      operations.push(`🆕 Decidir ${newWorkplaces.length} lotaç${newWorkplaces.length === 1 ? 'ão' : 'ões'} caso a caso`)
+      operations.push(`🆕 Decidir ${newWorkplaces.length} ${newWorkplaces.length === 1 ? 'posto' : 'postos'} caso a caso`)
     }
   }
   if (counts.invalid > 0) operations.push(`⚠ Ignorar ${counts.invalid} linha${counts.invalid === 1 ? '' : 's'} inválida${counts.invalid === 1 ? '' : 's'}`)

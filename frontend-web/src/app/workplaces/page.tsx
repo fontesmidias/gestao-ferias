@@ -431,8 +431,8 @@ export default function WorkplacesPage() {
                   <div className="text-right">
                     <div className="text-lg font-bold text-slate-300">{wp.positions.length}</div>
                     <div className="text-xs text-slate-500 flex items-center gap-1">
-                      posições
-                      <InfoTooltip text="Funções diferentes neste posto (ex: Vigilante, Recepcionista). Cada posição pode ter múltiplos colaboradores." />
+                      cargos
+                      <InfoTooltip text="Cargos diferentes neste posto (ex: Vigilante, Recepcionista). Cada cargo pode ter múltiplos colaboradores." />
                     </div>
                   </div>
                   <button
@@ -469,7 +469,7 @@ export default function WorkplacesPage() {
                                 setAllocSearchResults([])
                               }}
                               className="p-1 text-primary hover:bg-primary/10 rounded-lg transition-colors"
-                              title="Alocar colaborador nesta posição"
+                              title="Alocar colaborador neste cargo"
                             >
                               <Plus className="w-3.5 h-3.5" />
                             </button>
@@ -552,7 +552,7 @@ export default function WorkplacesPage() {
                       </div>
                     ))}
                     {positions.length === 0 && (
-                      <p className="text-sm text-slate-500 text-center py-4">Nenhuma posição cadastrada neste posto.</p>
+                      <p className="text-sm text-slate-500 text-center py-4">Nenhum cargo cadastrado neste posto.</p>
                     )}
                   </div>
                 )

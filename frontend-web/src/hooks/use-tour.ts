@@ -107,7 +107,7 @@ export function useTour() {
           element: 'select.bg-slate-950', // targets the branch/workplace filters 
           popover: {
             title: 'Análise Dimensional',
-            description: 'Utilize estas caixas de seleção para filtrar e buscar colaboradores por Empresa (razão social matriz) e Lotação (posto específico em que o profissional trabalha).',
+            description: 'Utilize estas caixas de seleção para filtrar e buscar colaboradores por Empresa (razão social matriz) e Posto (local específico em que o profissional trabalha).',
             side: 'bottom',
             align: 'center'
           }

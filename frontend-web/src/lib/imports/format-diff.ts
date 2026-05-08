@@ -65,7 +65,7 @@ const FIELD_LABELS: Record<string, string> = {
   salario: 'Salário',
   position: 'Cargo',
   status: 'Status',
-  workplace: 'Lotação',
+  workplace: 'Posto',
   shift: 'Jornada',
   branch: 'Empresa',
   hireDate: 'Admissão',

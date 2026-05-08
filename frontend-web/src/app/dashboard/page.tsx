@@ -122,7 +122,7 @@ export default function DashboardPage() {
                   </div>
                   <h3 className="text-slate-400 font-bold uppercase text-xs tracking-wider mb-2 z-10 relative">Em Férias Atualmente <InfoTooltip text="Quantidade de colaboradores que estão de férias neste exato momento. Esses profissionais não estão nos seus postos." /></h3>
                   <p className="text-4xl font-black text-white z-10 relative">{data?.kpis.composition?.['FERIAS'] || 0}</p>
-                  <p className="mt-4 text-xs text-slate-500 z-10 relative">Colaboradores ausentes da Lotação em D0</p>
+                  <p className="mt-4 text-xs text-slate-500 z-10 relative">Colaboradores ausentes do Posto em D0</p>
                 </div>
 
                 <div className="glass-card p-6 rounded-2xl border border-rose-500/10 relative overflow-hidden group shadow-[0_0_30px_-5px_rgba(244,63,94,0.1)]">
