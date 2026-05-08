@@ -73,7 +73,6 @@ export function Sidebar() {
     {
       label: t('sidebar.section.system'),
       items: [
-        { href: '/settings/imports/employees', label: t('sidebar.imports'), icon: Upload, matchPath: '/settings/imports' },
         { href: '/settings/holidays', label: t('sidebar.holidays'), icon: CalendarDays, matchPath: '/settings/holidays' },
         { href: '/settings', label: t('sidebar.settings'), icon: Settings, matchPath: '/settings' },
       ],

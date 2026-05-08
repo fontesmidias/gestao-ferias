@@ -18,7 +18,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "GestaoFerias | SaaS de Gestao Estrategica",
+  title: "GestaoFerias | Gestao Estrategica de Pessoas",
   description: "A plataforma definitiva para gestao de ferias com conformidade CLT e ROI em tempo real.",
   manifest: "/manifest.json",
 };

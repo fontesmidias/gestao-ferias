@@ -215,7 +215,7 @@ export default function SettingsPage() {
 
             {/* List Webhooks */}
             <div className="space-y-4">
-              <h3 className="text-sm font-bold text-slate-500 uppercase px-2">Webhooks Configurados <InfoTooltip text="Lista de todos os webhooks ativos no seu tenant. Cada um possui um secret único para validação HMAC." /></h3>
+              <h3 className="text-sm font-bold text-slate-500 uppercase px-2">Webhooks Configurados <InfoTooltip text="Lista de todos os webhooks ativos na sua organização. Cada um possui um secret único para validação HMAC." /></h3>
 
               {loading && (
                 <div className="flex items-center justify-center py-12">
