@@ -105,13 +105,11 @@ export async function ensureWorkplaceFromImport(
 
   if (trimmedRole) {
     // Match case-insensitive na role para evitar duplicatas por capitalização diferente.
-    const roleMatches = await tx.workplacePosition.findMany({
+    position = await tx.workplacePosition.findFirst({
       where: { tenantId, workplaceId: workplace.id, role: { equals: trimmedRole, mode: 'insensitive' } },
       orderBy: { createdAt: 'asc' },
       select: { id: true },
-      take: 1,
     })
-    position = roleMatches[0] ?? null
     if (!position) {
       position = await tx.workplacePosition.create({
         data: {

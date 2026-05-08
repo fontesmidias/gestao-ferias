@@ -287,6 +287,45 @@ export default function ApprovalsPage() {
                 >
                   <CalendarPlus className="w-3.5 h-3.5" /> Programar Férias
                 </button>
+                <label
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-emerald-500/40 text-emerald-400 rounded-lg hover:bg-emerald-500/10 text-xs font-bold cursor-pointer transition-colors"
+                  title="Importar plano de férias em massa (admin) — cria já APROVADO e detecta sobreposições/duplicatas"
+                >
+                  <Upload className="w-3.5 h-3.5" /> Importar Plano (Admin)
+                  <input type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={async (e) => {
+                    const file = e.target.files?.[0]
+                    if (!file) return
+                    const formData = new FormData()
+                    formData.append('file', file)
+                    try {
+                      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/vacations/plan/import`, {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+                        body: formData,
+                      })
+                      const json = await res.json()
+                      if (res.ok) {
+                        const s = json?.data?.summary
+                        toast.success(
+                          `Plano: ${s?.created ?? 0} criadas · ${s?.skipped_idempotent ?? 0} duplicatas · ${s?.skipped_overlap ?? 0} sobreposições · ${s?.errors ?? 0} erros`,
+                          { duration: 8000 }
+                        )
+                        if (s?.errors > 0) {
+                          const firstErrors = (json?.data?.results || [])
+                            .filter((r: any) => r.outcome === 'error')
+                            .slice(0, 3)
+                            .map((r: any) => `Linha ${r.rowIndex}: ${r.message}`)
+                            .join('\n')
+                          if (firstErrors) toast.error(firstErrors, { duration: 12000 })
+                        }
+                        fetchRequests()
+                      } else {
+                        toast.error(json?.error?.message || 'Erro ao importar plano')
+                      }
+                    } catch { toast.error('Erro de rede ao importar') }
+                    e.target.value = ''
+                  }} />
+                </label>
                 <button
                   onClick={() => { setBulkMode(prev => !prev); setBulkRows(Array.from({ length: 5 }, emptyRow)) }}
                   className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-bold cursor-pointer transition-colors ${
