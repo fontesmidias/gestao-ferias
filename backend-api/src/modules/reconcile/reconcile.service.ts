@@ -53,6 +53,7 @@ export class ReconcileService {
         workplaceId: true,
         hireDate: true,
         status: true,
+        position: true,
       },
     })
     if (!employee) throw new ReconcileEmployeeNotFoundError(input.employeeId)
@@ -67,9 +68,13 @@ export class ReconcileService {
     const det = await this.deterministicMatcher.match(input.tenantId, normalized)
 
     if (det.kind === 'unique') {
-      const positionId = await this.ensureDefaultPosition(
+      // V3.4 MVP M2: usar a Position do cargo do colaborador (ou criar) em vez
+      // de empilhar todos numa Position default. Mantém o KPI alocados/necessários
+      // significativo por cargo.
+      const positionId = await this.ensurePositionByRole(
         input.tenantId,
         det.workplace.id,
+        employee.position,
       )
       const result = await this.allocationService.upsertFromImport({
         tenantId: input.tenantId,
@@ -130,10 +135,25 @@ export class ReconcileService {
     return { outcome: 'queued_no_match' }
   }
 
-  private async ensureDefaultPosition(
+  private async ensurePositionByRole(
     tenantId: string,
     workplaceId: string,
+    role: string | null | undefined,
   ): Promise<string> {
+    const trimmedRole = role?.trim() || null
+    if (trimmedRole) {
+      const found = await this.prisma.workplacePosition.findFirst({
+        where: { tenantId, workplaceId, role: { equals: trimmedRole, mode: 'insensitive' } },
+        orderBy: { createdAt: 'asc' },
+      })
+      if (found) return found.id
+      const created = await this.prisma.workplacePosition.create({
+        data: { tenantId, workplaceId, role: trimmedRole, requiredCount: 1 },
+      })
+      return created.id
+    }
+
+    // Sem cargo definido: usa a primeira Position existente ou cria 'Operacional'.
     const existing = await this.prisma.workplacePosition.findFirst({
       where: { tenantId, workplaceId },
       orderBy: { createdAt: 'asc' },

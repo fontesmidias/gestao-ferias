@@ -146,13 +146,14 @@ async function applyCreate(
     },
   })
 
-  // Story 2.1: resolver workplace + gravar allocation se a planilha trouxe lotação.
+  // Story 2.1 + V3.4 M2: resolver workplace + cargo, gravar allocation.
   const workplaceCreated = await applyAllocationFromImport(
     tx,
     ctx,
     employee.id,
     hireDate,
     item.patch.workplace ?? null,
+    (item.patch.position as string | undefined) ?? null,
   )
 
   return { employeeId: employee.id, workplaceCreated }
@@ -172,10 +173,12 @@ async function applyAllocationFromImport(
   employeeId: string,
   startDate: Date,
   workplaceRaw: string | null,
+  positionRole?: string | null,
 ): Promise<boolean> {
   if (!workplaceRaw || !workplaceRaw.trim()) return false
 
-  const resolved = await ensureWorkplaceFromImport(tx, ctx.tenantId, workplaceRaw)
+  // V3.4 MVP M2: passa o cargo (position) para materializar 1 WorkplacePosition por (posto, cargo).
+  const resolved = await ensureWorkplaceFromImport(tx, ctx.tenantId, workplaceRaw, positionRole ?? null)
 
   await ctx.allocationService.upsertFromImport({
     tx,
@@ -253,6 +256,7 @@ async function applyUpdate(
       item.employee.id,
       startDate,
       item.patch.workplace ?? null,
+      (item.patch.position as string | undefined) ?? item.employee.position ?? null,
     )
   }
   return { workplaceCreated }

@@ -21,6 +21,11 @@ export interface WorkplaceResolution {
  * Se nenhum Workplace casa, cria com `importedBy='AUTO_TIRVU'` + WorkplacePosition
  * padrão (`role='Operacional'`, `requiredCount=1`) — Story 2.1, FR21.
  *
+ * V3.4 MVP M2: aceita `role` opcional. Quando fornecido, busca/cria a
+ * WorkplacePosition específica para esse cargo no Workplace, em vez de retornar
+ * a primeira disponível. Isso garante que cada (posto, cargo) único do Tirvu
+ * vire uma WorkplacePosition real, refletindo a estrutura operacional.
+ *
  * Sempre retorna `positionId` válido, criando WorkplacePosition padrão quando
  * o Workplace existente não tem posições (cobre Workplaces V3.0 importados sem
  * cargo).
@@ -31,6 +36,7 @@ export async function ensureWorkplaceFromImport(
   tx: TxClient,
   tenantId: string,
   rawName: string,
+  role?: string | null,
 ): Promise<WorkplaceResolution> {
   const normalized = normalize(rawName)
 
@@ -93,21 +99,48 @@ export async function ensureWorkplaceFromImport(
     created = true
   }
 
-  let position = await tx.workplacePosition.findFirst({
-    where: { tenantId, workplaceId: workplace.id },
-    orderBy: { createdAt: 'asc' },
-    select: { id: true },
-  })
-  if (!position) {
-    position = await tx.workplacePosition.create({
-      data: {
-        tenantId,
-        workplaceId: workplace.id,
-        role: 'Operacional',
-        requiredCount: 1,
-      },
+  // V3.4 MVP M2: se um role específico foi passado, materializa Position por (posto, cargo).
+  const trimmedRole = role?.trim() || null
+  let position: { id: string } | null = null
+
+  if (trimmedRole) {
+    // Match case-insensitive na role para evitar duplicatas por capitalização diferente.
+    const roleMatches = await tx.workplacePosition.findMany({
+      where: { tenantId, workplaceId: workplace.id, role: { equals: trimmedRole, mode: 'insensitive' } },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+      take: 1,
+    })
+    position = roleMatches[0] ?? null
+    if (!position) {
+      position = await tx.workplacePosition.create({
+        data: {
+          tenantId,
+          workplaceId: workplace.id,
+          role: trimmedRole,
+          requiredCount: 1,
+        },
+        select: { id: true },
+      })
+    }
+  } else {
+    // Sem role: comportamento legado — primeira Position do Workplace ou cria default.
+    position = await tx.workplacePosition.findFirst({
+      where: { tenantId, workplaceId: workplace.id },
+      orderBy: { createdAt: 'asc' },
       select: { id: true },
     })
+    if (!position) {
+      position = await tx.workplacePosition.create({
+        data: {
+          tenantId,
+          workplaceId: workplace.id,
+          role: 'Operacional',
+          requiredCount: 1,
+        },
+        select: { id: true },
+      })
+    }
   }
 
   return { workplaceId: workplace.id, positionId: position.id, created }
