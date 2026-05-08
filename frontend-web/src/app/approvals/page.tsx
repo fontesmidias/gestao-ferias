@@ -1,12 +1,13 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Check, X, Clock, Filter, Search, RotateCcw, Edit3, Trash2, ShieldAlert, FileSignature, ExternalLink, FileSpreadsheet, Upload, Plus, Send, Loader2, Table2 } from 'lucide-react'
+import { Check, X, Clock, Filter, Search, RotateCcw, Edit3, Trash2, ShieldAlert, FileSignature, ExternalLink, FileSpreadsheet, Upload, Plus, Send, Loader2, Table2, CalendarPlus } from 'lucide-react'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { HttpClient } from '@/lib/api-client'
 import { format, parseISO, differenceInDays } from 'date-fns'
 import { toast } from 'sonner'
+import { ProgramVacationModal } from '@/components/vacations/ProgramVacationModal'
 
 // --- Bulk Create Types ---
 interface BulkRow {
@@ -48,6 +49,9 @@ export default function ApprovalsPage() {
   const [coverageSuggestions, setCoverageSuggestions] = useState<any>(null)
   const [coverageLoading, setCoverageLoading] = useState(false)
   const [selectedCoverageId, setSelectedCoverageId] = useState<string | null>(null)
+
+  // --- Programar Férias (V3.4 MVP M5) ---
+  const [programOpen, setProgramOpen] = useState(false)
 
   // --- Bulk Create State (Story 3.4) ---
   const [bulkMode, setBulkMode] = useState(false)
@@ -276,6 +280,13 @@ export default function ApprovalsPage() {
             <div className="p-6 border-b border-white/5 flex flex-col md:flex-row items-center justify-between gap-4">
               <h3 className="font-bold text-lg">Solicitações Registradas ({filtered.length})</h3>
               <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setProgramOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary/90 text-white text-xs font-bold rounded-lg shadow-lg shadow-primary/20 transition-colors"
+                  title="Cadastrar férias diretamente em nome do colaborador (admin)"
+                >
+                  <CalendarPlus className="w-3.5 h-3.5" /> Programar Férias
+                </button>
                 <button
                   onClick={() => { setBulkMode(prev => !prev); setBulkRows(Array.from({ length: 5 }, emptyRow)) }}
                   className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-bold cursor-pointer transition-colors ${
@@ -781,6 +792,13 @@ export default function ApprovalsPage() {
           </div>
         </div>
       )}
+
+      {/* V3.4 MVP M5: Modal Programar Férias */}
+      <ProgramVacationModal
+        open={programOpen}
+        onClose={() => setProgramOpen(false)}
+        onCreated={fetchRequests}
+      />
     </div>
   )
 }
