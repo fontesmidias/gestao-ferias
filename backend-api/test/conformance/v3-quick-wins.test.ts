@@ -262,8 +262,9 @@ test('V3 conformance — quick wins Q1-Q7', async (t) => {
       method: 'GET', url: '/api/v1/audit-logs', headers: auth(tokenEmployee),
     })
     assert.equal(res.statusCode, 403, `Expected 403, got ${res.statusCode}`)
+    // Story 3.1 padronizou o shape de erro: { data, error: { code, message } }.
     const body = JSON.parse(res.payload)
-    assert.equal(body.error, 'Forbidden')
+    assert.equal(body.error?.code, 'FORBIDDEN')
   })
 
   await t.test('Q7: GET /audit-logs como ADMIN → 200', async () => {
