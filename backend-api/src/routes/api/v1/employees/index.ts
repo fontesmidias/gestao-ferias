@@ -166,13 +166,80 @@ const employees: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     return updated
   })
 
-  // Listar funcionários do Tenant atual (já com isolamento implícito no futuro)
-  fastify.get('/', {
+  // Summary leve: KPIs + facets para alimentar dropdowns sem trazer 1k+ rows.
+  fastify.get('/summary', {
     onRequest: [fastify.requireAuth]
-  }, async (request, reply) => {
+  }, async (request) => {
     const tenantId = (request.user as any).tenantId
+    const rows = await fastify.prisma.employee.findMany({
+      where: { tenantId },
+      select: { status: true, branch: true, workplace: true },
+    })
+    const branches = new Set<string>()
+    const workplaces = new Set<string>()
+    const statuses = new Set<string>()
+    let active = 0
+    let vacation = 0
+    let leave = 0
+    let inactive = 0
+    for (const r of rows) {
+      if (r.branch) branches.add(r.branch)
+      if (r.workplace) workplaces.add(r.workplace)
+      if (r.status) statuses.add(r.status)
+      const upper = (r.status ?? '').toUpperCase().trim()
+      if (upper === 'ATIVO') active++
+      else if (/^F[EÉ]RIAS$/.test(upper)) vacation++
+      else if (/AFASTAD|LICEN[ÇC]A|ATESTAD/.test(upper)) leave++
+      else inactive++
+    }
+    return {
+      total: rows.length,
+      kpis: { active, vacation, leave, inactive },
+      facets: {
+        branches: Array.from(branches).sort((a, b) => a.localeCompare(b, 'pt-BR')),
+        workplaces: Array.from(workplaces).sort((a, b) => a.localeCompare(b, 'pt-BR')),
+        statuses: Array.from(statuses).sort((a, b) => a.localeCompare(b, 'pt-BR')),
+      },
+    }
+  })
+
+  // Listar funcionários do Tenant. Aceita filtros server-side para evitar
+  // carregar 1k+ rows quando o usuário só quer um subconjunto (NFR-PERF).
+  fastify.get('/', {
+    onRequest: [fastify.requireAuth],
+    schema: {
+      querystring: {
+        type: 'object',
+        properties: {
+          search: { type: 'string' },
+          status: { type: 'string' },
+          workplace: { type: 'string' },
+          branch: { type: 'string' },
+          limit: { type: 'integer', minimum: 1, maximum: 1000 },
+        },
+      },
+    },
+  }, async (request) => {
+    const tenantId = (request.user as any).tenantId
+    const q = request.query as { search?: string; status?: string; workplace?: string; branch?: string; limit?: number }
+    const where: Prisma.EmployeeWhereInput = { tenantId }
+    if (q.status) where.status = q.status
+    if (q.workplace) where.workplace = q.workplace
+    if (q.branch) where.branch = q.branch
+    if (q.search) {
+      const term = q.search.trim()
+      if (term.length > 0) {
+        where.OR = [
+          { name: { contains: term, mode: 'insensitive' } },
+          { registration: { contains: term, mode: 'insensitive' } },
+          { cpf: { contains: term } },
+        ]
+      }
+    }
     const employees = await fastify.prisma.employee.findMany({
-      where: { tenantId }
+      where,
+      orderBy: { name: 'asc' },
+      take: q.limit ?? 1000,
     })
     return employees
   })

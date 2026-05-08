@@ -1,11 +1,11 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { HttpClient } from '@/lib/api-client'
 import {
   Users, Search, Download, Upload, FileSpreadsheet, MoreHorizontal, UserCheck,
   UserMinus, CalendarHeart, Briefcase, MapPin, Building2, LayoutGrid, Clock,
-  X, Phone
+  X, Phone, Plus
 } from 'lucide-react'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { toast } from 'sonner'
@@ -31,9 +31,23 @@ interface Employee {
   hireDate: string
 }
 
+interface Summary {
+  total: number
+  kpis: { active: number; vacation: number; leave: number; inactive: number }
+  facets: { branches: string[]; workplaces: string[]; statuses: string[] }
+}
+
+const EMPTY_FORM = {
+  name: '', cpf: '', phone: '', position: '', employeeType: 'EFETIVO', isFerista: false, status: 'ATIVO',
+  branch: '', department: '', workplace: '', shift: '', salary: '', registration: '',
+  hireDate: '',
+}
+
 export default function EmployeesPage() {
   const [employees, setEmployees] = useState<Employee[]>([])
-  const [loading, setLoading] = useState(true)
+  const [summary, setSummary] = useState<Summary | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [hasSearched, setHasSearched] = useState(false)
 
   // Filters State
   const [search, setSearch] = useState('')
@@ -41,66 +55,69 @@ export default function EmployeesPage() {
   const [filterWorkplace, setFilterWorkplace] = useState('')
   const [filterStatus, setFilterStatus] = useState('TODOS')
 
-  // Edit modal state
+  // Modal state — único form serve para criar e editar
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null)
-  const [editForm, setEditForm] = useState({
-    name: '', cpf: '', phone: '', position: '', employeeType: '', isFerista: false, status: '',
-    branch: '', department: '', workplace: '', shift: '', salary: '', registration: ''
-  })
+  const [creating, setCreating] = useState(false)
+  const [editForm, setEditForm] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    fetchEmployees()
-  }, [])
-
-  const fetchEmployees = async () => {
+  const fetchSummary = useCallback(async () => {
     try {
-      setLoading(true)
-      const data = await HttpClient.get('/employees')
-      setEmployees(data)
+      const data = await HttpClient.get('/employees/summary') as Summary
+      setSummary(data)
     } catch (err) {
       console.error(err)
-    } finally {
-      setLoading(false)
     }
-  }
+  }, [])
 
-  // Derived filter options
-  const branches = useMemo(() => Array.from(new Set(employees.map(e => e.branch).filter(Boolean))), [employees])
-  const workplaces = useMemo(() => Array.from(new Set(employees.map(e => e.workplace).filter(Boolean))), [employees])
-  // Status dinâmico — qualquer valor vindo da planilha (Tirvu pode trazer
-  // ATESTADO MÉDICO, LICENÇA MATERNIDADE, etc além dos canônicos).
-  const statusOptions = useMemo(
-    () => Array.from(new Set(employees.map(e => e.status).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'pt-BR')),
-    [employees],
-  )
+  useEffect(() => {
+    fetchSummary()
+  }, [fetchSummary])
 
-  // Apply filters
-  const filtered = useMemo(() => {
-    return employees.filter(e => {
-      // 1. Text Search (Name or Registration)
-      if (search && !e.name.toLowerCase().includes(search.toLowerCase()) &&
-          !(e.registration && e.registration.toLowerCase().includes(search.toLowerCase()))
-      ) return false
+  // Server-side search — só dispara quando há filtro aplicado.
+  // Debounce de 300ms no campo de busca livre.
+  useEffect(() => {
+    const hasFilter =
+      search.trim().length > 0 ||
+      filterBranch !== '' ||
+      filterWorkplace !== '' ||
+      filterStatus !== 'TODOS'
+    if (!hasFilter) {
+      setEmployees([])
+      setHasSearched(false)
+      return
+    }
+    const handle = setTimeout(async () => {
+      try {
+        setLoading(true)
+        const params = new URLSearchParams()
+        if (search.trim()) params.set('search', search.trim())
+        if (filterBranch) params.set('branch', filterBranch)
+        if (filterWorkplace) params.set('workplace', filterWorkplace)
+        if (filterStatus !== 'TODOS') params.set('status', filterStatus)
+        const data = await HttpClient.get(`/employees?${params.toString()}`) as Employee[]
+        setEmployees(data)
+        setHasSearched(true)
+      } catch (err) {
+        console.error(err)
+      } finally {
+        setLoading(false)
+      }
+    }, 300)
+    return () => clearTimeout(handle)
+  }, [search, filterBranch, filterWorkplace, filterStatus])
 
-      // 2. Branch Filter
-      if (filterBranch && e.branch !== filterBranch) return false
+  const branches = summary?.facets.branches ?? []
+  const workplaces = summary?.facets.workplaces ?? []
+  const statusOptions = summary?.facets.statuses ?? []
 
-      // 3. Workplace Filter
-      if (filterWorkplace && e.workplace !== filterWorkplace) return false
+  // Filtragem é server-side — mostramos o que veio da API.
+  const filtered = employees
 
-      // 4. Status Filter — comparação direta (lista é dinâmica agora)
-      if (filterStatus !== 'TODOS' && e.status !== filterStatus) return false
-
-      return true
-    })
-  }, [employees, search, filterBranch, filterWorkplace, filterStatus])
-
-  // KPIs — agora cobrem os status reais do Tirvu (LICENÇA MATERNIDADE,
-  // ATESTADO MÉDICO, AFASTADO INSS contam como "Afastados").
-  const totalActives = employees.filter(e => (e.status ?? '').toUpperCase() === 'ATIVO').length
-  const totalOnVacation = employees.filter(e => /^F[EÉ]RIAS$/.test((e.status ?? '').toUpperCase())).length
-  const totalLeaves = employees.filter(e => /AFASTAD|LICEN[ÇC]A|ATESTAD/.test((e.status ?? '').toUpperCase())).length
+  // KPIs vêm do summary agregado (não dependem da lista carregada).
+  const totalActives = summary?.kpis.active ?? 0
+  const totalOnVacation = summary?.kpis.vacation ?? 0
+  const totalLeaves = summary?.kpis.leave ?? 0
 
   const handleExportCSV = () => {
     const headers = ['ID/Matricula', 'Colaborador', 'CPF', 'Status', 'Empresa/Filial', 'Lotação', 'Cargo', 'Admissão', 'Jornada/Escala']
@@ -142,7 +159,26 @@ export default function EmployeesPage() {
       shift: emp.shift || '',
       salary: emp.salary != null ? String(emp.salary) : '',
       registration: emp.registration || '',
+      hireDate: emp.hireDate ? emp.hireDate.slice(0, 10) : '',
     })
+  }
+
+  const reloadCurrentList = async () => {
+    fetchSummary()
+    const hasFilter =
+      search.trim().length > 0 || filterBranch !== '' || filterWorkplace !== '' || filterStatus !== 'TODOS'
+    if (!hasFilter) return
+    const params = new URLSearchParams()
+    if (search.trim()) params.set('search', search.trim())
+    if (filterBranch) params.set('branch', filterBranch)
+    if (filterWorkplace) params.set('workplace', filterWorkplace)
+    if (filterStatus !== 'TODOS') params.set('status', filterStatus)
+    try {
+      const data = await HttpClient.get(`/employees?${params.toString()}`) as Employee[]
+      setEmployees(data)
+    } catch (err) {
+      console.error(err)
+    }
   }
 
   const handleSaveEdit = async () => {
@@ -155,10 +191,37 @@ export default function EmployeesPage() {
       })
       toast.success('Colaborador atualizado com sucesso!')
       setEditingEmployee(null)
-      fetchEmployees()
+      reloadCurrentList()
     } catch (err) {
       console.error(err)
       toast.error('Erro ao atualizar colaborador.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const openCreateModal = () => {
+    setEditForm({ ...EMPTY_FORM, hireDate: format(new Date(), 'yyyy-MM-dd') })
+    setCreating(true)
+  }
+
+  const handleSaveCreate = async () => {
+    if (!editForm.name.trim() || !editForm.cpf.trim() || !editForm.hireDate) {
+      toast.error('Nome, CPF e data de admissão são obrigatórios.')
+      return
+    }
+    try {
+      setSaving(true)
+      await HttpClient.post('/employees', {
+        ...editForm,
+        salary: editForm.salary ? Number(editForm.salary) : undefined,
+      })
+      toast.success('Colaborador criado com sucesso!')
+      setCreating(false)
+      reloadCurrentList()
+    } catch (err: any) {
+      console.error(err)
+      toast.error(err?.message || 'Erro ao criar colaborador.')
     } finally {
       setSaving(false)
     }
@@ -262,13 +325,21 @@ export default function EmployeesPage() {
               <div className="flex-[2] min-w-[300px] flex items-center gap-2">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     value={search} onChange={e => setSearch(e.target.value)}
-                    placeholder="Filtrar por nome ou matrícula..." 
+                    placeholder="Filtrar por nome, matrícula ou CPF..."
                     className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/50"
                   />
                 </div>
+                <button
+                  onClick={openCreateModal}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-primary hover:bg-primary/90 text-white text-sm font-bold rounded-lg shadow-lg shadow-primary/20 transition-colors"
+                  title="Cadastrar colaborador manualmente"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span className="hidden sm:inline">Novo</span>
+                </button>
                 <button
                   onClick={handleExportCSV}
                   className="p-2 border border-slate-700 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 hover:text-white transition-colors"
@@ -320,7 +391,7 @@ export default function EmployeesPage() {
                       const data = await res.json()
                       if (res.ok) {
                         toast.success(data.message || 'Importacao concluida!')
-                        fetchEmployees()
+                        reloadCurrentList()
                       } else {
                         toast.error(data.message || 'Erro na importacao')
                       }
@@ -386,6 +457,16 @@ export default function EmployeesPage() {
                         </tr>
                       ))}
                     </>
+                  ) : !hasSearched ? (
+                    <tr>
+                      <td colSpan={8} className="px-6 py-16 text-center text-slate-500">
+                        <div className="flex flex-col items-center gap-2">
+                          <Search className="w-8 h-8 opacity-30" />
+                          <p className="text-sm">Use os filtros ou a busca para listar colaboradores.</p>
+                          <p className="text-xs text-slate-600">{summary?.total ?? 0} colaboradores cadastrados no total.</p>
+                        </div>
+                      </td>
+                    </tr>
                   ) : filtered.length === 0 ? (
                     <tr>
                       <td colSpan={8} className="px-6 py-12 text-center text-slate-500">
@@ -448,20 +529,20 @@ export default function EmployeesPage() {
 
             {/* Footer Summary */}
             <div className="p-3 border-t border-white/5 bg-slate-900/50 flex justify-between items-center text-xs text-slate-500">
-              <p>Mostrando <span className="text-white font-bold">{filtered.length}</span> registros filtrados</p>
+              <p>Mostrando <span className="text-white font-bold">{filtered.length}</span> de <span className="text-white font-bold">{summary?.total ?? 0}</span> colaboradores</p>
               <p>Orquestração Exclusiva GestãoFérias V2</p>
             </div>
           </div>
         </ErrorBoundary>
       </main>
 
-      {/* Edit Employee Modal */}
-      {editingEmployee && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setEditingEmployee(null)}>
+      {/* Modal compartilhado: Edit ou Create */}
+      {(editingEmployee || creating) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => { setEditingEmployee(null); setCreating(false) }}>
           <div className="glass-card bg-slate-800 border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto mx-4 p-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-white">Editar Colaborador</h3>
-              <button onClick={() => setEditingEmployee(null)} className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-md transition-colors">
+              <h3 className="text-xl font-bold text-white">{creating ? 'Novo Colaborador' : 'Editar Colaborador'}</h3>
+              <button onClick={() => { setEditingEmployee(null); setCreating(false) }} className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-md transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -532,14 +613,18 @@ export default function EmployeesPage() {
                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1">Salário <InfoTooltip text="Remuneração mensal bruta do colaborador." /></label>
                 <input type="number" step="0.01" value={editForm.salary} onChange={e => setEditForm({...editForm, salary: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary/50" />
               </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1">Data de Admissão {creating && <span className="text-rose-400">*</span>} <InfoTooltip text="Data em que o colaborador foi contratado. Obrigatória ao criar manualmente." /></label>
+                <input type="date" value={editForm.hireDate} onChange={e => setEditForm({...editForm, hireDate: e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary/50" disabled={!creating} />
+              </div>
             </div>
 
             <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-white/5">
-              <button onClick={() => setEditingEmployee(null)} className="px-4 py-2 text-sm text-slate-400 hover:text-white border border-slate-700 rounded-lg hover:bg-slate-700 transition-colors">
+              <button onClick={() => { setEditingEmployee(null); setCreating(false) }} className="px-4 py-2 text-sm text-slate-400 hover:text-white border border-slate-700 rounded-lg hover:bg-slate-700 transition-colors">
                 Cancelar
               </button>
-              <button onClick={handleSaveEdit} disabled={saving} className="px-5 py-2 text-sm font-bold text-white bg-primary hover:bg-primary/80 rounded-lg transition-colors disabled:opacity-50">
-                {saving ? 'Salvando...' : 'Salvar Alterações'}
+              <button onClick={creating ? handleSaveCreate : handleSaveEdit} disabled={saving} className="px-5 py-2 text-sm font-bold text-white bg-primary hover:bg-primary/80 rounded-lg transition-colors disabled:opacity-50">
+                {saving ? 'Salvando...' : creating ? 'Criar Colaborador' : 'Salvar Alterações'}
               </button>
             </div>
           </div>
