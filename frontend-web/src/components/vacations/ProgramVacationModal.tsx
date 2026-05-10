@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { X, AlertCircle, CheckCircle2, Sparkles, Calendar, AlertTriangle } from 'lucide-react'
 import { HttpClient } from '@/lib/api-client'
 import { toast } from 'sonner'
-import { differenceInDays, parseISO, format, addDays, getDay } from 'date-fns'
+import { differenceInDays, parseISO, format, addDays, getDay, differenceInMonths } from 'date-fns'
 
 interface EmployeeLite {
   id: string
@@ -338,21 +338,37 @@ export function ProgramVacationModal({ open, onClose, onCreated }: Props) {
                   {balance.periods.length === 0 && (
                     <p className="text-xs text-slate-500">Sem períodos elegíveis ainda (admissão recente).</p>
                   )}
-                  {balance.periods.map((p, i) => (
-                    <div key={i} className="flex items-center justify-between text-[11px]">
-                      <div className="flex items-center gap-2">
-                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${STATUS_BADGE[p.status]?.className || 'bg-slate-700'}`}>
-                          {STATUS_BADGE[p.status]?.label || p.status}
-                        </span>
-                        <span className="text-slate-400 font-mono">
-                          {p.startDate} → {p.endDate}
-                        </span>
+                  {balance.periods.map((p, i) => {
+                    // CLT proporcionalidade: se aquisitivo ainda nao fechou (endDate > hoje),
+                    // o saldo e proporcional aos meses trabalhados (Art. 130).
+                    const today = new Date()
+                    const endDt = parseISO(p.endDate)
+                    const startDt = parseISO(p.startDate)
+                    const isOpenAquisitivo = p.status === 'AQUISITIVO' && endDt > today
+                    const monthsWorked = isOpenAquisitivo ? Math.max(0, differenceInMonths(today, startDt)) : 12
+                    return (
+                      <div key={i} className="text-[11px]">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${STATUS_BADGE[p.status]?.className || 'bg-slate-700'}`}>
+                              {STATUS_BADGE[p.status]?.label || p.status}
+                            </span>
+                            <span className="text-slate-400 font-mono">
+                              {p.startDate} → {p.endDate}
+                            </span>
+                          </div>
+                          <span className={`font-bold ${p.daysOfRight > 0 ? 'text-white' : 'text-slate-600'}`}>
+                            {p.daysOfRight} dias
+                          </span>
+                        </div>
+                        {isOpenAquisitivo && (
+                          <p className="text-[10px] text-slate-500 mt-0.5 ml-1 italic">
+                            Proporcional · {monthsWorked} de 12 meses trabalhados · saldo completo de 30 dias em {format(endDt, 'dd/MM/yyyy')}
+                          </p>
+                        )}
                       </div>
-                      <span className={`font-bold ${p.daysOfRight > 0 ? 'text-white' : 'text-slate-600'}`}>
-                        {p.daysOfRight} dias
-                      </span>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
                 {balance.suggestion && (
                   <button
