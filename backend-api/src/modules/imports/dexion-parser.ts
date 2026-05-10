@@ -33,11 +33,11 @@ export interface DexionParseResult {
   skippedRows: number
 }
 
-const COL_MATRICULA = 1
-const COL_NOME = 3
-const COL_CARGO = 5
+const COL_MATRICULA = 0
+const COL_NOME = 2
+const COL_CARGO = 4
 const COL_SALARIO = 10
-const COL_CPF = 15
+const COL_CPF = 14
 
 function isNumericLike(v: unknown): boolean {
   if (typeof v === 'number' && Number.isFinite(v)) return true

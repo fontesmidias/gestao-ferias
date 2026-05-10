@@ -318,7 +318,8 @@ export default function EmployeesPage() {
         <ErrorBoundary>
           <div className="glass-card rounded-2xl overflow-hidden border border-white/5 flex flex-col h-[calc(100vh-220px)] min-h-[500px]">
             {/* Filter Toolbar */}
-            <div className="p-4 border-b border-white/5 bg-slate-900/30 flex flex-wrap gap-4 items-end">
+            <div className="p-4 border-b border-white/5 bg-slate-900/30 flex flex-col gap-3">
+              <div className="flex flex-wrap gap-4 items-end">
               <div className="flex-1 min-w-[200px]">
                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1">Empresa / Filial <InfoTooltip text="Filtre por empresa ou filial à qual o colaborador está vinculado contratualmente." /></label>
                 <select 
@@ -383,8 +384,9 @@ export default function EmployeesPage() {
                 </select>
               </div>
 
-              <div className="flex-[2] min-w-[300px] flex items-center gap-2">
-                <div className="relative flex-1">
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative flex-1 min-w-[260px]">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                   <input
                     type="text"
