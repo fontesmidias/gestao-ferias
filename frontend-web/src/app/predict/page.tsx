@@ -299,7 +299,7 @@ export default function AIPredictDashboard() {
               <div className="flex items-center gap-3 text-rose-400 mb-2">
                 <ShieldAlert className="w-5 h-5" />
                 <span className="font-bold text-sm tracking-widest uppercase">Risco de Passivo</span>
-                <InfoTooltip text="Estimativa de multas pela CLT Art. 137 caso as férias vencidas não sejam concedidas a tempo. Quanto maior, mais urgente." />
+                <InfoTooltip text="Estimativa de multas CLT Art. 137 (salário + 1/3) por períodos VENCIDOS ainda não cobertos por férias programadas/gozadas. Atualizado conforme você programa férias." />
               </div>
               <p className="text-4xl font-black text-white">
                 {summary ? formatCompact(summary.totalMultaEstimada) : '—'}
@@ -325,14 +325,14 @@ export default function AIPredictDashboard() {
               <div className="flex items-center gap-3 text-sky-400 mb-2">
                 <Users className="w-5 h-5" />
                 <span className="font-bold text-sm tracking-widest uppercase">Gargalos Críticos</span>
-                <InfoTooltip text="Colaboradores com risco alto que precisam de ação imediata. Prioridade máxima para agendamento." />
+                <InfoTooltip text="Colaboradores com pelo menos um período aquisitivo VENCIDO e sem férias já programadas/gozadas que cubram o saldo. Multa CLT Art. 137 vigente até regularização." />
               </div>
               <p className="text-4xl font-black text-white">
                 {summary?.highRisks ?? '—'}{' '}
                 <span className="text-lg font-medium text-slate-500">pessoas</span>
               </p>
               <p className="text-xs text-slate-400 mt-2">
-                Colaboradores com duplo período concessivo iminente.
+                Período vencido sem férias programadas.
               </p>
             </div>
           </div>

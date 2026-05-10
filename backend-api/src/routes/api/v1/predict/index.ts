@@ -12,25 +12,42 @@ const predict: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   }, async (request) => {
     const { tenantId } = request.user as any
 
+    // V3.4 FASE A2: carrega VacationRequest do tenant em batch para usar
+    // calculatePeriodsWithUsage. Sem isso, vencidos contábeis acumulam desde
+    // a admissão e a multaEstimada explode (R$ 150M para 1k colaboradores).
     const employees = await fastify.prisma.employee.findMany({
       where: { tenantId, status: 'ATIVO' },
-      select: { id: true, name: true, hireDate: true, salary: true, balanceOffset: true, position: true }
+      select: {
+        id: true, name: true, hireDate: true, salary: true, balanceOffset: true, position: true,
+        requests: {
+          where: { status: { in: ['APPROVED', 'PENDING', 'SIGNED', 'COMPLETED'] } },
+          select: { startDate: true, endDate: true, days: true, status: true },
+        },
+      },
     })
 
     const risks = employees.map(emp => {
-      const periods = VacationEngine.calculatePeriods(emp.hireDate, 0, emp.balanceOffset)
-      const vencidos = periods.filter(p => p.status === 'VENCIDO')
-      const concessivos = periods.filter(p => p.status === 'CONCESSIVO')
+      const periods = VacationEngine.calculatePeriodsWithUsage(
+        emp.hireDate,
+        emp.requests,
+        0,
+        emp.balanceOffset,
+      )
+      // VENCIDO sem saldo zerado = realmente pendente de gozo.
+      const vencidos = periods.filter(p => p.status === 'VENCIDO' && p.daysOfRight > 0)
+      const concessivos = periods.filter(p => p.status === 'CONCESSIVO' && p.daysOfRight > 0)
 
       if (vencidos.length === 0 && concessivos.length === 0) return null
 
-      // CLT Art. 137: multa = salário + 1/3 por período vencido
-      const multaEstimada = vencidos.length > 0 && emp.salary
-        ? Number(emp.salary) * (1 + 1/3) * vencidos.length
+      const safeSalary = emp.salary ? Math.max(0, Number(emp.salary)) : 0
+
+      // CLT Art. 137: multa = salário + 1/3 constitucional por período vencido.
+      const multaEstimada = vencidos.length > 0 && safeSalary > 0
+        ? safeSalary * (1 + 1/3) * vencidos.length
         : 0
 
-      const savingsEstimado = emp.salary
-        ? ROIEngine.calculateImpact(emp.salary, 30).totalContingency
+      const savingsEstimado = safeSalary > 0
+        ? ROIEngine.calculateImpact(safeSalary, 30).totalContingency
         : 0
 
       return {
@@ -40,6 +57,8 @@ const predict: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         risk: vencidos.length > 0 ? 'HIGH' : 'MEDIUM',
         vencidoCount: vencidos.length,
         concessivoCount: concessivos.length,
+        daysVencidoTotal: vencidos.reduce((s, p) => s + p.daysOfRight, 0),
+        daysConcessivoTotal: concessivos.reduce((s, p) => s + p.daysOfRight, 0),
         multaEstimada: Math.round(multaEstimada * 100) / 100,
         savingsEstimado: Math.round(savingsEstimado * 100) / 100,
         deadline: concessivos[0]?.concessiveEndDate || vencidos[0]?.concessiveEndDate || null,

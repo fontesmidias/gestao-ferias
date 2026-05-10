@@ -25,12 +25,18 @@ export function Sidebar() {
     try {
       const [vacations, gaps] = await Promise.all([
         HttpClient.get('/vacations').catch(() => []),
-        HttpClient.get('/coverages/gaps?from=' + new Date().toISOString().split('T')[0] + '&to=' + new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0]).catch(() => ({ totalGaps: 0 })),
+        HttpClient.get('/coverages/gaps?from=' + new Date().toISOString().split('T')[0] + '&to=' + new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0]).catch(() => ({ gaps: [] })),
       ])
       const pending = Array.isArray(vacations) ? vacations.filter((v: any) => v.status === 'PENDING').length : 0
+      // V3.4 FASE A4: badge conta apenas gaps SEM cobertura atribuida
+      // (hasCoverage=false). Antes contava todos os gaps detectados, gerando
+      // alerta falso quando ja havia cobertura planejada.
+      const uncovered = Array.isArray(gaps?.gaps)
+        ? gaps.gaps.filter((g: any) => g.hasCoverage === false).length
+        : 0
       setBadges({
         '/approvals': pending,
-        '/coverage': gaps?.totalGaps || 0,
+        '/coverage': uncovered,
       })
     } catch { /* non-critical */ }
   }, [user])

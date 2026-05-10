@@ -5,7 +5,7 @@ import { Shield, AlertTriangle, Users, Calendar, ChevronLeft, ChevronRight, User
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { HttpClient } from '@/lib/api-client'
-import { format, parseISO, startOfMonth, endOfMonth, addMonths, subMonths } from 'date-fns'
+import { format, parseISO, startOfMonth, endOfMonth, addMonths, subMonths, addDays } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { toast } from 'sonner'
 
@@ -73,20 +73,29 @@ interface CoverageKpis {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function buildPeriodRange(ref: Date) {
+type ViewMode = '90d' | 'month'
+
+function buildPeriodRange(ref: Date, mode: ViewMode) {
+  if (mode === '90d') {
+    const from = format(new Date(), 'yyyy-MM-dd')
+    const to = format(addDays(new Date(), 90), 'yyyy-MM-dd')
+    return { from, to }
+  }
   const from = format(startOfMonth(ref), 'yyyy-MM-dd')
   const to = format(endOfMonth(ref), 'yyyy-MM-dd')
   return { from, to }
 }
 
 const MIN_MONTH_OFFSET = -3
-const MAX_MONTH_OFFSET = 3
+const MAX_MONTH_OFFSET = 6
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
 export default function CoveragePage() {
+  // V3.4 FASE A1: default é rolling 90d (corrige bug onde férias futuras não apareciam).
+  const [viewMode, setViewMode] = useState<ViewMode>('90d')
   const [selectedMonth, setSelectedMonth] = useState(() => startOfMonth(new Date()))
   const [gaps, setGaps] = useState<GapsResponse | null>(null)
   const [coverages, setCoverages] = useState<Coverage[]>([])
@@ -109,7 +118,7 @@ export default function CoveragePage() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true)
-      const { from, to } = buildPeriodRange(selectedMonth)
+      const { from, to } = buildPeriodRange(selectedMonth, viewMode)
       const monthParam = format(selectedMonth, 'yyyy-MM')
       const [gapsRes, coveragesRes, kpisRes] = await Promise.all([
         HttpClient.get(`/coverages/gaps?from=${from}&to=${to}`),
@@ -125,7 +134,7 @@ export default function CoveragePage() {
     } finally {
       setLoading(false)
     }
-  }, [selectedMonth])
+  }, [selectedMonth, viewMode])
 
   useEffect(() => {
     fetchData()
@@ -355,25 +364,53 @@ export default function CoveragePage() {
             </label>
           </div>
           <div className="flex items-center gap-2 bg-slate-900/50 border border-white/5 p-2 rounded-xl">
+            {/* V3.4 A1: toggle entre rolling 90d (default) e mês específico */}
             <button
-              onClick={goToPrevMonth}
-              disabled={!canGoPrev()}
-              className="p-1.5 rounded-lg hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              onClick={() => setViewMode('90d')}
+              className={`px-3 py-1 text-xs font-bold rounded-lg transition-colors ${
+                viewMode === '90d'
+                  ? 'bg-primary text-white shadow-lg shadow-primary/20'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+              title="Próximos 90 dias a partir de hoje"
             >
-              <ChevronLeft className="w-4 h-4" />
+              Próximos 90d
             </button>
-            <span className="px-3 py-1 text-sm font-bold text-white min-w-[120px] text-center flex items-center justify-center gap-1">
-              <Calendar className="w-4 h-4 text-primary" />
-              {format(selectedMonth, 'MMMM yyyy', { locale: ptBR }).replace(/^\w/, c => c.toUpperCase())}
-              <InfoTooltip text="Periodo de analise. Navegue ate 3 meses no passado ou no futuro a partir do mes atual." />
-            </span>
             <button
-              onClick={goToNextMonth}
-              disabled={!canGoNext()}
-              className="p-1.5 rounded-lg hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              onClick={() => setViewMode('month')}
+              className={`px-3 py-1 text-xs font-bold rounded-lg transition-colors ${
+                viewMode === 'month'
+                  ? 'bg-primary text-white shadow-lg shadow-primary/20'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+              title="Visualizar mês específico"
             >
-              <ChevronRight className="w-4 h-4" />
+              Por mês
             </button>
+            {viewMode === 'month' && (
+              <>
+                <div className="w-px h-6 bg-slate-700 mx-1" />
+                <button
+                  onClick={goToPrevMonth}
+                  disabled={!canGoPrev()}
+                  className="p-1.5 rounded-lg hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="px-3 py-1 text-sm font-bold text-white min-w-[120px] text-center flex items-center justify-center gap-1">
+                  <Calendar className="w-4 h-4 text-primary" />
+                  {format(selectedMonth, 'MMMM yyyy', { locale: ptBR }).replace(/^\w/, c => c.toUpperCase())}
+                  <InfoTooltip text="Período de análise. Navegue até 3 meses no passado ou 6 meses no futuro." />
+                </span>
+                <button
+                  onClick={goToNextMonth}
+                  disabled={!canGoNext()}
+                  className="p-1.5 rounded-lg hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </>
+            )}
           </div>
         </div>
 

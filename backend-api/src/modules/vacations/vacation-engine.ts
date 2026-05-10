@@ -65,17 +65,17 @@ export class VacationEngine {
     const periods: VacationPeriod[] = []
 
     let currentAquisitivoStart = startOfDay(hireDate)
-    
+
     // Gerar períodos até o dia atual
     while (!isAfter(currentAquisitivoStart, today)) {
         const aquisitivoEnd = addYears(currentAquisitivoStart, 1)
         const concessiveEnd = addYears(aquisitivoEnd, 1)
-        
+
         let days = this.getDaysFromAbsences(absences)
-        
+
         // Se for o período aberto (atual), calcular proporcional 1/12
         let status: 'AQUISITIVO' | 'CONCESSIVO' | 'VENCIDO' | 'QUITADO' = 'AQUISITIVO'
-        
+
         if (isAfter(today, concessiveEnd)) {
             status = 'VENCIDO'
         } else if (isAfter(today, aquisitivoEnd)) {
@@ -98,6 +98,49 @@ export class VacationEngine {
         })
 
         currentAquisitivoStart = aquisitivoEnd
+    }
+
+    return periods
+  }
+
+  /**
+   * V3.4 FASE A2: variante que considera férias já gozadas/programadas para
+   * marcar períodos como QUITADO ou reduzir o saldo restante.
+   *
+   * Sem isso, colaboradores com 5+ anos acumulam vencidos contábeis fictícios
+   * que nunca quitam, causando estimativas de multa CLT absurdas no Predict
+   * (R$ 150M para 1000 colaboradores).
+   *
+   * Regras:
+   * - Cada VacationRequest em status COMPLETED/SIGNED/APPROVED/PENDING consome
+   *   `days` do período aquisitivo que abriga `startDate`.
+   * - Se consumed >= daysOfRight original: status vira QUITADO + daysOfRight=0.
+   * - Se 0 < consumed < daysOfRight: daysOfRight = original - consumed.
+   * - Status VENCIDO/CONCESSIVO/AQUISITIVO da data permanece (refletindo prazo legal).
+   */
+  static calculatePeriodsWithUsage(
+    hireDate: Date,
+    usedRequests: Array<{ startDate: Date; endDate: Date; days: number; status: string }>,
+    absences: number = 0,
+    balanceOffset: number = 0,
+  ): VacationPeriod[] {
+    const periods = this.calculatePeriods(hireDate, absences, balanceOffset)
+    if (periods.length === 0) return periods
+
+    const COUNTING_STATUSES = new Set(['APPROVED', 'PENDING', 'SIGNED', 'COMPLETED'])
+
+    for (const req of usedRequests) {
+      if (!COUNTING_STATUSES.has(req.status)) continue
+      // Acha o período aquisitivo que abriga req.startDate.
+      const target = periods.find(
+        (p) => req.startDate >= p.startDate && req.startDate < p.endDate,
+      )
+      if (!target) continue
+      const remaining = target.daysOfRight - req.days
+      target.daysOfRight = Math.max(0, remaining)
+      if (target.daysOfRight === 0) {
+        target.status = 'QUITADO'
+      }
     }
 
     return periods
