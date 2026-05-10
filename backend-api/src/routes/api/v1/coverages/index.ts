@@ -58,13 +58,50 @@ const coverages: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       return reply.code(404).send({ error: 'Not Found', message: 'Posição não encontrada.' })
     }
 
+    // V3.4 FASE C3: anti-overlap rigido. A mesma pessoa nao pode estar em
+    // duas coberturas PLANNED/ACTIVE com periodos sobrepostos.
+    const start = parseISO(data.startDate)
+    const end = parseISO(data.endDate)
+    const overlap = await fastify.prisma.coverageAssignment.findFirst({
+      where: {
+        tenantId,
+        replacementEmployeeId: data.replacementEmployeeId,
+        status: { in: ['PLANNED', 'ACTIVE'] },
+        AND: [
+          { startDate: { lte: end } },
+          { endDate: { gte: start } },
+        ],
+      },
+      include: {
+        workplacePosition: { select: { workplace: { select: { name: true } }, role: true } },
+        vacationRequest: { select: { employee: { select: { name: true } } } },
+      },
+    })
+    if (overlap) {
+      return reply.code(409).send({
+        data: null,
+        error: {
+          code: 'COVERAGE_OVERLAP',
+          message: `${replacement.name} ja esta em outra cobertura nesse periodo (cobrindo ${overlap.vacationRequest.employee.name} em ${overlap.workplacePosition.workplace.name} / ${overlap.workplacePosition.role}).`,
+          conflict: {
+            id: overlap.id,
+            startDate: overlap.startDate,
+            endDate: overlap.endDate,
+            workplace: overlap.workplacePosition.workplace.name,
+            role: overlap.workplacePosition.role,
+            coveringFor: overlap.vacationRequest.employee.name,
+          },
+        },
+      })
+    }
+
     const coverage = await fastify.prisma.coverageAssignment.create({
       data: {
         vacationRequestId: data.vacationRequestId,
         replacementEmployeeId: data.replacementEmployeeId,
         workplacePositionId: data.workplacePositionId,
-        startDate: parseISO(data.startDate),
-        endDate: parseISO(data.endDate),
+        startDate: start,
+        endDate: end,
         type: data.type,
         status: 'ACTIVE',
         cost: data.cost || null,
@@ -364,6 +401,62 @@ const coverages: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     }
   })
 
+  // V3.4 FASE C5: Feristas livres num período (default próximos 30d). Útil
+  // para o operador planejar antes de ter VacationRequest específica.
+  fastify.get('/available-feristas', {
+    onRequest: [fastify.requireAuth],
+    schema: {
+      querystring: {
+        type: 'object',
+        properties: {
+          from: { type: 'string' },
+          to: { type: 'string' },
+        },
+      },
+    },
+  }, async (request) => {
+    const { tenantId } = request.user as any
+    const q = request.query as { from?: string; to?: string }
+    const fromDate = q.from ? parseISO(q.from) : new Date()
+    const toDate = q.to ? parseISO(q.to) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+
+    const feristas = await fastify.prisma.employee.findMany({
+      where: {
+        tenantId,
+        isFerista: true,
+        status: 'ATIVO',
+      },
+      select: {
+        id: true, name: true, position: true, workplace: true, shift: true, salary: true,
+        coveragesAsReplacement: {
+          where: {
+            status: { in: ['PLANNED', 'ACTIVE'] },
+            startDate: { lte: toDate },
+            endDate: { gte: fromDate },
+          },
+          select: { id: true, startDate: true, endDate: true },
+        },
+      },
+      orderBy: { name: 'asc' },
+    })
+
+    return {
+      data: {
+        period: { from: fromDate.toISOString().slice(0, 10), to: toDate.toISOString().slice(0, 10) },
+        feristas: feristas.map(f => ({
+          id: f.id,
+          name: f.name,
+          position: f.position,
+          workplace: f.workplace,
+          shift: f.shift,
+          coveragesInPeriod: f.coveragesAsReplacement.length,
+          isFree: f.coveragesAsReplacement.length === 0,
+        })),
+      },
+      error: null,
+    }
+  })
+
   // Sugerir cobertura: feristas disponíveis no período
   fastify.get('/suggestions', {
     onRequest: [fastify.requireAuth],
@@ -416,6 +509,7 @@ const coverages: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       },
       select: {
         id: true, name: true, cpf: true, salary: true, employeeType: true, isFerista: true,
+        position: true, shift: true,
         coveragesAsReplacement: {
           where: { status: { in: ['PLANNED', 'ACTIVE'] } },
           select: { startDate: true, endDate: true },
@@ -438,7 +532,8 @@ const coverages: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
           }
         }
       },
-      select: { id: true, name: true, cpf: true, salary: true, employeeType: true, isFerista: true },
+      select: { id: true, name: true, cpf: true, salary: true, employeeType: true, isFerista: true,
+        position: true, shift: true },
     })
 
     const allocation = vacation.employee.allocations[0]
@@ -458,6 +553,66 @@ const coverages: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       })
     }
 
+    // V3.4 FASE C2: ranking explicito por cargo. Familias hardcoded para Green
+    // House — pode virar config por tenant depois. matchScore: 3=idêntico,
+    // 2=mesma família, 1=qualquer ferista (ainda elegível pra cobrir).
+    const targetRole = (allocation?.workplacePosition?.role || '').toLowerCase().trim()
+    const ROLE_FAMILIES: Record<string, string[]> = {
+      limpeza: ['servente', 'auxiliar de limpeza', 'auxiliar de servicos gerais', 'asg', 'copeira'],
+      seguranca: ['vigilante', 'porteiro', 'controlador de acesso', 'brigadista'],
+      recepcao: ['recepcionista', 'atendente', 'secretaria', 'tecnico em secretariado'],
+      tecnico: ['tecnico', 'analista', 'operador'],
+      motorista: ['motorista', 'condutor'],
+    }
+    const familyOf = (role: string): string | null => {
+      const r = role.toLowerCase()
+      for (const [family, members] of Object.entries(ROLE_FAMILIES)) {
+        if (members.some(m => r.includes(m))) return family
+        if (r.includes(family)) return family
+      }
+      return null
+    }
+    const targetFamily = familyOf(targetRole)
+    const computeMatchScore = (candidatePosition: string | null | undefined): {
+      score: number
+      level: 'identical' | 'family' | 'any'
+      reason: string
+    } => {
+      if (!targetRole) return { score: 1, level: 'any', reason: 'Sem cargo de referência no posto' }
+      const cand = (candidatePosition || '').toLowerCase().trim()
+      if (cand === targetRole) return { score: 3, level: 'identical', reason: `Cargo idêntico: ${candidatePosition}` }
+      const candFamily = familyOf(cand)
+      if (targetFamily && candFamily === targetFamily) {
+        return { score: 2, level: 'family', reason: `Família ${targetFamily}: ${candidatePosition || 'cargo n/d'}` }
+      }
+      return { score: 1, level: 'any', reason: `Cargo diferente: ${candidatePosition || 'n/d'}` }
+    }
+
+    const feristasRanked = feristas.map(f => {
+      const { coveragesAsReplacement, ...rest } = f
+      const match = computeMatchScore(f.position)
+      return {
+        ...rest,
+        estimatedCost: f.salary ? Number(f.salary) / 30 * vacation.days : null,
+        type: 'FERISTA' as const,
+        conflictFree: true,
+        canChain: detectChaining(coveragesAsReplacement),
+        match,
+      }
+    }).sort((a, b) => b.match.score - a.match.score)
+
+    const intermitentesRanked = intermitentes.map(i => {
+      const match = computeMatchScore(i.position)
+      return {
+        ...i,
+        estimatedCost: i.salary ? Number(i.salary) / 30 * vacation.days : null,
+        type: 'INTERMITENTE' as const,
+        conflictFree: true,
+        canChain: false,
+        match,
+      }
+    }).sort((a, b) => b.match.score - a.match.score)
+
     return {
       vacationRequest: {
         id: vacation.id,
@@ -468,28 +623,12 @@ const coverages: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         position: allocation ? {
           positionId: allocation.workplacePosition.id,
           role: allocation.workplacePosition.role
-        } : null
+        } : null,
+        targetFamily,
       },
       suggestions: {
-        feristas: feristas.map(f => {
-          const { coveragesAsReplacement, ...rest } = f
-          return {
-            ...rest,
-            estimatedCost: f.salary ? Number(f.salary) / 30 * vacation.days : null,
-            type: 'FERISTA' as const,
-            // Filtro Prisma já exclui conflitos no período. canChain identifica
-            // feristas com coberturas adjacentes (≤7d), úteis para encadear.
-            conflictFree: true,
-            canChain: detectChaining(coveragesAsReplacement),
-          }
-        }),
-        intermitentes: intermitentes.map(i => ({
-          ...i,
-          estimatedCost: i.salary ? Number(i.salary) / 30 * vacation.days : null,
-          type: 'INTERMITENTE' as const,
-          conflictFree: true,
-          canChain: false,
-        }))
+        feristas: feristasRanked,
+        intermitentes: intermitentesRanked,
       }
     }
   })

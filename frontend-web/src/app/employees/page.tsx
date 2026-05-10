@@ -54,6 +54,8 @@ export default function EmployeesPage() {
   const [filterBranch, setFilterBranch] = useState('')
   const [filterWorkplace, setFilterWorkplace] = useState('')
   const [filterStatus, setFilterStatus] = useState('TODOS')
+  // V3.4 C4: filtro 'Apenas Feristas' para localizar coberturas potenciais.
+  const [filterFerista, setFilterFerista] = useState(false)
 
   // Modal state — único form serve para criar e editar
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null)
@@ -81,7 +83,8 @@ export default function EmployeesPage() {
       search.trim().length > 0 ||
       filterBranch !== '' ||
       filterWorkplace !== '' ||
-      filterStatus !== 'TODOS'
+      filterStatus !== 'TODOS' ||
+      filterFerista
     if (!hasFilter) {
       setEmployees([])
       setHasSearched(false)
@@ -95,6 +98,7 @@ export default function EmployeesPage() {
         if (filterBranch) params.set('branch', filterBranch)
         if (filterWorkplace) params.set('workplace', filterWorkplace)
         if (filterStatus !== 'TODOS') params.set('status', filterStatus)
+        if (filterFerista) params.set('isFerista', 'true')
         const data = await HttpClient.get(`/employees?${params.toString()}`) as Employee[]
         setEmployees(data)
         setHasSearched(true)
@@ -105,7 +109,7 @@ export default function EmployeesPage() {
       }
     }, 300)
     return () => clearTimeout(handle)
-  }, [search, filterBranch, filterWorkplace, filterStatus])
+  }, [search, filterBranch, filterWorkplace, filterStatus, filterFerista])
 
   const branches = summary?.facets.branches ?? []
   const workplaces = summary?.facets.workplaces ?? []
@@ -322,6 +326,24 @@ export default function EmployeesPage() {
                 </select>
               </div>
 
+              <div className="min-w-[140px] flex flex-col items-start gap-1">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                  Tipo <InfoTooltip text="Filtre apenas Feristas (colaboradores elegíveis para cobertura de férias de outros)." />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setFilterFerista(prev => !prev)}
+                  className={`px-3 py-2 text-xs font-bold rounded-lg border transition-colors w-full ${
+                    filterFerista
+                      ? 'border-indigo-500 bg-indigo-500/15 text-indigo-300'
+                      : 'border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700'
+                  }`}
+                  title="Mostra apenas colaboradores marcados como Ferista"
+                >
+                  {filterFerista ? '★ Apenas Feristas' : 'Todos os tipos'}
+                </button>
+              </div>
+
               <div className="flex-[2] min-w-[300px] flex items-center gap-2">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
@@ -482,7 +504,14 @@ export default function EmployeesPage() {
                               {emp.name.charAt(0)}
                             </div>
                             <div className="min-w-0">
-                              <p className="font-bold text-white text-[13px] truncate">{emp.name}</p>
+                              <p className="font-bold text-white text-[13px] truncate flex items-center gap-1.5">
+                                {emp.name}
+                                {emp.isFerista && (
+                                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 shrink-0" title="Ferista — elegível para cobertura">
+                                    ★ Ferista
+                                  </span>
+                                )}
+                              </p>
                               <p className="text-[11px] text-slate-500 font-mono mt-0.5">
                                 <span className="text-sky-400/80">{emp.registration || 'S/N'}</span>
                                 {/* Branch só aparece quando há mais de uma — em tenant single-branch

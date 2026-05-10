@@ -293,16 +293,20 @@ const employees: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
           workplace: { type: 'string' },
           branch: { type: 'string' },
           limit: { type: 'integer', minimum: 1, maximum: 1000 },
+          isFerista: { type: 'string', enum: ['true', 'false'] },
         },
       },
     },
   }, async (request) => {
     const tenantId = (request.user as any).tenantId
-    const q = request.query as { search?: string; status?: string; workplace?: string; branch?: string; limit?: number }
+    const q = request.query as { search?: string; status?: string; workplace?: string; branch?: string; limit?: number; isFerista?: string }
     const where: Prisma.EmployeeWhereInput = { tenantId }
     if (q.status) where.status = q.status
     if (q.workplace) where.workplace = q.workplace
     if (q.branch) where.branch = q.branch
+    // V3.4 FASE C4: filtro 'Apenas Feristas' para o operador identificar
+    // rapidamente quem pode cobrir vagas em /coverage.
+    if (q.isFerista === 'true') where.isFerista = true
     if (q.search) {
       const term = q.search.trim()
       if (term.length > 0) {

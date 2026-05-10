@@ -36,11 +36,21 @@ interface GapsResponse {
   gaps: Gap[]
 }
 
+interface MatchInfo {
+  score: number
+  level: 'identical' | 'family' | 'any'
+  reason: string
+}
+
 interface Suggestion {
   id: string
   name: string
   estimatedCost: number
   type: string
+  position?: string | null
+  shift?: string | null
+  match?: MatchInfo
+  canChain?: boolean
 }
 
 interface SuggestionsResponse {
@@ -67,6 +77,16 @@ interface CoverageKpis {
   gapsTotal: number
   estimatedCoverageMonthCost: number
   availableFeristasCount: number
+}
+
+interface FeristaLivre {
+  id: string
+  name: string
+  position: string | null
+  workplace: string | null
+  shift: string | null
+  coveragesInPeriod: number
+  isFree: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -102,6 +122,10 @@ export default function CoveragePage() {
   const [kpis, setKpis] = useState<CoverageKpis | null>(null)
   const [loading, setLoading] = useState(true)
 
+  // V3.4 FASE C5: feristas livres no periodo da view
+  const [feristasLivres, setFeristasLivres] = useState<FeristaLivre[] | null>(null)
+  const [showFeristasPanel, setShowFeristasPanel] = useState(false)
+
   // Sheet (slide-in panel) state
   const [modalOpen, setModalOpen] = useState(false)
   const [sheetVisible, setSheetVisible] = useState(false)
@@ -120,14 +144,17 @@ export default function CoveragePage() {
       setLoading(true)
       const { from, to } = buildPeriodRange(selectedMonth, viewMode)
       const monthParam = format(selectedMonth, 'yyyy-MM')
-      const [gapsRes, coveragesRes, kpisRes] = await Promise.all([
+      const [gapsRes, coveragesRes, kpisRes, feristasRes] = await Promise.all([
         HttpClient.get(`/coverages/gaps?from=${from}&to=${to}`),
         HttpClient.get('/coverages'),
         HttpClient.get(`/coverages/kpis?month=${monthParam}`),
+        HttpClient.get(`/coverages/available-feristas?from=${from}&to=${to}`).catch(() => null),
       ])
       setGaps(gapsRes)
       setCoverages(coveragesRes)
       setKpis(kpisRes)
+      const feristasData = (feristasRes as any)?.data?.feristas
+      setFeristasLivres(Array.isArray(feristasData) ? feristasData : null)
     } catch (err: unknown) {
       console.error(err)
       toast.error('Erro ao carregar dados de cobertura')
@@ -284,9 +311,16 @@ export default function CoveragePage() {
       toast.success('Cobertura atribuida com sucesso!')
       closeSheet()
       fetchData()
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Erro ao criar cobertura'
-      toast.error(message)
+    } catch (err: any) {
+      // V3.4 C3: trata bloqueio anti-overlap (409 COVERAGE_OVERLAP) com mensagem
+      // contextualizada apontando o conflito.
+      const errBody = err?.body?.error
+      if (err?.status === 409 && errBody?.code === 'COVERAGE_OVERLAP') {
+        toast.error(errBody.message || 'Substituto já está em outra cobertura nesse período.', { duration: 8000 })
+      } else {
+        const message = err instanceof Error ? err.message : 'Erro ao criar cobertura'
+        toast.error(message)
+      }
     } finally {
       setSubmitting(false)
     }
@@ -499,6 +533,63 @@ export default function CoveragePage() {
                 </div>
               </div>
 
+              {/* V3.4 FASE C5: Painel "Feristas Livres no período" — pre-planejamento. */}
+              {feristasLivres && feristasLivres.length > 0 && (
+                <div className="glass-card rounded-2xl border border-white/5 overflow-hidden mb-6">
+                  <button
+                    type="button"
+                    onClick={() => setShowFeristasPanel(prev => !prev)}
+                    className="w-full p-4 border-b border-white/5 flex items-center justify-between hover:bg-white/[0.02] transition-colors"
+                  >
+                    <h3 className="font-bold text-sm text-white uppercase tracking-wider flex items-center gap-2">
+                      <UserCheck className="w-4 h-4 text-indigo-400" />
+                      Feristas no Período
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                        {feristasLivres.filter(f => f.isFree).length} livres
+                      </span>
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                        {feristasLivres.filter(f => !f.isFree).length} ocupados
+                      </span>
+                    </h3>
+                    <span className="text-xs text-slate-500">{showFeristasPanel ? 'Recolher' : 'Expandir'}</span>
+                  </button>
+                  {showFeristasPanel && (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-slate-900/50 text-[10px] uppercase tracking-wider text-slate-400">
+                          <tr>
+                            <th className="text-left px-4 py-2">Status</th>
+                            <th className="text-left px-4 py-2">Ferista</th>
+                            <th className="text-left px-4 py-2">Cargo</th>
+                            <th className="text-left px-4 py-2">Posto base</th>
+                            <th className="text-left px-4 py-2">Escala</th>
+                            <th className="text-right px-4 py-2">Coberturas no período</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5">
+                          {feristasLivres.map(f => (
+                            <tr key={f.id} className="hover:bg-white/[0.02]">
+                              <td className="px-4 py-2">
+                                {f.isFree ? (
+                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">Livre</span>
+                                ) : (
+                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30">Ocupado</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-2 text-white font-bold text-[13px]">{f.name}</td>
+                              <td className="px-4 py-2 text-slate-300 text-xs">{f.position || '—'}</td>
+                              <td className="px-4 py-2 text-slate-400 text-xs">{f.workplace || '—'}</td>
+                              <td className="px-4 py-2 text-slate-500 text-xs">{f.shift || '—'}</td>
+                              <td className="px-4 py-2 text-right text-slate-300 font-mono text-xs">{f.coveragesInPeriod}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Gantt Timeline (Story 2.4) */}
               {(gaps?.gaps?.length ?? 0) > 0 && (
                 <div className="glass-card rounded-2xl border border-white/5 overflow-hidden mb-8">
@@ -705,7 +796,18 @@ export default function CoveragePage() {
                       <p className="text-sm text-slate-500 py-3">Nenhum ferista disponivel para este periodo.</p>
                     ) : (
                       <div className="space-y-2">
-                        {suggestions.suggestions.feristas.map((s) => (
+                        {suggestions.suggestions.feristas.map((s) => {
+                          const matchClass = s.match?.level === 'identical'
+                            ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                            : s.match?.level === 'family'
+                              ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                              : 'bg-slate-700/40 text-slate-400 border-slate-600/50'
+                          const matchLabel = s.match?.level === 'identical'
+                            ? 'Cargo idêntico'
+                            : s.match?.level === 'family'
+                              ? 'Família compatível'
+                              : 'Cargo diferente'
+                          return (
                           <label
                             key={s.id}
                             className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${
@@ -722,15 +824,34 @@ export default function CoveragePage() {
                               className="accent-primary"
                             />
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-bold text-white truncate">{s.name}</p>
-                              <p className="text-xs text-slate-500">{s.type}</p>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="text-sm font-bold text-white truncate">{s.name}</p>
+                                {s.match && (
+                                  <span
+                                    className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${matchClass}`}
+                                    title={s.match.reason}
+                                  >
+                                    {matchLabel}
+                                  </span>
+                                )}
+                                {s.canChain && (
+                                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full border bg-indigo-500/15 text-indigo-300 border-indigo-500/30" title="Encadeia com cobertura adjacente">
+                                    Encadeia
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-slate-500">
+                                {s.position || 'Cargo n/d'}
+                                {s.shift && <span className="text-slate-600"> · {s.shift}</span>}
+                              </p>
                             </div>
                             <span className="text-sm font-mono font-bold text-emerald-400 shrink-0">
                               R$ {s.estimatedCost.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                               <InfoTooltip text="Custo estimado para este profissional cobrir o periodo completo de ferias." />
                             </span>
                           </label>
-                        ))}
+                          )
+                        })}
                       </div>
                     )}
                   </div>
