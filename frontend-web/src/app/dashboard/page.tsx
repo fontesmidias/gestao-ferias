@@ -6,26 +6,43 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, 
   AreaChart, Area
 } from 'recharts'
-import { 
-  LayoutDashboard, Users, Clock, AlertCircle, TrendingUp, CheckSquare, BrainCircuit 
+import {
+  LayoutDashboard, Users, Clock, AlertCircle, TrendingUp, CheckSquare, BrainCircuit,
+  ChevronLeft, ChevronRight
 } from 'lucide-react'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
+// V3.4: navegacao de periodo no dashboard (quarter selector).
+// Backend hoje retorna dados agregados sem filtro de periodo; o label e usado
+// para contexto visual e sera consumido quando /dashboard/metrics aceitar ?quarter=.
+function currentQuarter(d: Date = new Date()): { year: number; quarter: 1 | 2 | 3 | 4 } {
+  return { year: d.getFullYear(), quarter: (Math.floor(d.getMonth() / 3) + 1) as 1 | 2 | 3 | 4 }
+}
+function shiftQuarter(qy: { year: number; quarter: 1 | 2 | 3 | 4 }, delta: -1 | 1): { year: number; quarter: 1 | 2 | 3 | 4 } {
+  let q = qy.quarter + delta
+  let y = qy.year
+  if (q < 1) { q = 4; y-- }
+  if (q > 4) { q = 1; y++ }
+  return { year: y, quarter: q as 1 | 2 | 3 | 4 }
+}
+
 export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<any>(null)
+  const [period, setPeriod] = useState(() => currentQuarter())
 
   useEffect(() => {
     fetchMetrics()
-  }, [])
+  }, [period])
 
   const fetchMetrics = async () => {
     try {
       setLoading(true)
-      const res = await HttpClient.get('/dashboard/metrics')
+      const qParam = `${period.year}-Q${period.quarter}`
+      const res = await HttpClient.get(`/dashboard/metrics?quarter=${qParam}`)
       setData(res)
     } catch (err) {
       console.error(err)
@@ -54,10 +71,29 @@ export default function DashboardPage() {
             </h2>
             <p className="text-slate-400 mt-2">Cockpit preditivo e monitoramento global de férias.</p>
           </div>
-          <div className="flex bg-slate-900/50 border border-white/5 p-2 rounded-xl">
-             <button className="px-4 py-1 flex items-center gap-2 bg-primary text-white font-bold rounded-lg text-sm shadow-lg shadow-primary/20">
-               <TrendingUp className="w-4 h-4"/> 1T 2026 <InfoTooltip text="Período selecionado para análise. 1T = primeiro trimestre de 2026." />
-             </button>
+          <div className="flex items-center gap-1 bg-slate-900/50 border border-white/5 p-2 rounded-xl">
+            <button
+              onClick={() => setPeriod(p => shiftQuarter(p, -1))}
+              className="p-1.5 rounded-lg hover:bg-slate-800 transition-colors"
+              title="Trimestre anterior"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setPeriod(currentQuarter())}
+              className="px-4 py-1 flex items-center gap-2 bg-primary text-white font-bold rounded-lg text-sm shadow-lg shadow-primary/20"
+              title="Voltar ao trimestre atual"
+            >
+              <TrendingUp className="w-4 h-4" /> {period.quarter}T {period.year}
+              <InfoTooltip text="Período selecionado para análise. Clique para voltar ao trimestre atual; use as setas para navegar." />
+            </button>
+            <button
+              onClick={() => setPeriod(p => shiftQuarter(p, 1))}
+              className="p-1.5 rounded-lg hover:bg-slate-800 transition-colors"
+              title="Próximo trimestre"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
         </div>
 

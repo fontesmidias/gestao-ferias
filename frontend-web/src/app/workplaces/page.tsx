@@ -18,6 +18,7 @@ interface Position {
   role: string
   shiftPattern: string | null
   requiredCount: number
+  isCritical?: boolean
   _count: { allocations: number }
   allocations: Allocation[]
 }
@@ -453,13 +454,36 @@ export default function WorkplacesPage() {
                     {positions.map((pos) => (
                       <div key={pos.id} className="bg-slate-900/50 rounded-xl p-4">
                         <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-bold text-white">{pos.role}</span>
                             {pos.shiftPattern && (
                               <span className="text-xs text-slate-500 bg-slate-800 px-2 py-0.5 rounded-full">
                                 {pos.shiftPattern}
                               </span>
                             )}
+                            {/* V3.4 Story 4.8: badge + toggle de posto critico */}
+                            <button
+                              onClick={async (e) => {
+                                e.stopPropagation()
+                                const next = !pos.isCritical
+                                if (next && !confirm(`Marcar "${pos.role}" como POSTO CRITICO?\n\nAprovacao de ferias para colaboradores neste posto sera bloqueada sem cobertura confirmada.`)) return
+                                try {
+                                  await HttpClient.patch(`/positions/${pos.id}`, { isCritical: next })
+                                  toast.success(next ? 'Marcado como critico.' : 'Desmarcado como critico.')
+                                  fetchWorkplaces()
+                                } catch (err: any) { toast.error(err?.body?.error?.message || 'Erro ao atualizar.') }
+                              }}
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition-colors ${
+                                pos.isCritical
+                                  ? 'bg-rose-500/15 text-rose-300 border-rose-500/40 hover:bg-rose-500/25'
+                                  : 'bg-slate-800 text-slate-500 border-slate-700 hover:text-slate-300'
+                              }`}
+                              title={pos.isCritical
+                                ? 'Posto critico: aprovacao de ferias bloqueada sem cobertura. Clique para desmarcar.'
+                                : 'Marcar como critico (aprovacao de ferias exigira cobertura).'}
+                            >
+                              {pos.isCritical ? '⚠ Critico' : 'Marcar critico'}
+                            </button>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation()

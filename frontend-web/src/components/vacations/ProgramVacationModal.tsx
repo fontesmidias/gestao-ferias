@@ -203,6 +203,33 @@ export function ProgramVacationModal({ open, onClose, onCreated }: Props) {
     setLastEdited(null)
   }
 
+  // V3.4 Story 4.17: marca periodo aquisitivo como ja gozado (registro retroativo).
+  const markPeriodTaken = async (periodStartDate: string, days: number) => {
+    if (!selected) return
+    const reason = prompt(
+      `Marcar periodo iniciado em ${periodStartDate} (${days} dias) como JA GOZADO.\n\n` +
+      `Isto cria um registro retroativo de ferias COMPLETED para ${selected.name}, ` +
+      `consumindo o saldo do periodo. Acao auditada e reversivel (cancelando a request criada).\n\n` +
+      `Observacao (opcional):`,
+      '',
+    )
+    if (reason === null) return
+    try {
+      await HttpClient.post('/vacations/mark-period-taken', {
+        employeeId: selected.id,
+        periodStartDate,
+        days,
+        note: reason.trim() || undefined,
+      })
+      toast.success(`Periodo de ${days} dias marcado como gozado.`)
+      // Re-carrega saldo
+      const data = await HttpClient.get(`/employees/${selected.id}/vacation-balance`) as { data?: BalanceData } | BalanceData
+      setBalance(((data as { data?: BalanceData })?.data ?? data) as BalanceData)
+    } catch (err: any) {
+      toast.error(err?.body?.error?.message || 'Erro ao marcar como gozado.')
+    }
+  }
+
   const submit = async (overrides?: { overrideOverlap?: boolean; overrideBalance?: boolean }) => {
     if (!selected || !startDate || !endDate || !days || days < 1) {
       toast.error('Preencha colaborador, datas e dias.')
@@ -339,27 +366,40 @@ export function ProgramVacationModal({ open, onClose, onCreated }: Props) {
                     <p className="text-xs text-slate-500">Sem períodos elegíveis ainda (admissão recente).</p>
                   )}
                   {balance.periods.map((p, i) => {
-                    // CLT proporcionalidade: se aquisitivo ainda nao fechou (endDate > hoje),
-                    // o saldo e proporcional aos meses trabalhados (Art. 130).
                     const today = new Date()
                     const endDt = parseISO(p.endDate)
                     const startDt = parseISO(p.startDate)
                     const isOpenAquisitivo = p.status === 'AQUISITIVO' && endDt > today
                     const monthsWorked = isOpenAquisitivo ? Math.max(0, differenceInMonths(today, startDt)) : 12
+                    // V3.4 Story 4.17: pode marcar como gozado se ha saldo e periodo nao esta aberto
+                    // (aquisitivo aberto seria gozar antes de fechar — pratica incomum).
+                    const canMarkTaken = p.daysOfRight > 0 && !isOpenAquisitivo
                     return (
                       <div key={i} className="text-[11px]">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
                             <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${STATUS_BADGE[p.status]?.className || 'bg-slate-700'}`}>
                               {STATUS_BADGE[p.status]?.label || p.status}
                             </span>
-                            <span className="text-slate-400 font-mono">
+                            <span className="text-slate-400 font-mono truncate">
                               {p.startDate} → {p.endDate}
                             </span>
                           </div>
-                          <span className={`font-bold ${p.daysOfRight > 0 ? 'text-white' : 'text-slate-600'}`}>
-                            {p.daysOfRight} dias
-                          </span>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className={`font-bold ${p.daysOfRight > 0 ? 'text-white' : 'text-slate-600'}`}>
+                              {p.daysOfRight} dias
+                            </span>
+                            {canMarkTaken && selected && (
+                              <button
+                                type="button"
+                                onClick={() => markPeriodTaken(p.startDate, p.daysOfRight)}
+                                className="text-[9px] font-bold px-1.5 py-0.5 rounded border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 transition-colors"
+                                title="Marcar este período como já gozado (registro retroativo, audita). Útil quando férias antigas não foram cadastradas."
+                              >
+                                ✓ Já gozado
+                              </button>
+                            )}
+                          </div>
                         </div>
                         {isOpenAquisitivo && (
                           <p className="text-[10px] text-slate-500 mt-0.5 ml-1 italic">

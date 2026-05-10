@@ -148,6 +148,9 @@ export default function CoveragePage() {
   const [editCost, setEditCost] = useState<string>('')
   const [editSubmitting, setEditSubmitting] = useState(false)
 
+  // V3.4 Story 4.16: filtro por posto/workplace e "so com gap"
+  const [workplaceFilter, setWorkplaceFilter] = useState<string>('')
+
   // V3.4 Story 4.4: bulk coverage assign — gaps selecionados.
   const [bulkSelectedVrIds, setBulkSelectedVrIds] = useState<Set<string>>(new Set())
   const [bulkRunning, setBulkRunning] = useState(false)
@@ -317,7 +320,11 @@ export default function CoveragePage() {
   const totalGaps = kpis?.gapsTotal ?? gaps?.totalGaps ?? 0
   const monthCost = kpis?.estimatedCoverageMonthCost ?? 0
   const availableFeristasCount = kpis?.availableFeristasCount ?? 0
-  const uncoveredGaps = (gaps?.gaps ?? []).filter(g => !g.hasCoverage)
+  const allGaps = gaps?.gaps ?? []
+  const workplaceOptions = Array.from(new Set(allGaps.map(g => g.workplace?.name).filter(Boolean) as string[])).sort()
+  const uncoveredGaps = allGaps
+    .filter(g => !g.hasCoverage)
+    .filter(g => !workplaceFilter || g.workplace?.name === workplaceFilter)
   const plannedCoverages = coverages.filter(c => c.status === 'PLANNED').length
 
   // ---------- Modal logic ----------
@@ -1040,6 +1047,18 @@ export default function CoveragePage() {
                     Gaps de Cobertura ({uncoveredGaps.length})
                     <InfoTooltip text="Lista de ferias sem substituto atribuido. Marque um ou mais e clique em 'Atribuir em lote' para auto-match, ou abra individualmente para escolher." />
                   </h3>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {workplaceOptions.length > 1 && (
+                      <select
+                        value={workplaceFilter}
+                        onChange={e => setWorkplaceFilter(e.target.value)}
+                        className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:ring-1 focus:ring-primary/50"
+                        title="Filtrar gaps por posto"
+                      >
+                        <option value="">Todos os postos</option>
+                        {workplaceOptions.map(w => <option key={w} value={w}>{w}</option>)}
+                      </select>
+                    )}
                   {uncoveredGaps.length > 0 && (
                     <div className="flex items-center gap-2">
                       <button
@@ -1059,6 +1078,7 @@ export default function CoveragePage() {
                       </button>
                     </div>
                   )}
+                  </div>
                 </div>
 
                 {uncoveredGaps.length === 0 ? (

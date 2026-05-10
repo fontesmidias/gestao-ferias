@@ -3,10 +3,36 @@ import { classifyStatus } from '../../../../modules/shared/employee-status-class
 
 const dashboard: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   fastify.get('/metrics', {
-    onRequest: [fastify.requireAuth]
+    onRequest: [fastify.requireAuth],
+    schema: {
+      querystring: {
+        type: 'object',
+        properties: {
+          // V3.4: aceita ?quarter=YYYY-QN (ex: 2026-Q2). Default = trimestre atual.
+          quarter: { type: 'string', pattern: '^\\d{4}-Q[1-4]$' },
+        },
+      },
+    },
   }, async (request, reply) => {
     const { tenantId, role } = request.user as any
     const whereClause = role === 'SUPERADMIN' ? {} : { tenantId }
+    const q = request.query as { quarter?: string }
+    // Janela do trimestre selecionado para o timeline (composition e total agregam global).
+    let quarterStart: Date
+    let quarterEnd: Date
+    if (q.quarter) {
+      const [yStr, qStr] = q.quarter.split('-Q')
+      const y = Number(yStr)
+      const qn = Number(qStr)
+      const monthStart = (qn - 1) * 3
+      quarterStart = new Date(Date.UTC(y, monthStart, 1))
+      quarterEnd = new Date(Date.UTC(y, monthStart + 3, 1) - 1)
+    } else {
+      const now = new Date()
+      const qn = Math.floor(now.getUTCMonth() / 3)
+      quarterStart = new Date(Date.UTC(now.getUTCFullYear(), qn * 3, 1))
+      quarterEnd = new Date(Date.UTC(now.getUTCFullYear(), qn * 3 + 3, 1) - 1)
+    }
 
     // 1. Employee Composition KPIs (Active vs Leaves)
     // Status é free-form (Tirvu escreve "FÉRIAS", "AFASTADO INSS", "LICENÇA
@@ -38,13 +64,12 @@ const dashboard: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       where: { ...whereClause, status: 'PENDING' }
     })
 
-    // 3. Approval Timeline (Vacations scheduled in the near future)
-    // Here we query requests that are APPROVED and map them out by MM/YYYY
+    // 3. Approval Timeline — ferias APPROVED/SIGNED/COMPLETED dentro do trimestre selecionado.
     const futureVacations = await fastify.prisma.vacationRequest.findMany({
       where: {
         ...whereClause,
         status: { in: ['APPROVED', 'COMPLETED', 'SIGNED'] },
-        startDate: { gte: new Date(new Date().setHours(0,0,0,0)) } // From today onwards
+        startDate: { gte: quarterStart, lte: quarterEnd },
       },
       select: {
         startDate: true,

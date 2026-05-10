@@ -259,6 +259,97 @@ const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   })
 
   // Listar solicitações do Tenant (com hasCoverage)
+  // V3.4 Story 4.17: marcar periodo aquisitivo como ja gozado (registro retroativo).
+  // Cria VacationRequest sintetica status=COMPLETED dentro do periodo aquisitivo,
+  // zerando o saldo daquele periodo. Operador pode informar datas reais; se nao,
+  // assume startDate=periodStartDate, days=daysOfRight.
+  fastify.post('/mark-period-taken', {
+    onRequest: [fastify.requireAuth, fastify.requireAdmin],
+    schema: {
+      body: {
+        type: 'object',
+        required: ['employeeId', 'periodStartDate', 'days'],
+        properties: {
+          employeeId: { type: 'string', format: 'uuid' },
+          periodStartDate: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+          days: { type: 'integer', minimum: 1, maximum: 31 },
+          actualStartDate: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+          actualEndDate: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+          note: { type: 'string', maxLength: 500 },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const { tenantId, userId } = request.user as { tenantId: string; userId: string }
+    const body = request.body as {
+      employeeId: string
+      periodStartDate: string
+      days: number
+      actualStartDate?: string
+      actualEndDate?: string
+      note?: string
+    }
+
+    const employee = await fastify.prisma.employee.findFirst({ where: { id: body.employeeId, tenantId } })
+    if (!employee) return reply.code(404).send({ data: null, error: { code: 'NOT_FOUND', message: 'Colaborador nao encontrado.' } })
+
+    const periodStart = parseISO(body.periodStartDate)
+    const start = body.actualStartDate ? parseISO(body.actualStartDate) : periodStart
+    const end = body.actualEndDate
+      ? parseISO(body.actualEndDate)
+      : new Date(start.getTime() + (body.days - 1) * 24 * 60 * 60 * 1000)
+    const days = body.actualStartDate && body.actualEndDate
+      ? differenceInDays(end, start) + 1
+      : body.days
+
+    // Validacao: o startDate da request precisa cair dentro do periodo aquisitivo
+    // (engine matchea por p.startDate >= req.startDate < p.endDate).
+    const periodEnd = new Date(periodStart.getTime())
+    periodEnd.setFullYear(periodEnd.getFullYear() + 1)
+    if (start < periodStart || start >= periodEnd) {
+      return reply.code(422).send({
+        data: null,
+        error: {
+          code: 'OUT_OF_PERIOD',
+          message: `actualStartDate ${format(start, 'yyyy-MM-dd')} esta fora do periodo aquisitivo ${format(periodStart, 'yyyy-MM-dd')} - ${format(periodEnd, 'yyyy-MM-dd')}.`,
+        },
+      })
+    }
+
+    const dispatchNote = body.note?.trim()
+      || `Periodo aquisitivo iniciado em ${format(periodStart, 'yyyy-MM-dd')} marcado como JA GOZADO (registro retroativo pelo RH).`
+
+    const created = await fastify.prisma.vacationRequest.create({
+      data: {
+        tenantId,
+        employeeId: body.employeeId,
+        startDate: start,
+        endDate: end,
+        days,
+        status: 'COMPLETED',
+        dispatchNote,
+      },
+    })
+
+    await AuditService.log(fastify.prisma as any, {
+      tenantId,
+      userId,
+      action: 'VACATION_MARKED_AS_TAKEN',
+      resourceType: 'VACATION_REQUEST',
+      resourceId: created.id,
+      newData: {
+        employeeId: body.employeeId,
+        periodStartDate: body.periodStartDate,
+        days,
+        actualStartDate: format(start, 'yyyy-MM-dd'),
+        actualEndDate: format(end, 'yyyy-MM-dd'),
+        retroactive: !body.actualStartDate || !body.actualEndDate,
+      } as never,
+    })
+
+    return reply.code(201).send({ data: created, error: null })
+  })
+
   fastify.get('/', {
     onRequest: [fastify.requireAuth]
   }, async (request) => {
