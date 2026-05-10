@@ -4,6 +4,7 @@ import { ImportService } from '../../../../modules/employees/import-service'
 import { AuditService } from '../../../../modules/shared/audit-service'
 import { VacationEngine } from '../../../../modules/vacations/vacation-engine'
 import { resolveBankDataField } from '../../../../modules/employees/bank-data-view'
+import { classifyStatus } from '../../../../modules/shared/employee-status-classifier'
 
 const employees: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   // Download template de importacao
@@ -277,10 +278,11 @@ const employees: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       if (r.workplace) workplaces.add(r.workplace)
       if (r.status) statuses.add(r.status)
       if (r.position) positions.add(r.position)
-      const upper = (r.status ?? '').toUpperCase().trim()
-      if (upper === 'ATIVO') active++
-      else if (/^F[EÉ]RIAS$/.test(upper)) vacation++
-      else if (/AFASTAD|LICEN[ÇC]A|ATESTAD/.test(upper)) leave++
+      // V3.4 Story 4.11: classifier compartilhado.
+      const bucket = classifyStatus(r.status)
+      if (bucket === 'ATIVO') active++
+      else if (bucket === 'FERIAS') vacation++
+      else if (bucket === 'AFASTADO') leave++
       else inactive++
     }
     return {

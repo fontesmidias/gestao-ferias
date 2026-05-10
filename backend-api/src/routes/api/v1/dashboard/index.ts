@@ -1,4 +1,5 @@
 import { FastifyPluginAsync } from 'fastify'
+import { classifyStatus } from '../../../../modules/shared/employee-status-classifier'
 
 const dashboard: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   fastify.get('/metrics', {
@@ -17,21 +18,17 @@ const dashboard: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       _count: { id: true }
     })
 
+    // V3.4 Story 4.11: classificacao via classifier compartilhado.
     let totalEmployees = 0
     const composition: Record<string, number> = { ATIVO: 0, FERIAS: 0, AFASTADO: 0, INATIVO: 0 }
 
     for (const row of employeesAggr) {
       const count = row._count.id
       totalEmployees += count
+      const bucket = classifyStatus(row.status)
+      composition[bucket] += count
+      // Mantem chave bruta para debug/relatorios sem quebrar API.
       const upper = (row.status ?? '').toUpperCase().trim()
-      let bucket: string
-      if (upper === 'ATIVO') bucket = 'ATIVO'
-      else if (/^F[EÉ]RIAS$/.test(upper)) bucket = 'FERIAS'
-      else if (/AFASTAD|LICEN[ÇC]A|ATESTAD/.test(upper)) bucket = 'AFASTADO'
-      else if (upper === 'INATIVO' || upper === 'DEMITIDO') bucket = 'INATIVO'
-      else bucket = 'INATIVO'
-      composition[bucket] = (composition[bucket] ?? 0) + count
-      // Mantém também a chave bruta para debug/relatórios sem quebrar API.
       if (upper && !(upper in composition)) composition[upper] = count
       else if (upper && upper !== bucket) composition[upper] = (composition[upper] ?? 0) + count
     }
