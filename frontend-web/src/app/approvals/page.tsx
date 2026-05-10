@@ -321,6 +321,42 @@ export default function ApprovalsPage() {
                   <CalendarPlus className="w-3.5 h-3.5" /> Programar Férias
                 </button>
                 <label
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-cyan-500/40 text-cyan-300 rounded-lg hover:bg-cyan-500/10 text-xs font-bold cursor-pointer transition-colors"
+                  title="Importar férias ATUAIS e suas coberturas a partir do XLS 'Gestao Operacional' do Tirvu. Idempotente."
+                >
+                  <Upload className="w-3.5 h-3.5" /> Importar Tirvu Operacional
+                  <input type="file" accept=".xls,.xlsx" className="hidden" onChange={async (e) => {
+                    const file = e.target.files?.[0]
+                    if (!file) return
+                    if (!confirm('Importar Gestão Operacional do Tirvu:\n\nCria VacationRequest APPROVED para cada férias atual + CoverageAssignment quando há substituto. Match por matrícula (titular e substituto). Idempotente (rodar 2x = mesmo resultado).\n\nContinuar?')) {
+                      e.target.value = ''; return
+                    }
+                    const formData = new FormData()
+                    formData.append('file', file)
+                    try {
+                      toast.loading('Importando...', { id: 'imp-op' })
+                      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/vacations/import-operational`, {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+                        body: formData,
+                      })
+                      const json = await res.json()
+                      toast.dismiss('imp-op')
+                      if (res.ok) {
+                        const s = json?.data?.summary
+                        toast.success(
+                          `Férias: ${s?.created ?? 0} criadas, ${s?.alreadyExists ?? 0} já existiam, ${s?.noMatch ?? 0} sem match · Coberturas: ${s?.coverageCreated ?? 0} criadas, ${s?.coverageNoMatch ?? 0} sem match`,
+                          { duration: 12000 },
+                        )
+                        fetchRequests()
+                      } else {
+                        toast.error(json?.error?.message || 'Erro ao importar')
+                      }
+                    } catch { toast.dismiss('imp-op'); toast.error('Erro de rede ao importar') }
+                    e.target.value = ''
+                  }} />
+                </label>
+                <label
                   className="flex items-center gap-1.5 px-3 py-1.5 border border-emerald-500/40 text-emerald-400 rounded-lg hover:bg-emerald-500/10 text-xs font-bold cursor-pointer transition-colors"
                   title="Importar plano de férias em massa (admin) — cria já APROVADO e detecta sobreposições/duplicatas"
                 >

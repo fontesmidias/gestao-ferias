@@ -14,6 +14,24 @@ out/
 .env.local
 .env.production
 
+# LGPD: planilhas reais com PII em docs/exemplo/ ficam fora do versionamento.
+# Apenas os arquivos *_sample.xlsx (anonimizados) sao commitados.
+# IMPORTANTE: os 3 arquivos abaixo ja estao no historico do repo:
+#   - "Colaboradores, para fins de validação.xlsx"
+#   - "Postos de Serviço.xlsx"
+#   - "Trabalhadores, de 10-05-2026.XLS"
+# Para purga-los do historico, executar `git filter-repo` em rodada dedicada.
+docs/exemplo/*.xls
+docs/exemplo/*.XLS
+!docs/exemplo/*_sample.xls
+docs/exemplo/Colaboradores*.xlsx
+docs/exemplo/Postos*.xlsx
+docs/exemplo/Trabalhadores*.xlsx
+docs/exemplo/Gestao*.xlsx
+docs/exemplo/Rela*.xlsx
+!docs/exemplo/*_sample.xlsx
+!docs/exemplo/README.md
+
 # AI Agent configs (not source code)
 .agent/
 .agents/
