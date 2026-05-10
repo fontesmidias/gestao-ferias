@@ -140,6 +140,221 @@ const coverages: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     return reply.code(201).send(coverage)
   })
 
+  // V3.4 Story 4.3: encadeamento automatico de feristas para um unico gap.
+  // Quando 1 ferista nao consegue cobrir o periodo inteiro (ja tem cobertura
+  // adjacente OU operador quer dividir em N feristas), o sistema acha
+  // candidatos sequenciais que juntos cobrem o intervalo, sem overlap.
+  //
+  // POST /coverages/auto-chain — body: { vacationRequestId, maxFeristas?: 3 }
+  // Resposta: { suggestions: [{ ferista, startDate, endDate, days, score }] }
+  // Sem persistencia. O front confirma e chama POST /coverages para cada um.
+  fastify.post('/auto-chain', {
+    onRequest: [fastify.requireAuth, fastify.requireAdmin],
+    schema: {
+      body: {
+        type: 'object',
+        required: ['vacationRequestId'],
+        properties: {
+          vacationRequestId: { type: 'string', format: 'uuid' },
+          maxFeristas: { type: 'integer', minimum: 1, maximum: 5, default: 3 },
+          apply: { type: 'boolean', default: false }, // se true, ja cria as CoverageAssignment
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const { tenantId } = request.user as any
+    const { vacationRequestId, maxFeristas = 3, apply = false } = request.body as { vacationRequestId: string; maxFeristas?: number; apply?: boolean }
+
+    const vacation = await fastify.prisma.vacationRequest.findFirst({
+      where: { id: vacationRequestId, tenantId },
+      include: {
+        employee: { include: { allocations: { where: { status: 'ACTIVE' }, include: { workplacePosition: true } } } },
+      },
+    })
+    if (!vacation) return reply.code(404).send({ data: null, error: { code: 'NOT_FOUND', message: 'VacationRequest nao encontrada.' } })
+    const allocation = vacation.employee.allocations[0]
+    if (!allocation) return reply.code(422).send({ data: null, error: { code: 'NO_ALLOCATION', message: 'Titular sem allocation ACTIVE.' } })
+
+    const targetRole = (allocation.workplacePosition.role || '').toLowerCase().trim()
+    const vStart = vacation.startDate
+    const vEnd = vacation.endDate
+
+    // Busca todos os feristas ATIVOs do tenant com suas coberturas PLANNED/ACTIVE
+    // que sobreponham o periodo da ferias.
+    const feristas = await fastify.prisma.employee.findMany({
+      where: { tenantId, status: 'ATIVO', isFerista: true },
+      select: {
+        id: true, name: true, position: true, salary: true,
+        coveragesAsReplacement: {
+          where: {
+            status: { in: ['PLANNED', 'ACTIVE'] },
+            startDate: { lte: vEnd },
+            endDate: { gte: vStart },
+          },
+          select: { startDate: true, endDate: true },
+          orderBy: { startDate: 'asc' },
+        },
+      },
+    })
+
+    // Algoritmo greedy: para cada ferista, calcula janela LIVRE dentro de [vStart, vEnd].
+    // Score: cargo identico=3, mesma palavra=2, qualquer=1. Empate desempata por
+    // janela maior + custo menor.
+    function scoreCargo(candPos: string | null): number {
+      const cand = (candPos || '').toLowerCase().trim()
+      if (!targetRole) return 1
+      if (cand === targetRole) return 3
+      if (cand && (cand.includes(targetRole.split(/\s/)[0]) || targetRole.includes(cand.split(/\s/)[0]))) return 2
+      return 1
+    }
+
+    function freeRangesIn(busy: { startDate: Date; endDate: Date }[], rangeStart: Date, rangeEnd: Date): { start: Date; end: Date }[] {
+      const ranges: { start: Date; end: Date }[] = []
+      let cursor = rangeStart
+      const sorted = [...busy].sort((a, b) => a.startDate.getTime() - b.startDate.getTime())
+      for (const b of sorted) {
+        if (b.startDate > cursor) {
+          const segEnd = new Date(Math.min(b.startDate.getTime() - 86400000, rangeEnd.getTime()))
+          if (segEnd >= cursor) ranges.push({ start: cursor, end: segEnd })
+        }
+        if (b.endDate >= cursor) {
+          cursor = new Date(b.endDate.getTime() + 86400000)
+        }
+        if (cursor > rangeEnd) break
+      }
+      if (cursor <= rangeEnd) ranges.push({ start: cursor, end: rangeEnd })
+      return ranges
+    }
+
+    interface Segment {
+      feristaId: string
+      feristaName: string
+      position: string | null
+      score: number
+      startDate: Date
+      endDate: Date
+      days: number
+      estimatedCost: number | null
+      salary: number | null
+    }
+
+    const candidates: Segment[] = []
+    for (const f of feristas) {
+      const free = freeRangesIn(f.coveragesAsReplacement, vStart, vEnd)
+      const score = scoreCargo(f.position)
+      for (const r of free) {
+        const days = Math.max(0, Math.round((r.end.getTime() - r.start.getTime()) / 86400000) + 1)
+        if (days <= 0) continue
+        candidates.push({
+          feristaId: f.id,
+          feristaName: f.name,
+          position: f.position,
+          score,
+          startDate: r.start,
+          endDate: r.end,
+          days,
+          salary: f.salary ? Number(f.salary) : null,
+          estimatedCost: f.salary ? (Number(f.salary) / 30) * days : null,
+        })
+      }
+    }
+
+    // Greedy fill: comeca do vStart, escolhe segmento que cobre maior parte
+    // a partir desse ponto com maior score (desempate: maior days, menor cost).
+    const chosen: Segment[] = []
+    const usedFeristas = new Set<string>()
+    let cursor = vStart
+    while (cursor <= vEnd && chosen.length < maxFeristas) {
+      const viable = candidates.filter(c =>
+        !usedFeristas.has(c.feristaId) &&
+        c.startDate.getTime() <= cursor.getTime() &&
+        c.endDate.getTime() >= cursor.getTime(),
+      )
+      if (viable.length === 0) break
+      viable.sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score
+        if (b.days !== a.days) return b.days - a.days
+        return (a.estimatedCost ?? Number.MAX_VALUE) - (b.estimatedCost ?? Number.MAX_VALUE)
+      })
+      const pick = viable[0]
+      // Recorta o segmento ao intervalo restante [cursor, vEnd]
+      const segStart = pick.startDate < cursor ? cursor : pick.startDate
+      const segEnd = pick.endDate > vEnd ? vEnd : pick.endDate
+      const segDays = Math.max(1, Math.round((segEnd.getTime() - segStart.getTime()) / 86400000) + 1)
+      chosen.push({
+        ...pick,
+        startDate: segStart,
+        endDate: segEnd,
+        days: segDays,
+        estimatedCost: pick.salary ? (pick.salary / 30) * segDays : null,
+      })
+      usedFeristas.add(pick.feristaId)
+      cursor = new Date(segEnd.getTime() + 86400000)
+    }
+
+    const totalDays = chosen.reduce((s, c) => s + c.days, 0)
+    const totalCost = chosen.reduce((s, c) => s + (c.estimatedCost ?? 0), 0)
+    const uncovered = cursor <= vEnd
+
+    // Se apply=true, cria as CoverageAssignment
+    let applied: { coverageId: string; feristaId: string }[] = []
+    if (apply && chosen.length > 0 && !uncovered) {
+      for (const seg of chosen) {
+        try {
+          const cov = await fastify.prisma.coverageAssignment.create({
+            data: {
+              tenantId,
+              vacationRequestId,
+              replacementEmployeeId: seg.feristaId,
+              workplacePositionId: allocation.workplacePosition.id,
+              startDate: seg.startDate,
+              endDate: seg.endDate,
+              type: 'FERISTA',
+              status: 'PLANNED',
+              cost: seg.estimatedCost,
+            },
+          })
+          applied.push({ coverageId: cov.id, feristaId: seg.feristaId })
+          coverageEventBus.emit(tenantId, { type: 'coverage.created', coverageId: cov.id, vacationRequestId })
+        } catch (err: any) {
+          const sqlState = err?.meta?.code || err?.code
+          if (sqlState === '23P01') continue
+          throw err
+        }
+      }
+    }
+
+    return reply.send({
+      data: {
+        vacationRequest: {
+          id: vacation.id,
+          employeeName: vacation.employee.name,
+          startDate: vStart,
+          endDate: vEnd,
+          totalDays: vacation.days,
+        },
+        chain: chosen.map(c => ({
+          feristaId: c.feristaId,
+          feristaName: c.feristaName,
+          position: c.position,
+          score: c.score,
+          startDate: c.startDate.toISOString().slice(0, 10),
+          endDate: c.endDate.toISOString().slice(0, 10),
+          days: c.days,
+          estimatedCost: c.estimatedCost,
+        })),
+        summary: {
+          covered: totalDays,
+          uncovered: uncovered ? Math.round((vEnd.getTime() - cursor.getTime()) / 86400000) + 1 : 0,
+          feristasUsed: chosen.length,
+          totalCost,
+          applied: applied.length,
+        },
+      },
+      error: null,
+    })
+  })
+
   // V3.4 Story 4.4: atribuicao em lote com auto-match.
   // Para cada VacationRequestId em entrada, busca o melhor candidato (FERISTA
   // com cargo identico/familia/qualquer) e cria cobertura. Retorna summary.

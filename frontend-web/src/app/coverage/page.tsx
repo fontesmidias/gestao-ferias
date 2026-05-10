@@ -151,6 +151,29 @@ export default function CoveragePage() {
   // V3.4 Story 4.16: filtro por posto/workplace e "so com gap"
   const [workplaceFilter, setWorkplaceFilter] = useState<string>('')
 
+  // V3.4 Story 4.3: encadeamento automatico
+  const [chainRunning, setChainRunning] = useState(false)
+  const autoChain = async (vrId: string) => {
+    if (!confirm('Buscar e ENCADEAR ate 3 feristas para cobrir o periodo inteiro?\n\nO sistema escolhe automaticamente feristas com janelas livres compativeis. Se conseguir cobrir 100%, cria as coberturas PLANEJADAS.')) return
+    try {
+      setChainRunning(true)
+      const res: any = await HttpClient.post('/coverages/auto-chain', { vacationRequestId: vrId, maxFeristas: 3, apply: true })
+      const s = res?.data?.summary
+      const chain = res?.data?.chain ?? []
+      if (s?.uncovered > 0) {
+        toast.error(`Cobertura parcial: ${s.covered}d cobertos, ${s.uncovered}d ainda sem ferista. ${chain.length} ferista(s) usados.`, { duration: 10000 })
+      } else if (s?.applied > 0) {
+        toast.success(`Encadeamento aplicado: ${s.applied} ferista(s) em sequencia · ${s.covered} dias · R$ ${Number(s.totalCost || 0).toFixed(2)}`, { duration: 10000 })
+        closeSheet()
+        fetchData()
+      } else {
+        toast.error('Nao foi possivel encadear feristas para este periodo.')
+      }
+    } catch (err: any) {
+      toast.error(err?.body?.error?.message || 'Erro no encadeamento.')
+    } finally { setChainRunning(false) }
+  }
+
   // V3.4 Story 4.4: bulk coverage assign — gaps selecionados.
   const [bulkSelectedVrIds, setBulkSelectedVrIds] = useState<Set<string>>(new Set())
   const [bulkRunning, setBulkRunning] = useState(false)
@@ -1283,20 +1306,32 @@ export default function CoveragePage() {
             </div>
 
             {/* Sheet Footer (sticky at bottom) */}
-            <div className="p-4 border-t border-white/5 flex justify-end gap-3 bg-slate-900 shrink-0">
+            <div className="p-4 border-t border-white/5 flex justify-between gap-3 bg-slate-900 shrink-0 flex-wrap">
+              {/* V3.4 Story 4.3: encadeamento automatico multi-ferista */}
               <button
-                onClick={closeSheet}
-                className="px-4 py-2 rounded-lg text-sm font-bold text-slate-400 hover:text-white transition-colors"
+                onClick={() => modalGap && autoChain(modalGap.vacationRequestId)}
+                disabled={!modalGap || chainRunning}
+                className="px-4 py-2 rounded-lg text-xs font-bold border border-indigo-500/40 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                title="Sistema acha 2 ou 3 feristas em sequência para cobrir o período inteiro sem conflito"
               >
-                Cancelar
+                <Sparkles className="w-3 h-3" />
+                {chainRunning ? 'Calculando...' : 'Encadear feristas (auto)'}
               </button>
-              <button
-                onClick={confirmCoverage}
-                disabled={!selectedReplacement || submitting}
-                className="px-6 py-2 rounded-lg text-sm font-bold text-white bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {submitting ? 'Salvando...' : 'Confirmar Cobertura'}
-              </button>
+              <div className="flex gap-3 ml-auto">
+                <button
+                  onClick={closeSheet}
+                  className="px-4 py-2 rounded-lg text-sm font-bold text-slate-400 hover:text-white transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={confirmCoverage}
+                  disabled={!selectedReplacement || submitting}
+                  className="px-6 py-2 rounded-lg text-sm font-bold text-white bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {submitting ? 'Salvando...' : 'Confirmar Cobertura'}
+                </button>
+              </div>
             </div>
           </div>
         </>
