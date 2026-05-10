@@ -276,6 +276,8 @@ export default function ApprovalsPage() {
     return note.startsWith('programada') || note.startsWith('plano importado')
   }
   const filtered = requests.filter(r => {
+    // 'TODOS' = solicitacoes ativas. CANCELLED e REJECTED so aparecem nas tabs proprias.
+    if (filterStatus === 'TODOS' && (r.status === 'CANCELLED' || r.status === 'REJECTED')) return false
     if (filterStatus !== 'TODOS' && r.status !== filterStatus) return false
     if (filterSource === 'PROGRAMMED' && !isProgrammed(r)) return false
     if (filterSource === 'EMPLOYEE' && isProgrammed(r)) return false
@@ -451,7 +453,9 @@ export default function ApprovalsPage() {
                 { value: 'REJECTED' as const, label: 'Reprovadas', color: 'bg-rose-500/15 text-rose-300 border-rose-500/30' },
                 { value: 'CANCELLED' as const, label: 'Canceladas', color: 'bg-slate-600/30 text-slate-400 border-slate-600' },
               ]).map(chip => {
-                const count = chip.value === 'TODOS' ? requests.length : (statusCounts[chip.value] || 0)
+                // 'Todos' = ativos (exclui canceladas + reprovadas, que tem tabs proprias)
+                const activeCount = requests.filter(r => r.status !== 'CANCELLED' && r.status !== 'REJECTED').length
+                const count = chip.value === 'TODOS' ? activeCount : (statusCounts[chip.value] || 0)
                 const active = filterStatus === chip.value
                 return (
                   <button
