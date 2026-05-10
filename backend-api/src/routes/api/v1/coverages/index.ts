@@ -108,9 +108,9 @@ const coverages: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         tenantId
       },
       include: {
-        replacementEmployee: { select: { id: true, name: true, employeeType: true } },
+        replacementEmployee: { select: { id: true, name: true, employeeType: true, registration: true } },
         workplacePosition: { select: { id: true, role: true, workplace: { select: { id: true, name: true } } } },
-        vacationRequest: { select: { id: true, startDate: true, endDate: true, employee: { select: { name: true } } } }
+        vacationRequest: { select: { id: true, startDate: true, endDate: true, employee: { select: { name: true, registration: true } } } }
       }
     })
 
@@ -154,9 +154,9 @@ const coverages: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     return await fastify.prisma.coverageAssignment.findMany({
       where,
       include: {
-        replacementEmployee: { select: { id: true, name: true, employeeType: true } },
+        replacementEmployee: { select: { id: true, name: true, employeeType: true, registration: true } },
         workplacePosition: { select: { id: true, role: true, workplace: { select: { id: true, name: true } } } },
-        vacationRequest: { select: { id: true, startDate: true, endDate: true, employee: { select: { name: true } } } }
+        vacationRequest: { select: { id: true, startDate: true, endDate: true, employee: { select: { name: true, registration: true } } } }
       },
       orderBy: { startDate: 'asc' }
     })

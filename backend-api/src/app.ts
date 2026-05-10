@@ -3,6 +3,7 @@ import AutoLoad, { AutoloadPluginOptions } from '@fastify/autoload'
 import { FastifyPluginAsync, FastifyServerOptions } from 'fastify'
 import { LOG_REDACT_PATHS, logRedactCensor } from './lib/log-redact'
 import { registerReconcileQueuePurge } from './modules/reconcile/reconcile-queue.purge'
+import { registerCoverageStatusCron } from './modules/coverage-engine/coverage-status-cron'
 
 export interface AppOptions extends FastifyServerOptions, Partial<AutoloadPluginOptions> {
 
@@ -53,6 +54,10 @@ const app: FastifyPluginAsync<AppOptions> = async (
   // RECONCILE_QUEUE_PURGE_ENABLED=true (no-op em dev/test).
   fastify.ready(() => {
     registerReconcileQueuePurge(fastify)
+    // V3.4 FASE H2: cron de transicao de status de CoverageAssignment.
+    // PLANNED->ACTIVE quando startDate chega; ACTIVE->COMPLETED quando endDate passa.
+    // Default 6h, opt-out via COVERAGE_STATUS_CRON_ENABLED=false.
+    registerCoverageStatusCron(fastify)
   })
 }
 

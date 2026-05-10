@@ -511,7 +511,12 @@ export default function ApprovalsPage() {
                               {req.employee?.name?.charAt(0) || 'C'}
                             </div>
                             <div>
-                              <p className="font-bold text-white">{req.employee?.name || 'Vazio'}</p>
+                              <p className="font-bold text-white flex items-center gap-2 flex-wrap">
+                                {req.employee?.name || 'Vazio'}
+                                {req.employee?.registration && (
+                                  <span className="text-[10px] font-mono font-normal text-sky-400/80">Matr. {req.employee.registration}</span>
+                                )}
+                              </p>
                               <p className="text-xs font-bold mt-1 uppercase tracking-wider text-slate-500">
                                 {req.status === 'PENDING' && <span className="text-amber-500">Pendente</span>}
                                 {req.status === 'APPROVED' && <span className="text-emerald-500">Aprovado</span>}

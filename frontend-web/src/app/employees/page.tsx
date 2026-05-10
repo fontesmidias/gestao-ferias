@@ -504,6 +504,7 @@ export default function EmployeesPage() {
                     <th className="px-6 py-3 sticky left-10 z-30 bg-slate-900 border-r border-white/5 min-w-[260px]">
                       <div className="flex items-center gap-1">Colaborador <InfoTooltip text="Nome completo, matrícula e empresa de registro. Use a checkbox para seleção em massa." /></div>
                     </th>
+                    <th className="px-4 py-3"><div className="flex items-center gap-1">Matrícula <InfoTooltip text="Numero de registro do colaborador no sistema-fonte (Tirvu/Dexion). Importado da coluna 11 da planilha Tirvu." /></div></th>
                     <th className="px-6 py-3"><div className="flex items-center gap-1">Status <InfoTooltip text="Situação atual: verde=ativo, azul=férias, amarelo=afastado, etc." /></div></th>
                     <th className="px-6 py-3">
                       <div className="flex items-center gap-1.5"><MapPin className="w-3 h-3"/> Posto <InfoTooltip text="Posto de trabalho atual do colaborador." /></div>
@@ -538,6 +539,7 @@ export default function EmployeesPage() {
                               </div>
                             </div>
                           </td>
+                          <td className="px-4 py-3"><div className="h-4 bg-slate-800/50 rounded w-12" /></td>
                           <td className="px-6 py-3"><div className="h-4 bg-slate-800/50 rounded w-16" /></td>
                           <td className="px-6 py-3"><div className="h-4 bg-slate-800/50 rounded w-24" /></td>
                           <td className="px-6 py-3"><div className="h-4 bg-slate-800/50 rounded w-20" /></td>
@@ -550,7 +552,7 @@ export default function EmployeesPage() {
                     </>
                   ) : !hasSearched ? (
                     <tr>
-                      <td colSpan={9} className="px-6 py-16 text-center text-slate-500">
+                      <td colSpan={10} className="px-6 py-16 text-center text-slate-500">
                         <div className="flex flex-col items-center gap-2">
                           <Search className="w-8 h-8 opacity-30" />
                           <p className="text-sm">Use os filtros ou a busca para listar colaboradores.</p>
@@ -560,7 +562,7 @@ export default function EmployeesPage() {
                     </tr>
                   ) : filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="px-6 py-12 text-center text-slate-500">
+                      <td colSpan={10} className="px-6 py-12 text-center text-slate-500">
                         Nenhum colaborador corresponde aos filtros de busca aplicados.
                       </td>
                     </tr>
@@ -598,6 +600,13 @@ export default function EmployeesPage() {
                               </p>
                             </div>
                           </div>
+                        </td>
+                        <td className="px-4 py-3 text-[12px] font-mono">
+                          {emp.registration ? (
+                            <span className="text-sky-400/90">{emp.registration}</span>
+                          ) : (
+                            <span className="text-slate-600">S/N</span>
+                          )}
                         </td>
                         <td className="px-6 py-3">
                           {renderStatusBadge(emp.status)}
@@ -647,7 +656,17 @@ export default function EmployeesPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => { setEditingEmployee(null); setCreating(false) }}>
           <div className="glass-card bg-slate-800 border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto mx-4 p-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-white">{creating ? 'Novo Colaborador' : 'Editar Colaborador'}</h3>
+              <div>
+                <h3 className="text-xl font-bold text-white">{creating ? 'Novo Colaborador' : 'Editar Colaborador'}</h3>
+                {!creating && editingEmployee && (
+                  <p className="text-xs text-slate-400 mt-1">
+                    {editingEmployee.name}
+                    {editingEmployee.registration && (
+                      <span className="ml-2 font-mono text-sky-400/80">Matr. {editingEmployee.registration}</span>
+                    )}
+                  </p>
+                )}
+              </div>
               <button onClick={() => { setEditingEmployee(null); setCreating(false) }} className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-md transition-colors">
                 <X className="w-5 h-5" />
               </button>

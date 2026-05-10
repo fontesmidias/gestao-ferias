@@ -70,9 +70,9 @@ interface Coverage {
   endDate: string
   type: string
   cost: number | null
-  replacementEmployee?: { id: string; name: string; employeeType: string }
+  replacementEmployee?: { id: string; name: string; employeeType: string; registration?: string | null }
   workplacePosition?: { id: string; role: string; workplace: { id: string; name: string } }
-  vacationRequest?: { id: string; startDate: string; endDate: string; employee: { name: string } }
+  vacationRequest?: { id: string; startDate: string; endDate: string; employee: { name: string; registration?: string | null } }
 }
 
 interface CoverageKpis {
@@ -348,10 +348,12 @@ export default function CoveragePage() {
       toast.error('Nenhuma cobertura para exportar.')
       return
     }
-    const headers = ['Substituto', 'Tipo', 'Cobrindo', 'Posto', 'Cargo', 'Inicio', 'Fim', 'Status', 'Custo']
+    const headers = ['Matr. Substituto', 'Substituto', 'Tipo', 'Matr. Cobrindo', 'Cobrindo', 'Posto', 'Cargo', 'Inicio', 'Fim', 'Status', 'Custo']
     const rows = filteredCoverages.map(c => [
+      c.replacementEmployee?.registration ?? '',
       c.replacementEmployee?.name ?? '',
       c.type,
+      c.vacationRequest?.employee?.registration ?? '',
       c.vacationRequest?.employee?.name ?? '',
       c.workplacePosition?.workplace?.name ?? '',
       c.workplacePosition?.role ?? '',
@@ -833,11 +835,21 @@ export default function CoveragePage() {
                               const statusLabel = c.status === 'ACTIVE' ? 'Ativa' : c.status === 'PLANNED' ? 'Planejada' : 'Concluída'
                               return (
                                 <tr key={c.id} className="hover:bg-white/[0.02]">
-                                  <td className="px-4 py-2 text-white font-bold text-[13px]">{c.replacementEmployee?.name ?? '—'}</td>
+                                  <td className="px-4 py-2 text-white font-bold text-[13px]">
+                                    {c.replacementEmployee?.name ?? '—'}
+                                    {c.replacementEmployee?.registration && (
+                                      <span className="ml-1.5 text-[10px] font-mono font-normal text-slate-500">Matr. {c.replacementEmployee.registration}</span>
+                                    )}
+                                  </td>
                                   <td className="px-4 py-2">
                                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${typeClass}`}>{c.type}</span>
                                   </td>
-                                  <td className="px-4 py-2 text-slate-300 text-xs">{c.vacationRequest?.employee?.name ?? '—'}</td>
+                                  <td className="px-4 py-2 text-slate-300 text-xs">
+                                    {c.vacationRequest?.employee?.name ?? '—'}
+                                    {c.vacationRequest?.employee?.registration && (
+                                      <span className="ml-1 text-[10px] font-mono text-slate-500">[{c.vacationRequest.employee.registration}]</span>
+                                    )}
+                                  </td>
                                   <td className="px-4 py-2 text-slate-400 text-xs">
                                     {c.workplacePosition?.workplace?.name ?? '—'}
                                     {c.workplacePosition?.role && <span className="text-slate-600"> / {c.workplacePosition.role}</span>}
