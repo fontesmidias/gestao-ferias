@@ -10,6 +10,7 @@ jobs:
   backend-build:
     name: Backend - Build & Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     services:
       postgres:
@@ -78,6 +79,7 @@ jobs:
   frontend-build:
     name: Frontend - Build & Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     env:
       NEXT_PUBLIC_API_URL: http://localhost:3000/api/v1

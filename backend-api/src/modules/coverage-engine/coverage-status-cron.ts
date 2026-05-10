@@ -81,6 +81,9 @@ export async function runCoverageCronOnce(fastify: FastifyInstance): Promise<Tra
  * (sem reboot). Se enabled=false, o tick e no-op.
  */
 export function registerCoverageStatusCron(fastify: FastifyInstance): void {
+  // No-op em test: setInterval mantem event loop vivo e trava `node --test`.
+  if (process.env.NODE_ENV === 'test') return
+
   // Catch-up no boot (assincrono).
   void (async () => {
     try {
@@ -113,6 +116,8 @@ export function registerCoverageStatusCron(fastify: FastifyInstance): void {
   }
 
   const timer = setInterval(tick, HEARTBEAT_MS)
+  // unref para nao manter event loop vivo se app.close() nao for chamado
+  if (typeof timer.unref === 'function') timer.unref()
   fastify.addHook('onClose', () => {
     clearInterval(timer)
   })

@@ -87,6 +87,7 @@ export function registerReconcileQueuePurge(fastify: FastifyInstance): void {
   }
 
   const timer = setInterval(tick, intervalMs)
+  if (typeof timer.unref === 'function') timer.unref()
   fastify.addHook('onClose', () => {
     clearInterval(timer)
   })
