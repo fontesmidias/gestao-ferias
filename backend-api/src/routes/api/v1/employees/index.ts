@@ -250,11 +250,12 @@ const employees: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     const tenantId = (request.user as any).tenantId
     const rows = await fastify.prisma.employee.findMany({
       where: { tenantId },
-      select: { status: true, branch: true, workplace: true },
+      select: { status: true, branch: true, workplace: true, position: true },
     })
     const branches = new Set<string>()
     const workplaces = new Set<string>()
     const statuses = new Set<string>()
+    const positions = new Set<string>()
     let active = 0
     let vacation = 0
     let leave = 0
@@ -263,6 +264,7 @@ const employees: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       if (r.branch) branches.add(r.branch)
       if (r.workplace) workplaces.add(r.workplace)
       if (r.status) statuses.add(r.status)
+      if (r.position) positions.add(r.position)
       const upper = (r.status ?? '').toUpperCase().trim()
       if (upper === 'ATIVO') active++
       else if (/^F[EÉ]RIAS$/.test(upper)) vacation++
@@ -276,7 +278,104 @@ const employees: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         branches: Array.from(branches).sort((a, b) => a.localeCompare(b, 'pt-BR')),
         workplaces: Array.from(workplaces).sort((a, b) => a.localeCompare(b, 'pt-BR')),
         statuses: Array.from(statuses).sort((a, b) => a.localeCompare(b, 'pt-BR')),
+        positions: Array.from(positions).sort((a, b) => a.localeCompare(b, 'pt-BR')),
       },
+    }
+  })
+
+  // V3.4 FASE F6: edição em massa de campos arbitrários (salary, isFerista,
+  // status, position). Recebe lista de employeeIds + objeto patch.
+  // AuditLog 1 entrada por employee modificado. Idempotente por valor.
+  fastify.patch('/bulk-edit', {
+    onRequest: [fastify.requireAuth],
+    schema: {
+      body: {
+        type: 'object',
+        required: ['employeeIds', 'patch'],
+        properties: {
+          employeeIds: { type: 'array', items: { type: 'string', format: 'uuid' }, maxItems: 5000 },
+          patch: {
+            type: 'object',
+            properties: {
+              salary: { type: 'number', minimum: 0 },
+              isFerista: { type: 'boolean' },
+              status: { type: 'string' },
+              position: { type: 'string' },
+              shift: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const user = request.user as { userId: string; tenantId: string; role: string }
+    if (!['ADMIN', 'SUPERADMIN'].includes(user.role)) {
+      return reply.code(403).send({ data: null, error: { code: 'FORBIDDEN', message: 'Apenas ADMIN/SUPERADMIN.' } })
+    }
+    const body = request.body as { employeeIds: string[]; patch: Record<string, unknown> }
+    if (!body.employeeIds.length || Object.keys(body.patch).length === 0) {
+      return reply.code(400).send({ data: null, error: { code: 'EMPTY_INPUT', message: 'Lista de IDs ou patch vazios.' } })
+    }
+    const employees = await fastify.prisma.employee.findMany({
+      where: { tenantId: user.tenantId, id: { in: body.employeeIds } },
+    })
+    let applied = 0
+    let noop = 0
+    for (const emp of employees) {
+      const previousData: Record<string, unknown> = {}
+      const newData: Record<string, unknown> = {}
+      let changed = false
+      for (const k of Object.keys(body.patch)) {
+        const cur = (emp as unknown as Record<string, unknown>)[k]
+        const next = body.patch[k]
+        const curN = cur === null || cur === undefined ? null : cur
+        const nextN = next === null || next === undefined ? null : next
+        if (typeof curN === 'object' && curN !== null && 'toNumber' in (curN as object)) {
+          // Decimal field (ex: salary)
+          if (Math.abs(Number(curN) - Number(nextN)) >= 0.01) {
+            previousData[k] = Number(curN)
+            newData[k] = nextN
+            changed = true
+          }
+        } else if (curN !== nextN) {
+          previousData[k] = curN
+          newData[k] = nextN
+          changed = true
+        }
+      }
+      if (!changed) {
+        noop++
+        continue
+      }
+      await fastify.prisma.employee.update({
+        where: { id: emp.id },
+        data: body.patch as never,
+      })
+      await fastify.prisma.auditLog.create({
+        data: {
+          tenantId: user.tenantId,
+          userId: user.userId,
+          action: 'EMPLOYEE_BULK_EDIT',
+          resourceType: 'EMPLOYEE',
+          resourceId: emp.id,
+          previousData: previousData as never,
+          newData: newData as never,
+        },
+      })
+      applied++
+    }
+
+    return {
+      data: {
+        summary: {
+          requested: body.employeeIds.length,
+          matched: employees.length,
+          applied,
+          noop,
+          skippedNotFound: body.employeeIds.length - employees.length,
+        },
+      },
+      error: null,
     }
   })
 
@@ -294,16 +393,19 @@ const employees: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
           branch: { type: 'string' },
           limit: { type: 'integer', minimum: 1, maximum: 1000 },
           isFerista: { type: 'string', enum: ['true', 'false'] },
+          position: { type: 'string' },
         },
       },
     },
   }, async (request) => {
     const tenantId = (request.user as any).tenantId
-    const q = request.query as { search?: string; status?: string; workplace?: string; branch?: string; limit?: number; isFerista?: string }
+    const q = request.query as { search?: string; status?: string; workplace?: string; branch?: string; limit?: number; isFerista?: string; position?: string }
     const where: Prisma.EmployeeWhereInput = { tenantId }
     if (q.status) where.status = q.status
     if (q.workplace) where.workplace = q.workplace
     if (q.branch) where.branch = q.branch
+    // V3.4 FASE F7: filtro por cargo (string match exato).
+    if (q.position) where.position = q.position
     // V3.4 FASE C4: filtro 'Apenas Feristas' para o operador identificar
     // rapidamente quem pode cobrir vagas em /coverage.
     if (q.isFerista === 'true') where.isFerista = true

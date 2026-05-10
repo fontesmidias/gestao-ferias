@@ -5,12 +5,14 @@ import { HttpClient } from '@/lib/api-client'
 import {
   Users, Search, Download, Upload, FileSpreadsheet, MoreHorizontal, UserCheck,
   UserMinus, CalendarHeart, Briefcase, MapPin, Building2, LayoutGrid, Clock,
-  X, Phone, Plus
+  X, Phone, Plus, DollarSign, Edit3
 } from 'lucide-react'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { toast } from 'sonner'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { format, parseISO } from 'date-fns'
+import { SalaryImportModal } from '@/components/employees/SalaryImportModal'
+import { BulkEditModal } from '@/components/employees/BulkEditModal'
 
 interface Employee {
   id: string
@@ -56,6 +58,13 @@ export default function EmployeesPage() {
   const [filterStatus, setFilterStatus] = useState('TODOS')
   // V3.4 C4: filtro 'Apenas Feristas' para localizar coberturas potenciais.
   const [filterFerista, setFilterFerista] = useState(false)
+  // V3.4 F7: filtro por cargo (string match exato).
+  const [filterPosition, setFilterPosition] = useState('')
+
+  // V3.4 F5/F6: seleção em massa + modais.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [salaryImportOpen, setSalaryImportOpen] = useState(false)
+  const [bulkEditOpen, setBulkEditOpen] = useState(false)
 
   // Modal state — único form serve para criar e editar
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null)
@@ -84,7 +93,8 @@ export default function EmployeesPage() {
       filterBranch !== '' ||
       filterWorkplace !== '' ||
       filterStatus !== 'TODOS' ||
-      filterFerista
+      filterFerista ||
+      filterPosition !== ''
     if (!hasFilter) {
       setEmployees([])
       setHasSearched(false)
@@ -99,9 +109,11 @@ export default function EmployeesPage() {
         if (filterWorkplace) params.set('workplace', filterWorkplace)
         if (filterStatus !== 'TODOS') params.set('status', filterStatus)
         if (filterFerista) params.set('isFerista', 'true')
+        if (filterPosition) params.set('position', filterPosition)
         const data = await HttpClient.get(`/employees?${params.toString()}`) as Employee[]
         setEmployees(data)
         setHasSearched(true)
+        setSelectedIds(new Set()) // limpa seleção ao re-buscar
       } catch (err) {
         console.error(err)
       } finally {
@@ -109,11 +121,27 @@ export default function EmployeesPage() {
       }
     }, 300)
     return () => clearTimeout(handle)
-  }, [search, filterBranch, filterWorkplace, filterStatus, filterFerista])
+  }, [search, filterBranch, filterWorkplace, filterStatus, filterFerista, filterPosition])
 
   const branches = summary?.facets.branches ?? []
   const workplaces = summary?.facets.workplaces ?? []
   const statusOptions = summary?.facets.statuses ?? []
+  const positionOptions = (summary as any)?.facets?.positions ?? []
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+  const toggleSelectAll = () => {
+    if (selectedIds.size === employees.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(employees.map(e => e.id)))
+    }
+  }
 
   // Filtragem é server-side — mostramos o que veio da API.
   const filtered = employees
@@ -344,6 +372,17 @@ export default function EmployeesPage() {
                 </button>
               </div>
 
+              <div className="min-w-[180px]">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1">Cargo <InfoTooltip text="Filtre por cargo exato. Útil para selecionar todos de um cargo e editar em massa (ex: aplicar salário em todos os 'Recepcionista')." /></label>
+                <select
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary/50"
+                  value={filterPosition} onChange={e => setFilterPosition(e.target.value)}
+                >
+                  <option value="">[ TODOS ]</option>
+                  {positionOptions.map((p: string) => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+
               <div className="flex-[2] min-w-[300px] flex items-center gap-2">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
@@ -362,6 +401,24 @@ export default function EmployeesPage() {
                   <Plus className="w-4 h-4" />
                   <span className="hidden sm:inline">Novo</span>
                 </button>
+                <button
+                  onClick={() => setSalaryImportOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-2 border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 text-sm font-bold rounded-lg hover:bg-emerald-500/20 transition-colors"
+                  title="Importar salários (Dexion XLSX) — preview com divergências antes de aplicar"
+                >
+                  <DollarSign className="w-4 h-4" />
+                  <span className="hidden sm:inline">Salários</span>
+                </button>
+                {selectedIds.size > 0 && (
+                  <button
+                    onClick={() => setBulkEditOpen(true)}
+                    className="flex items-center gap-1.5 px-3 py-2 border border-indigo-500/40 bg-indigo-500/10 text-indigo-300 text-sm font-bold rounded-lg hover:bg-indigo-500/20 transition-colors"
+                    title="Editar campo em todos os selecionados"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                    <span className="hidden sm:inline">Editar {selectedIds.size}</span>
+                  </button>
+                )}
                 <button
                   onClick={handleExportCSV}
                   className="p-2 border border-slate-700 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 hover:text-white transition-colors"
@@ -433,8 +490,17 @@ export default function EmployeesPage() {
               <table className="w-full text-left text-sm whitespace-nowrap">
                 <thead className="sticky top-0 z-20">
                   <tr className="bg-slate-900 border-b border-white/5 text-slate-400 uppercase text-[10px] tracking-wider font-bold shadow-sm">
-                    <th className="px-6 py-3 sticky left-0 z-30 bg-slate-900 border-r border-white/5 min-w-[260px]">
-                      <div className="flex items-center gap-1">Colaborador <InfoTooltip text="Nome completo, matrícula e empresa de registro." /></div>
+                    <th className="px-3 py-3 sticky left-0 z-30 bg-slate-900 border-r border-white/5 w-10">
+                      <input
+                        type="checkbox"
+                        checked={employees.length > 0 && selectedIds.size === employees.length}
+                        onChange={toggleSelectAll}
+                        className="accent-primary cursor-pointer"
+                        title="Selecionar/desmarcar todos"
+                      />
+                    </th>
+                    <th className="px-6 py-3 sticky left-10 z-30 bg-slate-900 border-r border-white/5 min-w-[260px]">
+                      <div className="flex items-center gap-1">Colaborador <InfoTooltip text="Nome completo, matrícula e empresa de registro. Use a checkbox para seleção em massa." /></div>
                     </th>
                     <th className="px-6 py-3"><div className="flex items-center gap-1">Status <InfoTooltip text="Situação atual: verde=ativo, azul=férias, amarelo=afastado, etc." /></div></th>
                     <th className="px-6 py-3">
@@ -460,7 +526,8 @@ export default function EmployeesPage() {
                     <>
                       {[1, 2, 3, 4, 5].map((i) => (
                         <tr key={i} className="animate-pulse">
-                          <td className="px-6 py-3 sticky left-0 z-10 bg-slate-950 border-r border-white/5">
+                          <td className="px-3 py-3 sticky left-0 z-10 bg-slate-950 border-r border-white/5"></td>
+                          <td className="px-6 py-3 sticky left-10 z-10 bg-slate-950 border-r border-white/5">
                             <div className="flex items-center gap-3">
                               <div className="w-8 h-8 rounded-full bg-slate-800/50 shrink-0" />
                               <div className="space-y-1.5">
@@ -481,7 +548,7 @@ export default function EmployeesPage() {
                     </>
                   ) : !hasSearched ? (
                     <tr>
-                      <td colSpan={8} className="px-6 py-16 text-center text-slate-500">
+                      <td colSpan={9} className="px-6 py-16 text-center text-slate-500">
                         <div className="flex flex-col items-center gap-2">
                           <Search className="w-8 h-8 opacity-30" />
                           <p className="text-sm">Use os filtros ou a busca para listar colaboradores.</p>
@@ -491,14 +558,22 @@ export default function EmployeesPage() {
                     </tr>
                   ) : filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-6 py-12 text-center text-slate-500">
+                      <td colSpan={9} className="px-6 py-12 text-center text-slate-500">
                         Nenhum colaborador corresponde aos filtros de busca aplicados.
                       </td>
                     </tr>
                   ) : (
                     filtered.map((emp) => (
-                      <tr key={emp.id} className="hover:bg-white/[0.03] transition-colors group">
-                        <td className="px-6 py-3 sticky left-0 z-10 bg-slate-950 group-hover:bg-[#0d1827] border-r border-white/5">
+                      <tr key={emp.id} className={`hover:bg-white/[0.03] transition-colors group ${selectedIds.has(emp.id) ? 'bg-primary/5' : ''}`}>
+                        <td className="px-3 py-3 sticky left-0 z-10 bg-slate-950 group-hover:bg-[#0d1827] border-r border-white/5">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(emp.id)}
+                            onChange={() => toggleSelect(emp.id)}
+                            className="accent-primary cursor-pointer"
+                          />
+                        </td>
+                        <td className="px-6 py-3 sticky left-10 z-10 bg-slate-950 group-hover:bg-[#0d1827] border-r border-white/5">
                           <div className="flex items-center gap-3">
                             <div className="w-8 h-8 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center font-bold text-xs border border-white/5 shrink-0">
                               {emp.name.charAt(0)}
@@ -659,6 +734,19 @@ export default function EmployeesPage() {
           </div>
         </div>
       )}
+
+      {/* V3.4 FASE F: importer salários Dexion + edição em massa */}
+      <SalaryImportModal
+        open={salaryImportOpen}
+        onClose={() => setSalaryImportOpen(false)}
+        onApplied={() => { fetchSummary(); reloadCurrentList() }}
+      />
+      <BulkEditModal
+        open={bulkEditOpen}
+        selectedEmployeeIds={Array.from(selectedIds)}
+        onClose={() => setBulkEditOpen(false)}
+        onApplied={() => { fetchSummary(); reloadCurrentList(); setSelectedIds(new Set()) }}
+      />
     </div>
   )
 }
