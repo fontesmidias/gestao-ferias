@@ -166,6 +166,83 @@ const employees: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     return updated
   })
 
+  // V3.4 FASE B: saldo CLT detalhado + janela sugerida do periodo concessivo aberto.
+  // Alimenta o modal "Programar Ferias" para mostrar quanto a pessoa pode gozar
+  // e qual janela faz sentido (periodo VENCIDO se houver, senao CONCESSIVO).
+  fastify.get('/:id/vacation-balance', {
+    onRequest: [fastify.requireAuth],
+    schema: { params: { type: 'object', properties: { id: { type: 'string', format: 'uuid' } } } },
+  }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const tenantId = (request.user as any).tenantId
+    const employee = await fastify.prisma.employee.findFirst({
+      where: { id, tenantId },
+      select: {
+        id: true, name: true, hireDate: true, balanceOffset: true,
+        requests: {
+          where: { status: { in: ['APPROVED', 'PENDING', 'SIGNED', 'COMPLETED'] } },
+          select: { startDate: true, endDate: true, days: true, status: true },
+        },
+      },
+    })
+    if (!employee) {
+      return reply.code(404).send({ data: null, error: { code: 'EMPLOYEE_NOT_FOUND', message: 'Colaborador nao encontrado.' } })
+    }
+    const periods = VacationEngine.calculatePeriodsWithUsage(
+      employee.hireDate,
+      employee.requests,
+      0,
+      employee.balanceOffset,
+    )
+    const totalAvailable = periods.reduce((acc, p) => acc + p.daysOfRight, 0)
+    // Janela sugerida: prioriza VENCIDO com saldo > 0 (urgente); senao CONCESSIVO.
+    const urgent = periods.find(p => p.status === 'VENCIDO' && p.daysOfRight > 0)
+    const concessivo = periods.find(p => p.status === 'CONCESSIVO' && p.daysOfRight > 0)
+    const target = urgent ?? concessivo ?? null
+    const now = new Date()
+    let suggestion: { startDate: string; endDate: string; days: number; reason: string } | null = null
+    if (target) {
+      // Limite: nao sugerir antes de hoje, nao depois do concessiveEndDate.
+      const earliestStart = now > target.startDate ? now : target.startDate
+      const latestEnd = target.concessiveEndDate
+      const days = Math.min(target.daysOfRight, 30)
+      const start = new Date(earliestStart)
+      const end = new Date(start)
+      end.setDate(end.getDate() + days - 1)
+      // Se o end estourar concessiveEnd, ancora no fim e recua start.
+      if (end > latestEnd) {
+        end.setTime(latestEnd.getTime())
+        start.setTime(end.getTime())
+        start.setDate(start.getDate() - days + 1)
+      }
+      suggestion = {
+        startDate: start.toISOString().slice(0, 10),
+        endDate: end.toISOString().slice(0, 10),
+        days,
+        reason: target.status === 'VENCIDO'
+          ? `Periodo VENCIDO desde ${target.endDate.toISOString().slice(0, 10)}, urgente (multa CLT Art. 137).`
+          : `Periodo CONCESSIVO aberto, prazo final ${latestEnd.toISOString().slice(0, 10)}.`,
+      }
+    }
+    return {
+      data: {
+        employeeId: employee.id,
+        employeeName: employee.name,
+        hireDate: employee.hireDate.toISOString().slice(0, 10),
+        totalAvailable,
+        periods: periods.map(p => ({
+          startDate: p.startDate.toISOString().slice(0, 10),
+          endDate: p.endDate.toISOString().slice(0, 10),
+          concessiveEndDate: p.concessiveEndDate.toISOString().slice(0, 10),
+          daysOfRight: p.daysOfRight,
+          status: p.status,
+        })),
+        suggestion,
+      },
+      error: null,
+    }
+  })
+
   // Summary leve: KPIs + facets para alimentar dropdowns sem trazer 1k+ rows.
   fastify.get('/summary', {
     onRequest: [fastify.requireAuth]
