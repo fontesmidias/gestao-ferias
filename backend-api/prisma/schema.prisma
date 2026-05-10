@@ -470,6 +470,11 @@ model SystemConfig {
   evoApiUrl          String?   @map("evo_api_url")
   evoApiKey          String?   @map("evo_api_key")
   evoInstanceName    String?   @map("evo_instance_name")
+  // V3.4 FASE H3: cron de transicao de status de CoverageAssignment
+  coverageCronEnabled       Boolean   @default(true)  @map("coverage_cron_enabled")
+  coverageCronIntervalHours Int       @default(6)     @map("coverage_cron_interval_hours")
+  coverageCronLastRunAt     DateTime? @map("coverage_cron_last_run_at")
+  coverageCronLastResult    Json?     @map("coverage_cron_last_result")
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 

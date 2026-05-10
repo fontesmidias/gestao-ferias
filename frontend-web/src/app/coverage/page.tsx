@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { Shield, AlertTriangle, Users, Calendar, ChevronLeft, ChevronRight, UserCheck, FileSpreadsheet, Upload, ArrowLeft, Pencil, Trash2, X } from 'lucide-react'
+import { Shield, AlertTriangle, Users, Calendar, ChevronLeft, ChevronRight, UserCheck, FileSpreadsheet, Upload, ArrowLeft, Pencil, Trash2, X, Settings, Play } from 'lucide-react'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { HttpClient } from '@/lib/api-client'
@@ -147,6 +147,44 @@ export default function CoveragePage() {
   const [editStatus, setEditStatus] = useState<'PLANNED' | 'ACTIVE' | 'COMPLETED'>('PLANNED')
   const [editCost, setEditCost] = useState<string>('')
   const [editSubmitting, setEditSubmitting] = useState(false)
+
+  // V3.4 FASE H3: gestao do cron de transicao de status
+  const [cronOpen, setCronOpen] = useState(false)
+  const [cronCfg, setCronCfg] = useState<{ enabled: boolean; intervalHours: number; lastRunAt: string | null; lastResult: { toActive: number; toCompleted: number; durationMs: number } | null } | null>(null)
+  const [cronSaving, setCronSaving] = useState(false)
+  const [cronRunning, setCronRunning] = useState(false)
+  const fetchCronCfg = useCallback(async () => {
+    try {
+      const res: any = await HttpClient.get('/admin/coverage-cron')
+      setCronCfg(res?.data ?? null)
+    } catch (err: any) {
+      if (err?.status === 403) return // operador comum nao precisa
+      toast.error('Erro ao carregar configuracao do cron.')
+    }
+  }, [])
+  const saveCronCfg = async (patch: { enabled?: boolean; intervalHours?: number }) => {
+    try {
+      setCronSaving(true)
+      const res: any = await HttpClient.patch('/admin/coverage-cron', patch)
+      setCronCfg(res?.data ?? null)
+      toast.success('Configuracao salva.')
+    } catch (err: any) {
+      toast.error(err?.body?.error?.message || 'Erro ao salvar.')
+    } finally { setCronSaving(false) }
+  }
+  const runCronNow = async () => {
+    try {
+      setCronRunning(true)
+      const res: any = await HttpClient.post('/admin/coverage-cron/run', {})
+      const d = res?.data
+      toast.success(`Cron executado: ${d?.toActive ?? 0} -> ATIVA, ${d?.toCompleted ?? 0} -> CONCLUIDA (${d?.durationMs ?? 0}ms).`, { duration: 8000 })
+      await fetchCronCfg()
+      fetchData()
+    } catch (err: any) {
+      toast.error(err?.body?.error?.message || 'Erro ao executar.')
+    } finally { setCronRunning(false) }
+  }
+  useEffect(() => { fetchCronCfg() }, [fetchCronCfg])
 
   // ---------- Data fetching ----------
 
@@ -522,6 +560,20 @@ export default function CoveragePage() {
             >
               Por mês
             </button>
+            {cronCfg && (
+              <button
+                onClick={() => setCronOpen(o => !o)}
+                className={`px-3 py-1 text-xs font-bold rounded-lg transition-colors flex items-center gap-1 ${
+                  cronCfg.enabled
+                    ? 'text-emerald-300 hover:bg-slate-800'
+                    : 'text-amber-300 hover:bg-slate-800'
+                }`}
+                title={cronCfg.enabled ? `Cron ativo (${cronCfg.intervalHours}h)` : 'Cron desativado'}
+              >
+                <Settings className="w-3 h-3" />
+                Cron {cronCfg.enabled ? `(${cronCfg.intervalHours}h)` : '(off)'}
+              </button>
+            )}
             {viewMode === 'month' && (
               <>
                 <div className="w-px h-6 bg-slate-700 mx-1" />
@@ -548,6 +600,68 @@ export default function CoveragePage() {
             )}
           </div>
         </div>
+
+        {/* V3.4 FASE H3: painel de gestao do cron de transicao de status */}
+        {cronOpen && cronCfg && (
+          <div className="glass-card rounded-2xl border border-white/5 mb-6 p-4">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div>
+                <h4 className="font-bold text-white text-sm flex items-center gap-2">
+                  <Settings className="w-4 h-4 text-primary" /> Cron de transição automática de status
+                  <InfoTooltip text="Move coberturas PLANEJADAS para ATIVAS quando a data de início chega, e ATIVAS para CONCLUÍDAS quando a data de fim passa. Configuração persistida no banco." />
+                </h4>
+                <p className="text-xs text-slate-400 mt-1">
+                  {cronCfg.lastRunAt
+                    ? <>Última execução: <span className="text-slate-300 font-mono">{format(parseISO(cronCfg.lastRunAt), 'dd/MM/yyyy HH:mm')}</span> · {cronCfg.lastResult?.toActive ?? 0} → ATIVA, {cronCfg.lastResult?.toCompleted ?? 0} → CONCLUÍDA ({cronCfg.lastResult?.durationMs ?? 0}ms)</>
+                    : <>Nunca executado.</>}
+                </p>
+              </div>
+              <button onClick={() => setCronOpen(false)} className="p-1 text-slate-400 hover:text-white"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={cronCfg.enabled}
+                    disabled={cronSaving}
+                    onChange={e => saveCronCfg({ enabled: e.target.checked })}
+                    className="accent-primary"
+                  />
+                  <span className="text-sm text-slate-300">Cron ativo</span>
+                </label>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Intervalo (h)</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={168}
+                  value={cronCfg.intervalHours}
+                  disabled={cronSaving || !cronCfg.enabled}
+                  onChange={e => setCronCfg(c => c ? { ...c, intervalHours: Number(e.target.value) } : c)}
+                  onBlur={e => {
+                    const v = Number(e.target.value)
+                    if (Number.isFinite(v) && v >= 1 && v <= 168) saveCronCfg({ intervalHours: v })
+                  }}
+                  className="w-24 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary/50 disabled:opacity-50"
+                />
+                <span className="text-xs text-slate-500">(min 1, max 168 = 1 semana)</span>
+              </div>
+              <div className="flex justify-end">
+                <button
+                  onClick={runCronNow}
+                  disabled={cronRunning}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary/90 text-white text-xs font-bold rounded-lg shadow-lg shadow-primary/20 disabled:opacity-50"
+                  title="Executar transição agora (não aguarda o próximo tick)"
+                >
+                  <Play className="w-3 h-3" />
+                  {cronRunning ? 'Executando...' : 'Rodar agora'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <ErrorBoundary>
           {loading ? (
