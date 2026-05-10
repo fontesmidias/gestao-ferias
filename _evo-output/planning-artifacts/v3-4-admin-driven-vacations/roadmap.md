@@ -78,58 +78,72 @@ visual de cobertura nem timeline Gantt — esses ficam na V3.4 completa.
 
 ---
 
-## V3.4 completo (deferido para depois do MVP)
+## V3.4 completo — Status auditado em 2026-05-10
 
-Backlog ordenado, a ser detalhado em PRD/Architecture/UX antes da execução.
+Após o MVP overnight (FASES A-H entregues), auditoria do que JÁ está em
+produção vs. o que falta. Backlog reorganizado por prioridade real.
+
+Legenda: ✅ DONE · 🟡 PARTIAL · ❌ NOT_STARTED
 
 ### Epic V3.4.1 — Wizard de planejamento de cobertura
 
-- **Story 4.1:** Visualização timeline Gantt (próximos 90d) das férias
-  programadas + coberturas planejadas, agrupada por posto/cargo.
-- **Story 4.2:** Wizard "Casar cobertura": dada uma VacationRequest APPROVED,
-  o sistema mostra feristas disponíveis (sem conflito) ordenados por adequação
-  (cargo igual, escala compatível, proximidade geográfica se houver, custo).
-- **Story 4.3:** Encadeamento automático de feristas para férias longas
-  (30 dias = 2-3 feristas em sequência sem overlap).
-- **Story 4.4:** "Atribuir cobertura em lote" — admin seleciona múltiplas férias
-  do mês e o sistema sugere alocação ótima de feristas.
+- ✅ **4.1** Timeline Gantt em `/coverage` agrupando férias × postos
+  (`frontend-web/src/app/coverage/page.tsx` linhas 593–668). Janela toggle
+  90d/mês. Falta apenas drag-drop (vê 4.15).
+- 🟡 **4.2** Wizard "Casar cobertura": panel slide-in com ranking de feristas
+  por cargo (identical/family/any), encadeamento, custo estimado. Cobre o
+  caminho principal. Falta wizard multi-passo guiado tipo "stepper".
+- 🟡 **4.3** Encadeamento: backend `detectChaining()` + badge "Encadeia" no
+  modal já existem. Falta auto-cascade que cria 2-3 coberturas sequenciais
+  numa única ação.
+- ❌ **4.4** Atribuição em lote: hoje só status update bulk (`PATCH
+  /vacations/bulk`). Falta selecionar várias férias e atribuir feristas
+  ótimos em massa.
 
-### Epic V3.4.2 — Validações sistêmicas anti-erro (lista do EVO Master)
+### Epic V3.4.2 — Validações anti-erro
 
-- **Story 4.5:** UNIQUE constraint funcional: `CoverageAssignment` ACTIVE não
-  pode sobrepor para o mesmo `coveringEmployeeId` (igual à V3.3 fez para
-  Allocation). Migration aditiva.
-- **Story 4.6:** Validação no backend ao criar VacationRequest: se colaborador
-  é ferista de cobertura ACTIVE, bloqueia ou pede confirmação explícita.
-- **Story 4.7:** Validação ao mover Allocation: se employee tem férias
-  programadas, recalcular impacto na cobertura existente.
-- **Story 4.8:** Política configurável por posto crítico: "Bloquear aprovação
-  de férias se posto fica vago e não há cobertura planejada".
-- **Story 4.9:** Detecção de feriado dentro de período de férias — calcular
-  conforme CLT Art. 134 (feriado conta como dia útil de gozo).
-- **Story 4.10:** Validação de fracionamento CLT (Art. 134 §1º): mín. 14 dias
-  contínuos em um dos períodos quando fracionado.
+- ❌ **4.5** UNIQUE partial index no DB para `CoverageAssignment` ACTIVE
+  (hoje só validação aplicacional em coverages/index.ts:65). Race condition
+  pode duplicar. **PRIORIDADE 1.**
+- ❌ **4.6** Bloquear criar VacationRequest se colaborador tem
+  `CoverageAssignment` ACTIVE no período. **PRIORIDADE 2.**
+- ❌ **4.7** Recalcular cobertura impactada ao mover Allocation.
+- ❌ **4.8** Política por posto crítico (bloquear férias se posto fica vago).
+- ✅ **4.9** Feriado dentro de período (CLT Art. 134) já validado em
+  `vacation-engine.ts:280` via `holidayResolver.isHoliday()`.
+- ✅ **4.10** Fracionamento Art. 134 §1º (3 frações, ≥14d em uma delas)
+  implementado em `vacation-engine.ts:validateRequest`.
 
 ### Epic V3.4.3 — Single-Source-of-Truth de KPIs
 
-- **Story 4.11:** Centralizar lógica de classificação de status do colaborador
-  (ATIVO/FÉRIAS/AFASTADO) em service compartilhado backend, eliminando regex
-  duplicado em 4 lugares (dashboard, employees, summary, frontend).
-- **Story 4.12:** Endpoint `/v1/operational-status` consolidado: dado um
-  período (default = D0), retorna por colaborador o status efetivo
-  (considerando VacationRequest APPROVED ativo, AFASTAMENTO, etc).
-- **Story 4.13:** Dashboard, /employees e /coverage passam a consumir esse
-  endpoint único — fim das divergências silenciosas entre páginas.
+- 🟡 **4.11** Classificação ATIVO/FÉRIAS/AFASTADO duplicada em
+  dashboard/index.ts:26-36 + coverage-engine + employees summary. Service
+  centralizado falta. **PRIORIDADE 3.**
+- ❌ **4.12** Endpoint `/v1/operational-status` consolidado.
+- ❌ **4.13** Páginas consumirem o endpoint único.
 
-### Epic V3.4.4 — UX visual da timeline
+### Epic V3.4.4 — UX timeline rica
 
-- **Story 4.14:** Componente `<VacationTimeline>` com tracks por posto, blocos
-  de férias coloridos por status (PROGRAMADA / EM ANDAMENTO / CONCLUÍDA),
-  blocos de cobertura sobrepostos.
-- **Story 4.15:** Drag-and-drop para reagendar férias (com validação CLT em
-  tempo real).
-- **Story 4.16:** Filtros: por posto, por gerente, por mês, "só mostrar postos
-  com gap descoberto".
+- 🟡 **4.14** `<VacationTimeline>`: o Gantt de 4.1 já cobre o básico. Tracks
+  por posto OK, falta só blocos de cobertura sobrepostos coloridos.
+- ❌ **4.15** Drag-drop reagendar.
+- ❌ **4.16** Filtros (posto/gerente/mês/só com gap).
+
+---
+
+## Próxima rodada (ordem recomendada)
+
+1. **4.5** UNIQUE partial index `coverage_assignments_unique_active` —
+   migration aditiva + catch P2002 no service. ~1h.
+2. **4.6** Validação anti-overlap ao criar VacationRequest para ferista
+   alocado. ~1h.
+3. **4.11+4.12+4.13** SSoT operational-status: service + endpoint +
+   refactor dashboard/employees/coverage pra consumir. ~3-4h.
+4. **4.4** Bulk coverage assign — fácil reaproveitar /coverages/suggestions.
+5. **4.8** Política posto crítico — flag em Workplace + check no approval.
+
+V3.5 (DB normalização) fica para DEPOIS desta rodada — pré-condição era
+"V3.4 estável" e ainda há os bugs de race condition acima.
 
 ---
 

@@ -138,6 +138,42 @@ const programmedVacations: FastifyPluginAsync = async (fastify) => {
       })
     }
 
+    // V3.4 Story 4.6: bloqueia se este colaborador esta como replacement em
+    // CoverageAssignment PLANNED/ACTIVE sobreposta. Override por overrideOverlap=true.
+    const conflictingCoverage = await fastify.prisma.coverageAssignment.findFirst({
+      where: {
+        tenantId: user.tenantId,
+        replacementEmployeeId: body.employeeId,
+        status: { in: ['PLANNED', 'ACTIVE'] },
+        AND: [
+          { startDate: { lte: end } },
+          { endDate: { gte: start } },
+        ],
+      },
+      include: {
+        workplacePosition: { select: { role: true, workplace: { select: { name: true } } } },
+        vacationRequest: { select: { employee: { select: { name: true } } } },
+      },
+    })
+    if (conflictingCoverage && !body.overrideOverlap) {
+      return reply.code(409).send({
+        data: null,
+        error: {
+          code: 'EMPLOYEE_HAS_ACTIVE_COVERAGE',
+          message: `${employee.name} esta atribuido como substituto em cobertura ${conflictingCoverage.status} de ${conflictingCoverage.vacationRequest.employee.name} (${conflictingCoverage.workplacePosition.workplace.name} / ${conflictingCoverage.workplacePosition.role}). Remova/reagende a cobertura ou marque overrideOverlap.`,
+          conflict: {
+            coverageId: conflictingCoverage.id,
+            status: conflictingCoverage.status,
+            startDate: conflictingCoverage.startDate,
+            endDate: conflictingCoverage.endDate,
+            coveringFor: conflictingCoverage.vacationRequest.employee.name,
+            workplace: conflictingCoverage.workplacePosition.workplace.name,
+            role: conflictingCoverage.workplacePosition.role,
+          },
+        },
+      })
+    }
+
     // Cria APPROVED com dispatchNote indicando origem.
     const note = body.dispatchNote?.trim() || 'Programada pelo RH'
     const created = await fastify.prisma.vacationRequest.create({

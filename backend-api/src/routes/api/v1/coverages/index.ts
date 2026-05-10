@@ -95,24 +95,42 @@ const coverages: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       })
     }
 
-    const coverage = await fastify.prisma.coverageAssignment.create({
-      data: {
-        vacationRequestId: data.vacationRequestId,
-        replacementEmployeeId: data.replacementEmployeeId,
-        workplacePositionId: data.workplacePositionId,
-        startDate: start,
-        endDate: end,
-        type: data.type,
-        status: 'ACTIVE',
-        cost: data.cost || null,
-        tenantId
-      },
-      include: {
-        replacementEmployee: { select: { id: true, name: true, employeeType: true, registration: true } },
-        workplacePosition: { select: { id: true, role: true, workplace: { select: { id: true, name: true } } } },
-        vacationRequest: { select: { id: true, startDate: true, endDate: true, employee: { select: { name: true, registration: true } } } }
+    let coverage
+    try {
+      coverage = await fastify.prisma.coverageAssignment.create({
+        data: {
+          vacationRequestId: data.vacationRequestId,
+          replacementEmployeeId: data.replacementEmployeeId,
+          workplacePositionId: data.workplacePositionId,
+          startDate: start,
+          endDate: end,
+          type: data.type,
+          status: 'ACTIVE',
+          cost: data.cost || null,
+          tenantId
+        },
+        include: {
+          replacementEmployee: { select: { id: true, name: true, employeeType: true, registration: true } },
+          workplacePosition: { select: { id: true, role: true, workplace: { select: { id: true, name: true } } } },
+          vacationRequest: { select: { id: true, startDate: true, endDate: true, employee: { select: { name: true, registration: true } } } }
+        }
+      })
+    } catch (err: any) {
+      // Story 4.5: trata violacao da EXCLUDE constraint coverage_assignments_no_overlap_active
+      // (caso a checagem aplicacional acima escape sob race condition).
+      const sqlState = err?.meta?.code || err?.code
+      const msg = String(err?.message || '')
+      if (sqlState === '23P01' || msg.includes('coverage_assignments_no_overlap_active')) {
+        return reply.code(409).send({
+          data: null,
+          error: {
+            code: 'COVERAGE_OVERLAP_DB',
+            message: `${replacement.name} ja possui cobertura sobreposta no banco (constraint anti-overlap acionada).`,
+          },
+        })
       }
-    })
+      throw err
+    }
 
     coverageEventBus.emit(tenantId, {
       type: 'coverage.created',

@@ -208,6 +208,41 @@ const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       })
     }
 
+    // V3.4 Story 4.6: bloqueia se este colaborador esta como replacement em
+    // CoverageAssignment PLANNED/ACTIVE sobreposta ao periodo. Caso contrario,
+    // o ferista entraria de ferias enquanto deveria estar cobrindo outro.
+    const conflictingCoverage = await fastify.prisma.coverageAssignment.findFirst({
+      where: {
+        tenantId,
+        replacementEmployeeId: employeeId,
+        status: { in: ['PLANNED', 'ACTIVE'] },
+        AND: [
+          { startDate: { lte: end } },
+          { endDate: { gte: start } },
+        ],
+      },
+      include: {
+        workplacePosition: { select: { role: true, workplace: { select: { name: true } } } },
+        vacationRequest: { select: { employee: { select: { name: true } } } },
+      },
+    })
+    if (conflictingCoverage) {
+      return reply.code(409).send({
+        error: 'Coverage Conflict',
+        code: 'EMPLOYEE_HAS_ACTIVE_COVERAGE',
+        message: `${employee.name} esta atribuido como substituto em cobertura ${conflictingCoverage.status} de ${conflictingCoverage.vacationRequest.employee.name} (${conflictingCoverage.workplacePosition.workplace.name} / ${conflictingCoverage.workplacePosition.role}) no periodo. Remova ou reagende a cobertura antes de programar ferias.`,
+        conflict: {
+          coverageId: conflictingCoverage.id,
+          status: conflictingCoverage.status,
+          startDate: conflictingCoverage.startDate,
+          endDate: conflictingCoverage.endDate,
+          coveringFor: conflictingCoverage.vacationRequest.employee.name,
+          workplace: conflictingCoverage.workplacePosition.workplace.name,
+          role: conflictingCoverage.workplacePosition.role,
+        },
+      })
+    }
+
     // 3. Persistência
     const vacationRequest = await fastify.prisma.vacationRequest.create({
       data: {
