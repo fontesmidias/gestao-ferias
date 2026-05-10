@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { Shield, AlertTriangle, Users, Calendar, ChevronLeft, ChevronRight, UserCheck, FileSpreadsheet, Upload, ArrowLeft } from 'lucide-react'
+import { Shield, AlertTriangle, Users, Calendar, ChevronLeft, ChevronRight, UserCheck, FileSpreadsheet, Upload, ArrowLeft, Pencil, Trash2, X } from 'lucide-react'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { HttpClient } from '@/lib/api-client'
@@ -65,11 +65,14 @@ interface Coverage {
   id: string
   vacationRequestId: string
   replacementEmployeeId: string
-  status: string
+  status: 'PLANNED' | 'ACTIVE' | 'COMPLETED'
   startDate: string
   endDate: string
   type: string
-  cost: number
+  cost: number | null
+  replacementEmployee?: { id: string; name: string; employeeType: string }
+  workplacePosition?: { id: string; role: string; workplace: { id: string; name: string } }
+  vacationRequest?: { id: string; startDate: string; endDate: string; employee: { name: string } }
 }
 
 interface CoverageKpis {
@@ -136,6 +139,14 @@ export default function CoveragePage() {
   const [selectedType, setSelectedType] = useState<string>('')
   const [selectedCost, setSelectedCost] = useState<number>(0)
   const [submitting, setSubmitting] = useState(false)
+
+  // V3.4 FASE H: gestao de coberturas atribuidas (listar/editar/excluir/CSV)
+  const [showCoveragesPanel, setShowCoveragesPanel] = useState(true)
+  const [coverageStatusFilter, setCoverageStatusFilter] = useState<'ALL' | 'PLANNED' | 'ACTIVE' | 'COMPLETED'>('ALL')
+  const [editCoverage, setEditCoverage] = useState<Coverage | null>(null)
+  const [editStatus, setEditStatus] = useState<'PLANNED' | 'ACTIVE' | 'COMPLETED'>('PLANNED')
+  const [editCost, setEditCost] = useState<string>('')
+  const [editSubmitting, setEditSubmitting] = useState(false)
 
   // ---------- Data fetching ----------
 
@@ -323,6 +334,94 @@ export default function CoveragePage() {
       }
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  // ---------- Coverage management (V3.4 FASE H) ----------
+
+  const filteredCoverages = coverageStatusFilter === 'ALL'
+    ? coverages
+    : coverages.filter(c => c.status === coverageStatusFilter)
+
+  const exportCoveragesCsv = () => {
+    if (filteredCoverages.length === 0) {
+      toast.error('Nenhuma cobertura para exportar.')
+      return
+    }
+    const headers = ['Substituto', 'Tipo', 'Cobrindo', 'Posto', 'Cargo', 'Inicio', 'Fim', 'Status', 'Custo']
+    const rows = filteredCoverages.map(c => [
+      c.replacementEmployee?.name ?? '',
+      c.type,
+      c.vacationRequest?.employee?.name ?? '',
+      c.workplacePosition?.workplace?.name ?? '',
+      c.workplacePosition?.role ?? '',
+      format(parseISO(c.startDate), 'dd/MM/yyyy'),
+      format(parseISO(c.endDate), 'dd/MM/yyyy'),
+      c.status,
+      c.cost != null ? Number(c.cost).toFixed(2).replace('.', ',') : '',
+    ])
+    const csv = [headers, ...rows]
+      .map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(';'))
+      .join('\r\n')
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `coberturas-${format(new Date(), 'yyyy-MM-dd')}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    toast.success(`${filteredCoverages.length} cobertura(s) exportada(s).`)
+  }
+
+  const openEditCoverage = (c: Coverage) => {
+    setEditCoverage(c)
+    setEditStatus(c.status)
+    setEditCost(c.cost != null ? String(c.cost) : '')
+  }
+
+  const submitEditCoverage = async () => {
+    if (!editCoverage) return
+    const payload: { status?: string; cost?: number } = {}
+    if (editStatus !== editCoverage.status) payload.status = editStatus
+    const costNum = editCost === '' ? null : Number(editCost.replace(',', '.'))
+    if (costNum !== null && (!Number.isFinite(costNum) || costNum < 0)) {
+      toast.error('Custo invalido.')
+      return
+    }
+    if (costNum !== null && costNum !== editCoverage.cost) payload.cost = costNum
+    if (Object.keys(payload).length === 0) {
+      toast('Nada a alterar.')
+      setEditCoverage(null)
+      return
+    }
+    try {
+      setEditSubmitting(true)
+      await HttpClient.patch(`/coverages/${editCoverage.id}`, payload)
+      toast.success('Cobertura atualizada.')
+      setEditCoverage(null)
+      fetchData()
+    } catch (e: any) {
+      toast.error(e?.body?.error?.message || e?.message || 'Erro ao atualizar.')
+    } finally {
+      setEditSubmitting(false)
+    }
+  }
+
+  const deleteCoverage = async (c: Coverage) => {
+    if (c.status !== 'PLANNED') {
+      toast.error('Apenas coberturas PLANEJADAS podem ser excluidas. Para coberturas em andamento, marque como Concluida pela edicao.')
+      return
+    }
+    const who = c.replacementEmployee?.name ?? 'cobertura'
+    if (!confirm(`Excluir cobertura de ${who}?\n\nEsta acao nao pode ser desfeita.`)) return
+    try {
+      await HttpClient.delete(`/coverages/${c.id}`)
+      toast.success('Cobertura removida.')
+      fetchData()
+    } catch (e: any) {
+      toast.error(e?.body?.error?.message || e?.message || 'Erro ao excluir.')
     }
   }
 
@@ -667,6 +766,119 @@ export default function CoveragePage() {
                 </div>
               )}
 
+              {/* V3.4 FASE H: Coberturas Atribuidas (gestao + CSV) */}
+              {coverages.length > 0 && (
+                <div className="glass-card rounded-2xl border border-white/5 overflow-hidden mb-6">
+                  <div className="p-4 border-b border-white/5 flex flex-wrap items-center justify-between gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowCoveragesPanel(p => !p)}
+                      className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                    >
+                      <Shield className="w-4 h-4 text-emerald-400" />
+                      <h3 className="font-bold text-sm text-white uppercase tracking-wider">
+                        Coberturas Atribuídas ({coverages.length})
+                      </h3>
+                      <InfoTooltip text="Lista de todas as coberturas (planejadas, ativas, concluídas) no escopo carregado. Clique em Editar para alterar status/custo ou em Excluir para remover (apenas PLANEJADAS)." />
+                      <span className="text-xs text-slate-500">{showCoveragesPanel ? 'Recolher' : 'Expandir'}</span>
+                    </button>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={coverageStatusFilter}
+                        onChange={e => setCoverageStatusFilter(e.target.value as 'ALL' | 'PLANNED' | 'ACTIVE' | 'COMPLETED')}
+                        className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:ring-1 focus:ring-primary/50"
+                      >
+                        <option value="ALL">Todos os status</option>
+                        <option value="PLANNED">Planejadas</option>
+                        <option value="ACTIVE">Ativas</option>
+                        <option value="COMPLETED">Concluídas</option>
+                      </select>
+                      <button
+                        onClick={exportCoveragesCsv}
+                        className="flex items-center gap-1 px-2.5 py-1 border border-slate-700 text-emerald-300 rounded-lg text-xs font-bold hover:bg-slate-800 transition-colors"
+                        title="Exportar coberturas filtradas para CSV"
+                      >
+                        <FileSpreadsheet className="w-3 h-3" /> CSV
+                      </button>
+                    </div>
+                  </div>
+                  {showCoveragesPanel && (
+                    <div className="overflow-x-auto">
+                      {filteredCoverages.length === 0 ? (
+                        <p className="p-6 text-sm text-slate-500 text-center">Nenhuma cobertura no filtro atual.</p>
+                      ) : (
+                        <table className="w-full text-sm">
+                          <thead className="bg-slate-900/50 text-[10px] uppercase tracking-wider text-slate-400">
+                            <tr>
+                              <th className="text-left px-4 py-2">Substituto</th>
+                              <th className="text-left px-4 py-2">Tipo</th>
+                              <th className="text-left px-4 py-2">Cobrindo</th>
+                              <th className="text-left px-4 py-2">Posto / Cargo</th>
+                              <th className="text-left px-4 py-2">Período</th>
+                              <th className="text-right px-4 py-2">Custo</th>
+                              <th className="text-left px-4 py-2">Status</th>
+                              <th className="text-right px-4 py-2">Ações</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-white/5">
+                            {filteredCoverages.map(c => {
+                              const typeClass = c.type === 'FERISTA'
+                                ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30'
+                                : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                              const statusClass = c.status === 'ACTIVE'
+                                ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                                : c.status === 'PLANNED'
+                                  ? 'bg-sky-500/15 text-sky-300 border-sky-500/30'
+                                  : 'bg-slate-700/40 text-slate-400 border-slate-600/50'
+                              const statusLabel = c.status === 'ACTIVE' ? 'Ativa' : c.status === 'PLANNED' ? 'Planejada' : 'Concluída'
+                              return (
+                                <tr key={c.id} className="hover:bg-white/[0.02]">
+                                  <td className="px-4 py-2 text-white font-bold text-[13px]">{c.replacementEmployee?.name ?? '—'}</td>
+                                  <td className="px-4 py-2">
+                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${typeClass}`}>{c.type}</span>
+                                  </td>
+                                  <td className="px-4 py-2 text-slate-300 text-xs">{c.vacationRequest?.employee?.name ?? '—'}</td>
+                                  <td className="px-4 py-2 text-slate-400 text-xs">
+                                    {c.workplacePosition?.workplace?.name ?? '—'}
+                                    {c.workplacePosition?.role && <span className="text-slate-600"> / {c.workplacePosition.role}</span>}
+                                  </td>
+                                  <td className="px-4 py-2 text-slate-300 text-xs font-mono whitespace-nowrap">
+                                    {format(parseISO(c.startDate), 'dd/MM')} – {format(parseISO(c.endDate), 'dd/MM/yy')}
+                                  </td>
+                                  <td className="px-4 py-2 text-right text-emerald-400 font-mono text-xs whitespace-nowrap">
+                                    {c.cost != null ? fmtBRL(Number(c.cost)) : '—'}
+                                  </td>
+                                  <td className="px-4 py-2">
+                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${statusClass}`}>{statusLabel}</span>
+                                  </td>
+                                  <td className="px-4 py-2 text-right whitespace-nowrap">
+                                    <button
+                                      onClick={() => openEditCoverage(c)}
+                                      className="text-xs text-slate-300 hover:text-white px-2 py-1 rounded hover:bg-slate-800 inline-flex items-center gap-1"
+                                      title="Editar status e custo"
+                                    >
+                                      <Pencil className="w-3 h-3" /> Editar
+                                    </button>
+                                    <button
+                                      onClick={() => deleteCoverage(c)}
+                                      disabled={c.status !== 'PLANNED'}
+                                      className="text-xs text-rose-300 hover:text-rose-200 px-2 py-1 rounded hover:bg-rose-500/10 disabled:opacity-30 disabled:cursor-not-allowed inline-flex items-center gap-1 ml-1"
+                                      title={c.status !== 'PLANNED' ? 'Apenas coberturas PLANEJADAS podem ser excluídas. Para ativas/concluídas, edite o status.' : 'Excluir cobertura'}
+                                    >
+                                      <Trash2 className="w-3 h-3" /> Excluir
+                                    </button>
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Gaps List */}
               <div className="glass-card rounded-2xl border border-white/5 overflow-hidden">
                 <div className="p-6 border-b border-white/5 flex items-center justify-between">
@@ -943,6 +1155,82 @@ export default function CoveragePage() {
             </div>
           </div>
         </>
+      )}
+
+      {/* V3.4 FASE H: modal de edicao de cobertura */}
+      {editCoverage && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => !editSubmitting && setEditCoverage(null)}
+        >
+          <div
+            className="glass-card bg-slate-800 border border-white/10 rounded-2xl w-full max-w-md mx-4 p-6"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-xl font-bold text-white">Editar Cobertura</h3>
+              <button
+                onClick={() => !editSubmitting && setEditCoverage(null)}
+                className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-md"
+                disabled={editSubmitting}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="mb-4 bg-slate-900/50 border border-white/5 rounded-xl p-3 text-xs text-slate-300">
+              <p><strong className="text-white">{editCoverage.replacementEmployee?.name}</strong> cobrindo <strong className="text-white">{editCoverage.vacationRequest?.employee?.name}</strong></p>
+              <p className="text-slate-500 mt-1">{editCoverage.workplacePosition?.workplace?.name} / {editCoverage.workplacePosition?.role}</p>
+              <p className="text-slate-500">{format(parseISO(editCoverage.startDate), 'dd/MM/yyyy')} – {format(parseISO(editCoverage.endDate), 'dd/MM/yyyy')}</p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Status</label>
+                <select
+                  value={editStatus}
+                  onChange={e => setEditStatus(e.target.value as 'PLANNED' | 'ACTIVE' | 'COMPLETED')}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary/50"
+                  disabled={editSubmitting}
+                >
+                  <option value="PLANNED">Planejada — ainda não começou</option>
+                  <option value="ACTIVE">Ativa — substituto trabalhando</option>
+                  <option value="COMPLETED">Concluída — cobertura finalizada</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Custo (R$)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={editCost}
+                  onChange={e => setEditCost(e.target.value)}
+                  placeholder="Ex: 1862.09"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-primary/50"
+                  disabled={editSubmitting}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-white/5">
+              <button
+                onClick={() => setEditCoverage(null)}
+                disabled={editSubmitting}
+                className="px-4 py-2 text-sm border border-slate-700 text-slate-300 rounded-lg hover:bg-slate-700/50 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={submitEditCoverage}
+                disabled={editSubmitting}
+                className="px-5 py-2 text-sm font-bold bg-primary hover:bg-primary/90 text-white rounded-lg shadow-lg shadow-primary/20 disabled:opacity-50"
+              >
+                {editSubmitting ? 'Salvando...' : 'Salvar'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
