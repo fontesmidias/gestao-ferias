@@ -189,6 +189,7 @@ const allocations: FastifyPluginAsync = async (fastify, opts): Promise<void> => 
   }, async (request, reply) => {
     const { tenantId } = request.user as any
     const { id } = request.params as { id: string }
+    const body = (request.body ?? {}) as { force?: boolean }
 
     const allocation = await fastify.prisma.workplaceAllocation.findFirst({
       where: { id, tenantId, status: 'ACTIVE' }
@@ -196,6 +197,41 @@ const allocations: FastifyPluginAsync = async (fastify, opts): Promise<void> => 
 
     if (!allocation) {
       return reply.code(404).send({ error: 'Not Found', message: 'Alocação ativa não encontrada.' })
+    }
+
+    // V3.4 Story 4.7: detecta CoverageAssignment FUTURAS vinculadas a essa
+    // allocation. Mover/encerrar a allocation torna a cobertura "orfa" — o
+    // substituto cobre uma posicao que o titular nao ocupa mais. Bloqueia
+    // por default; aceita force=true.
+    const impacted = await fastify.prisma.coverageAssignment.findMany({
+      where: {
+        tenantId,
+        workplacePositionId: allocation.workplacePositionId,
+        status: { in: ['PLANNED', 'ACTIVE'] },
+        endDate: { gte: new Date() },
+        vacationRequest: { employeeId: allocation.employeeId },
+      },
+      select: {
+        id: true,
+        startDate: true,
+        endDate: true,
+        replacementEmployee: { select: { name: true } },
+        vacationRequest: { select: { id: true, employee: { select: { name: true } } } },
+      },
+    })
+    if (impacted.length > 0 && !body.force) {
+      return reply.code(409).send({
+        error: 'Coverage Impact',
+        code: 'ALLOCATION_HAS_FUTURE_COVERAGES',
+        message: `Esta alocacao tem ${impacted.length} cobertura(s) futura(s) vinculada(s). Mover/encerrar pode deixar as coberturas orfas. Marque force=true para prosseguir (sera auditado).`,
+        impacted: impacted.map(c => ({
+          coverageId: c.id,
+          startDate: c.startDate,
+          endDate: c.endDate,
+          replacement: c.replacementEmployee.name,
+          coveringFor: c.vacationRequest.employee.name,
+        })),
+      })
     }
 
     const updated = await fastify.prisma.workplaceAllocation.update({
@@ -209,7 +245,7 @@ const allocations: FastifyPluginAsync = async (fastify, opts): Promise<void> => 
       data: { workplaceId: null }
     })
 
-    return { message: 'Colaborador desalocado com sucesso.', allocation: updated }
+    return { message: 'Colaborador desalocado com sucesso.', allocation: updated, impactedCoverages: impacted.length }
   })
 }
 
