@@ -35,6 +35,9 @@ export default function ApprovalsPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [selectedIds, setSelectedIds] = useState<string[]>([])
+  // V3.4 FASE E2: filtros multi-faceta
+  const [filterStatus, setFilterStatus] = useState<'TODOS' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | 'RETURNED' | 'SIGNED' | 'COMPLETED'>('TODOS')
+  const [filterSource, setFilterSource] = useState<'TODOS' | 'PROGRAMMED' | 'EMPLOYEE'>('TODOS')
 
   // Modal State
   const [modalOpen, setModalOpen] = useState(false)
@@ -266,10 +269,28 @@ export default function ApprovalsPage() {
     }
   }
 
-  const filtered = requests.filter(r =>
-    r.employee?.name.toLowerCase().includes(search.toLowerCase()) ||
-    r.status.toLowerCase().includes(search.toLowerCase())
-  )
+  // V3.4 FASE E2: filtros combinados — status (chip), origem (programada/employee), busca livre.
+  // 'Programada pelo RH' detectada pelo dispatchNote começando com 'Programada' ou 'Plano importado'.
+  const isProgrammed = (r: any): boolean => {
+    const note = (r.dispatchNote ?? '').toString().toLowerCase()
+    return note.startsWith('programada') || note.startsWith('plano importado')
+  }
+  const filtered = requests.filter(r => {
+    if (filterStatus !== 'TODOS' && r.status !== filterStatus) return false
+    if (filterSource === 'PROGRAMMED' && !isProgrammed(r)) return false
+    if (filterSource === 'EMPLOYEE' && isProgrammed(r)) return false
+    if (search) {
+      const term = search.toLowerCase()
+      const hay = `${r.employee?.name ?? ''} ${r.employee?.registration ?? ''} ${r.dispatchNote ?? ''}`.toLowerCase()
+      if (!hay.includes(term)) return false
+    }
+    return true
+  })
+
+  const statusCounts = requests.reduce<Record<string, number>>((acc, r) => {
+    acc[r.status] = (acc[r.status] || 0) + 1
+    return acc
+  }, {})
 
   return (
     <div className="bg-dashboard text-slate-200 pb-12 min-h-full relative">
@@ -277,11 +298,11 @@ export default function ApprovalsPage() {
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-white flex items-center gap-3">
             <Clock className="w-8 h-8 text-amber-500" />
-            Caixa de Aprovações
+            Programação de Férias
           </h2>
           <p className="text-slate-400 mt-2 flex items-center gap-1">
-            Valide, Devolva ou Edite as solicitações de férias (Ações em Massa suportadas).
-            <InfoTooltip text="Aqui você gerencia todas as solicitações de férias dos colaboradores. Pode aprovar, reprovar, devolver para correção ou editar datas." />
+            Cadastre, valide, edite ou cancele solicitações de férias (lança você mesmo ou aprova solicitações de colaboradores).
+            <InfoTooltip text="Página única para o RH gerenciar férias da operação: programar diretamente, aprovar pedidos, reprovar com motivo formal, ou cancelar (libera saldo)." />
           </p>
         </div>
 
@@ -395,25 +416,56 @@ export default function ApprovalsPage() {
                 </label>
               </div>
               <div className="flex items-center gap-3 w-full md:w-auto">
-                <div className="relative flex-1 md:w-64">
+                <div className="relative flex-1 md:w-72">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Buscar colaborador ou status..." 
+                    placeholder="Buscar nome, matrícula ou despacho..."
                     className="w-full bg-slate-900/50 border border-slate-800 rounded-lg pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/50"
                   />
                 </div>
-                <button className="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-700">
-                  <Filter className="w-4 h-4" />
-                </button>
+                <select
+                  value={filterSource}
+                  onChange={e => setFilterSource(e.target.value as any)}
+                  className="bg-slate-900/50 border border-slate-800 rounded-lg px-3 py-2 text-xs font-bold text-slate-300 focus:outline-none focus:ring-1 focus:ring-primary/50"
+                  title="Origem da solicitação"
+                >
+                  <option value="TODOS">Todas as origens</option>
+                  <option value="PROGRAMMED">Programada pelo RH</option>
+                  <option value="EMPLOYEE">Pedido do colaborador</option>
+                </select>
               </div>
             </div>
 
-            <div className="px-6 py-2 bg-indigo-500/5 border-b border-white/5 flex items-center gap-2 text-xs text-slate-500">
-              <InfoTooltip text="Dica: Selecione múltiplas solicitações com as caixas de seleção para realizar ações em lote (aprovar, reprovar ou devolver várias de uma vez)." />
-              <span>Dica: Use as caixas de seleção para ações em lote.</span>
+            {/* V3.4 FASE E2: chips de filtro de status com contadores. */}
+            <div className="px-6 py-2 bg-slate-900/30 border-b border-white/5 flex items-center gap-2 text-xs flex-wrap">
+              {([
+                { value: 'TODOS' as const, label: 'Todos', color: 'bg-slate-700/50 text-slate-300 border-slate-600' },
+                { value: 'PENDING' as const, label: 'Pendentes', color: 'bg-amber-500/15 text-amber-300 border-amber-500/30' },
+                { value: 'APPROVED' as const, label: 'Aprovadas', color: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' },
+                { value: 'SIGNED' as const, label: 'Assinadas', color: 'bg-sky-500/15 text-sky-300 border-sky-500/30' },
+                { value: 'COMPLETED' as const, label: 'Concluídas', color: 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30' },
+                { value: 'RETURNED' as const, label: 'Devolvidas', color: 'bg-violet-500/15 text-violet-300 border-violet-500/30' },
+                { value: 'REJECTED' as const, label: 'Reprovadas', color: 'bg-rose-500/15 text-rose-300 border-rose-500/30' },
+                { value: 'CANCELLED' as const, label: 'Canceladas', color: 'bg-slate-600/30 text-slate-400 border-slate-600' },
+              ]).map(chip => {
+                const count = chip.value === 'TODOS' ? requests.length : (statusCounts[chip.value] || 0)
+                const active = filterStatus === chip.value
+                return (
+                  <button
+                    key={chip.value}
+                    type="button"
+                    onClick={() => setFilterStatus(chip.value)}
+                    className={`px-2.5 py-1 rounded-full font-bold border text-[11px] transition-colors ${
+                      active ? `${chip.color} ring-2 ring-white/10` : 'bg-slate-900/30 text-slate-500 border-slate-800 hover:text-slate-300'
+                    }`}
+                  >
+                    {chip.label} <span className="ml-1 opacity-70">({count})</span>
+                  </button>
+                )
+              })}
             </div>
 
             {loading ? (
@@ -436,9 +488,10 @@ export default function ApprovalsPage() {
                           className="rounded border-slate-700 bg-slate-800 text-primary focus:ring-primary/50 cursor-pointer"
                         />
                       </th>
-                      <th className="px-6 py-4 font-medium"><span className="inline-flex items-center gap-1">Colaborador <InfoTooltip text="Nome do colaborador e status atual da solicitação (Pendente, Aprovado, Reprovado, Devolvido)." /></span></th>
+                      <th className="px-6 py-4 font-medium"><span className="inline-flex items-center gap-1">Colaborador <InfoTooltip text="Nome, matrícula e status atual da solicitação." /></span></th>
                       <th className="px-6 py-4 font-medium"><span className="inline-flex items-center gap-1">Situação / Datas <InfoTooltip text="Período solicitado para as férias e total de dias. Se as datas foram editadas, mostra o pedido original." /></span></th>
-                      <th className="px-6 py-4 font-medium text-right"><span className="inline-flex items-center gap-1">Ações Abertas <InfoTooltip text="Botões de ação disponíveis para cada solicitação." /></span></th>
+                      <th className="px-6 py-4 font-medium"><span className="inline-flex items-center gap-1">Despacho / Motivo <InfoTooltip text="Texto registrado pelo RH no momento da decisão (motivo de reprovação, observação de programação, motivo de cancelamento, etc)." /></span></th>
+                      <th className="px-6 py-4 font-medium text-right"><span className="inline-flex items-center gap-1">Ações <InfoTooltip text="Botões de ação disponíveis para cada solicitação." /></span></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
@@ -516,6 +569,15 @@ export default function ApprovalsPage() {
                             </div>
                           )}
                         </td>
+                        <td className="px-6 py-4 text-slate-300 max-w-[260px]">
+                          {req.dispatchNote ? (
+                            <p className="text-xs text-slate-300 break-words" title={req.dispatchNote}>
+                              {req.dispatchNote}
+                            </p>
+                          ) : (
+                            <span className="text-[11px] text-slate-600 italic">— sem despacho —</span>
+                          )}
+                        </td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex justify-end gap-2">
                              <button onClick={() => openModal(req.id, 'RETURN')} className="p-2 text-indigo-400 hover:bg-indigo-500/10 rounded-lg" title="Devolver para Correção">
@@ -524,8 +586,11 @@ export default function ApprovalsPage() {
                              <button onClick={() => openModal(req.id, 'EDIT')} className="p-2 text-amber-500 hover:bg-amber-500/10 rounded-lg" title="Editar Datas">
                                <Edit3 className="w-4 h-4" />
                              </button>
-                             <button onClick={() => openModal(req.id, 'REJECT')} className="p-2 text-rose-500 hover:bg-rose-500/10 rounded-lg" title="Reprovar/Excluir">
+                             <button onClick={() => openModal(req.id, 'DELETE')} className="p-2 text-slate-400 hover:bg-slate-700/40 rounded-lg" title="Cancelar (libera saldo)">
                                <Trash2 className="w-4 h-4" />
+                             </button>
+                             <button onClick={() => openModal(req.id, 'REJECT')} className="p-2 text-rose-500 hover:bg-rose-500/10 rounded-lg" title="Reprovar (exige motivo formal)">
+                               <ShieldAlert className="w-4 h-4" />
                              </button>
                              <button onClick={() => openModal(req.id, 'APPROVE')} className="p-2 text-emerald-500 hover:bg-emerald-500/10 rounded-lg border border-emerald-500/20" title="Aprovar">
                                <Check className="w-4 h-4" />
