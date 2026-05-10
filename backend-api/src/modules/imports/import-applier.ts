@@ -12,6 +12,7 @@ import type {
   TirvuRow,
 } from './types'
 import { ensureWorkplaceFromImport } from './workplace-resolver'
+import { ensureBranchFromImport } from '../branches/branch-resolver'
 import type { WorkplaceAllocationService } from '../workplaces/workplace-allocation.service'
 
 export interface ApplyOptions {
@@ -124,6 +125,10 @@ async function applyCreate(
   }
   const { data, hasBankData } = patchWithBankData(item.row, item.patch, ctx.tenantId)
 
+  // V3.5 Story 5.1: resolve/cria Branch a partir do nome string e popula branchId.
+  // String legada (branch) permanece para compat durante 1 release.
+  const branchId = await ensureBranchFromImport(tx, ctx.tenantId, (item.patch.branch as string | null) ?? null)
+
   const hireDate = (item.patch.hireDate as Date) ?? new Date()
   const employee = await tx.employee.create({
     data: {
@@ -132,6 +137,7 @@ async function applyCreate(
       cpf: cpfDigits,
       hireDate,
       name: (item.patch.name as string) ?? cpfDigits,
+      branchId,
     },
   })
 
@@ -215,6 +221,12 @@ async function applyUpdate(
     diffOnlyData.bankDataEnc = (data as Record<string, unknown>).bankDataEnc
     diffOnlyData.bankDataIv = (data as Record<string, unknown>).bankDataIv
     diffOnlyData.bankDataTag = (data as Record<string, unknown>).bankDataTag
+  }
+
+  // V3.5 Story 5.1: se branch mudou OU employee ainda nao tem branchId, resolve.
+  if ('branch' in item.diff || !(item.employee as { branchId?: string | null }).branchId) {
+    const branchId = await ensureBranchFromImport(tx, ctx.tenantId, (item.patch.branch as string | null) ?? null)
+    if (branchId) diffOnlyData.branchId = branchId
   }
 
   await tx.employee.update({
