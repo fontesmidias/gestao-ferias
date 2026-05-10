@@ -38,6 +38,7 @@ export default function ApprovalsPage() {
 
   // Modal State
   const [modalOpen, setModalOpen] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const [modalMode, setModalMode] = useState<'APPROVE' | 'REJECT' | 'RETURN' | 'EDIT' | 'DELETE' | null>(null)
   const [dispatchNote, setDispatchNote] = useState('')
   const [editDates, setEditDates] = useState({ startDate: '', endDate: '' })
@@ -135,6 +136,7 @@ export default function ApprovalsPage() {
   }
 
   const confirmAction = async () => {
+    setSubmitting(true)
     try {
       const payload: any = { dispatchNote }
       let endpoint = ''
@@ -148,8 +150,10 @@ export default function ApprovalsPage() {
         await HttpClient.patch(endpoint, payload)
       } 
       else if (modalMode === 'DELETE') {
-         // Placeholder for real delete if API supports it, else we treat it as REJECT
-         payload.status = 'REJECTED'
+         // V3.4 FASE D3: lixeira agora é CANCELLED (não REJECTED). Não exige
+         // motivo formal. Saldo do colaborador é restaurado (não conta).
+         payload.status = 'CANCELLED'
+         payload.dispatchNote = (payload.dispatchNote && payload.dispatchNote.trim()) || `Cancelada em ${new Date().toLocaleDateString('pt-BR')}`
          if (isBulk) {
            payload.requestIds = selectedIds
            await HttpClient.patch('/vacations/bulk', payload)
@@ -178,7 +182,13 @@ export default function ApprovalsPage() {
       setSelectedIds([])
       fetchRequests()
     } catch (err: any) {
-      toast.error(err.message || 'Erro ao realizar ação')
+      // V3.4 FASE D2/D4: tratamento explícito de erros do backend (422 sem
+      // motivo, 409 conflito, etc). UI nunca pinta status sem confirmação.
+      const errBody = err?.body?.error || err?.body
+      const message = errBody?.message || err?.message || 'Erro ao realizar ação'
+      toast.error(message)
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -818,7 +828,7 @@ export default function ApprovalsPage() {
               </button>
               <button
                 onClick={confirmAction}
-                disabled={((modalMode === 'RETURN' || modalMode === 'REJECT') && dispatchNote.length < 5) || (modalMode === 'EDIT' && (!editDates.startDate || !editDates.endDate))}
+                disabled={((modalMode === 'RETURN' || modalMode === 'REJECT') && dispatchNote.length < 5) || (modalMode === 'EDIT' && (!editDates.startDate || !editDates.endDate)) || submitting}
                 className="px-6 py-2 rounded-lg text-sm font-bold text-white bg-primary hover:bg-primary/90 disabled:opacity-50"
               >
                 {modalMode === 'APPROVE' && selectedCoverageId

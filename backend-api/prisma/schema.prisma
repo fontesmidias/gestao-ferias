@@ -271,7 +271,7 @@ model VacationRequest {
   startDate         DateTime  @map("start_date")
   endDate           DateTime  @map("end_date")
   days              Int
-  status            String    @default("PENDING") // PENDING, APPROVED, REJECTED, RETURNED, SIGNED, COMPLETED
+  status            String    @default("PENDING") // PENDING, APPROVED, REJECTED, RETURNED, SIGNED, COMPLETED, CANCELLED
   dispatchNote      String?   @map("dispatch_note")
   originalStartDate DateTime? @map("original_start_date")
   originalEndDate   DateTime? @map("original_end_date")

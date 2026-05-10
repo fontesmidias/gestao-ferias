@@ -12,10 +12,12 @@ import type {
   TirvuRow,
 } from './types'
 import { parseCpfNoMask } from './utils'
+import { normalizeMatricula } from './matricula'
 
 export const DIFF_FIELDS = [
   'tirvuId',
   'name',
+  'registration',
   'birthDate',
   'position',
   'status',
@@ -133,6 +135,12 @@ export function mapRowToEmployeePatch(row: TirvuRow): EmployeePatch {
 
   if (row.tirvuId !== null) patch.tirvuId = row.tirvuId
   if (row.name !== null) patch.name = row.name
+  // V3.4 FASE D1: matrícula vem da coluna "Matrícula" do XLSX Tirvu (índice 10).
+  // Normalizada (zeros à esquerda removidos) para casar com Dexion depois.
+  if (row.matricula !== null) {
+    const normalized = normalizeMatricula(row.matricula)
+    if (normalized) patch.registration = normalized
+  }
   if (isDate(row.nascimento)) patch.birthDate = row.nascimento
   if (row.cargo !== null) patch.position = row.cargo
   if (row.status !== null) patch.status = row.status.toUpperCase().trim()

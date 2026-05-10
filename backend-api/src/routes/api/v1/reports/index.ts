@@ -12,7 +12,7 @@ const reports: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     const requests = await fastify.prisma.vacationRequest.findMany({
       where: { 
         tenantId,
-        status: { not: 'REJECTED' }
+        status: { notIn: ['REJECTED', 'CANCELLED'] }
       },
       include: { employee: true }
     })

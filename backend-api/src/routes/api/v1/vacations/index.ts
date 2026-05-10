@@ -182,7 +182,7 @@ const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       where: {
         employeeId,
         tenantId,
-        status: { not: 'REJECTED' },
+        status: { notIn: ['REJECTED', 'CANCELLED'] },
         startDate: { gte: targetPeriod?.startDate ?? new Date(0) },
         endDate: { lt: targetPeriod?.endDate ?? new Date('2999-12-31') }
       },
@@ -275,7 +275,9 @@ const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     const existing = await fastify.prisma.vacationRequest.findFirst({ where: { id, tenantId } })
     if (!existing) return reply.code(404).send({ error: 'Not Found' })
 
-    // Story 3.3 AC: rejeição exige motivo (dispatchNote) não-vazio.
+    // Story 3.3 AC: rejeição (decisão administrativa formal) exige motivo
+    // (dispatchNote) não-vazio. CANCELLED (cancelamento simples / retirada)
+    // não exige motivo — V3.4 FASE D3.
     if (status === 'REJECTED' && (!dispatchNote || String(dispatchNote).trim().length === 0)) {
       return reply.code(422).send({
         error: 'Unprocessable Entity',
@@ -594,7 +596,7 @@ const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
           where: {
             employeeId: item.employeeId,
             tenantId,
-            status: { not: 'REJECTED' },
+            status: { notIn: ['REJECTED', 'CANCELLED'] },
             startDate: { gte: targetPeriod?.startDate ?? new Date(0) },
             endDate: { lt: targetPeriod?.endDate ?? new Date('2999-12-31') }
           },
@@ -655,7 +657,7 @@ const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       where: {
         employeeId,
         tenantId,
-        status: { not: 'REJECTED' },
+        status: { notIn: ['REJECTED', 'CANCELLED'] },
         startDate: { gte: currentPeriod.startDate },
         endDate: { lt: currentPeriod.endDate }
       },

@@ -267,7 +267,8 @@ export function ProgramVacationModal({ open, onClose, onCreated }: Props) {
               <div className="text-sm">
                 <p className="font-bold text-white">{selected.name}</p>
                 <p className="text-[11px] text-slate-500">
-                  {selected.position || 'Cargo n/d'} · {selected.workplace || 'Posto n/d'}
+                  Matr. <span className="text-sky-400 font-mono">{selected.registration || 'S/N'}</span>
+                  {' · '}{selected.position || 'Cargo n/d'} · {selected.workplace || 'Posto n/d'}
                 </p>
               </div>
               <button
@@ -296,7 +297,10 @@ export function ProgramVacationModal({ open, onClose, onCreated }: Props) {
                       onClick={() => { setSelected(e); setSearch('') }}
                       className="w-full text-left px-3 py-1.5 text-sm hover:bg-white/5"
                     >
-                      <p className="font-bold text-white text-[13px]">{e.name}</p>
+                      <p className="font-bold text-white text-[13px] flex items-center gap-2">
+                        {e.name}
+                        <span className="text-[10px] font-mono text-sky-400">[{e.registration || 'S/N'}]</span>
+                      </p>
                       <p className="text-[11px] text-slate-500">{e.position || '—'} · {e.workplace || '—'}</p>
                     </button>
                   ))}

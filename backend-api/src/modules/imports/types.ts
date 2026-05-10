@@ -112,6 +112,7 @@ export type EmployeePatch = Partial<
     | 'address'
     | 'geofencingFlags'
     | 'inactivePending'
+    | 'registration'
   >
 >
 

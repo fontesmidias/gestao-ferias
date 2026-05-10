@@ -127,6 +127,7 @@ export class VacationEngine {
     const periods = this.calculatePeriods(hireDate, absences, balanceOffset)
     if (periods.length === 0) return periods
 
+    // V3.4: REJECTED (formal) e CANCELLED (cancelamento simples) NÃO consomem saldo.
     const COUNTING_STATUSES = new Set(['APPROVED', 'PENDING', 'SIGNED', 'COMPLETED'])
 
     for (const req of usedRequests) {
@@ -189,7 +190,7 @@ export class VacationEngine {
     // 3. Regras de fracionamento (Art. 134 §1º Lei 13.467/2017)
     if (fractionContext) {
       const { existingFractions, periodDaysOfRight } = fractionContext
-      const active = existingFractions.filter(f => f.status !== 'REJECTED')
+      const active = existingFractions.filter(f => f.status !== 'REJECTED' && f.status !== 'CANCELLED')
       const fractionsAfterThis = active.length + 1
       const hasFractionWith14Plus = active.some(f => f.days >= 14) || daysRequested >= 14
       const totalDaysAfterThis = active.reduce((s, f) => s + f.days, 0) + daysRequested
@@ -248,7 +249,7 @@ export class VacationEngine {
     existingFractions: ExistingFraction[],
     periodDaysOfRight: number
   ): FractioningAnalysis {
-    const active = existingFractions.filter(f => f.status !== 'REJECTED')
+    const active = existingFractions.filter(f => f.status !== 'REJECTED' && f.status !== 'CANCELLED')
     const daysUsed = active.reduce((s, f) => s + f.days, 0)
     const daysRemaining = Math.max(0, periodDaysOfRight - daysUsed)
     const hasFractionWith14Plus = active.some(f => f.days >= 14)
