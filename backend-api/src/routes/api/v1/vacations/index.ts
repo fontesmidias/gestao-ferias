@@ -321,6 +321,44 @@ const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       })
     }
 
+    // V3.4 Story 4.8: posto critico exige cobertura ao aprovar.
+    // Se o colaborador esta alocado em posicao com isCritical=true e a aprovacao
+    // nao traz coverageEmployeeId nem ja existe cobertura, bloqueia (override
+    // por { force: true } no body).
+    const body = request.body as { force?: boolean }
+    if (status === 'APPROVED' && !body.force) {
+      const allocation = await fastify.prisma.workplaceAllocation.findFirst({
+        where: { employeeId: existing.employeeId, status: 'ACTIVE' },
+        include: { workplacePosition: { select: { id: true, role: true, isCritical: true, workplace: { select: { name: true } } } } },
+      })
+      if (allocation?.workplacePosition?.isCritical) {
+        const willHaveCoverage = !!coverageEmployeeId
+        const startWindow = startDate ? parseISO(startDate) : existing.startDate
+        const endWindow = endDate ? parseISO(endDate) : existing.endDate
+        const existingCoverage = await fastify.prisma.coverageAssignment.findFirst({
+          where: {
+            vacationRequestId: existing.id,
+            status: { in: ['PLANNED', 'ACTIVE'] },
+            startDate: { lte: endWindow },
+            endDate: { gte: startWindow },
+          },
+          select: { id: true },
+        })
+        if (!willHaveCoverage && !existingCoverage) {
+          return reply.code(409).send({
+            error: 'Critical Position Without Coverage',
+            code: 'CRITICAL_POSITION_REQUIRES_COVERAGE',
+            message: `Posto CRITICO ${allocation.workplacePosition.workplace.name} / ${allocation.workplacePosition.role} exige cobertura confirmada antes de aprovar. Atribua substituto ou marque force=true (sera auditado).`,
+            criticalPosition: {
+              positionId: allocation.workplacePosition.id,
+              workplace: allocation.workplacePosition.workplace.name,
+              role: allocation.workplacePosition.role,
+            },
+          })
+        }
+      }
+    }
+
     const updateData: any = { status, dispatchNote: dispatchNote !== undefined ? dispatchNote : undefined }
 
     // Admin is forcibly editing dates

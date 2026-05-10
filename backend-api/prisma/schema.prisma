@@ -375,6 +375,8 @@ model WorkplacePosition {
   role          String
   shiftPattern  String?  @map("shift_pattern")
   requiredCount Int      @default(1) @map("required_count")
+  // V3.4 Story 4.8: posto critico exige cobertura confirmada antes de aprovar ferias
+  isCritical    Boolean  @default(false) @map("is_critical")
   tenantId      String   @map("tenant_id") @db.Uuid
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

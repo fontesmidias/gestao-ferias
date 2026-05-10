@@ -13,6 +13,7 @@ import { InfoTooltip } from '@/components/InfoTooltip'
 import { format, parseISO } from 'date-fns'
 import { SalaryImportModal } from '@/components/employees/SalaryImportModal'
 import { BulkEditModal } from '@/components/employees/BulkEditModal'
+import { classifyStatus, BUCKET_STYLES } from '@/lib/employee-status'
 
 interface Employee {
   id: string
@@ -259,21 +260,20 @@ export default function EmployeesPage() {
     }
   }
 
-  // Status agora é campo livre (Tirvu: ATESTADO MÉDICO, LICENÇA MATERNIDADE,
-  // AFASTADO INSS, etc). Mapeamos exatos primeiro; fallback por keyword.
+  // V3.4 Story 4.13: usa classifier compartilhado (lib/employee-status).
+  // Mostra o status RAW (Tirvu) com cores do bucket canonico para ficar
+  // consistente em qualquer pagina.
   const renderStatusBadge = (status: string) => {
-    const dot = (color: string) => <div className={`w-1.5 h-1.5 rounded-full ${color}`}/>
     const base = 'px-2 py-0.5 rounded-full text-[10px] font-bold tracking-tight border flex items-center gap-1 w-max max-w-full'
+    const bucket = classifyStatus(status)
+    const s = BUCKET_STYLES[bucket]
     const upper = (status ?? '').toUpperCase().trim()
-    // Exatos
-    if (upper === 'ATIVO') return <span className={`${base} bg-emerald-500/20 text-emerald-400 border-emerald-500/30`}>{dot('bg-emerald-500')}ATIVO</span>
-    if (upper === 'FERIAS' || upper === 'FÉRIAS') return <span className={`${base} bg-sky-500/20 text-sky-400 border-sky-500/30`}>{dot('bg-sky-500')}FÉRIAS</span>
-    if (upper === 'INATIVO' || upper === 'DEMITIDO') return <span className={`${base} bg-rose-500/15 text-rose-300 border-rose-500/30`}>{dot('bg-rose-500')}<span className="truncate">{upper}</span></span>
-    // Por keyword (cobre LICENÇA MATERNIDADE, ATESTADO MÉDICO, AFASTADO INSS, etc)
-    if (/AFASTAD|LICEN[ÇC]A|ATESTAD/.test(upper)) {
-      return <span className={`${base} bg-amber-500/15 text-amber-300 border-amber-500/30`} title={status}>{dot('bg-amber-500')}<span className="truncate">{upper}</span></span>
-    }
-    return <span className={`${base} bg-slate-800 text-slate-400 border-slate-700`} title={status}><span className="truncate">{upper || '—'}</span></span>
+    return (
+      <span className={`${base} ${s.bg} ${s.text} ${s.border}`} title={status}>
+        <div className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
+        <span className="truncate">{upper || '—'}</span>
+      </span>
+    )
   }
 
   return (

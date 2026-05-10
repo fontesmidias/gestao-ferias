@@ -81,7 +81,9 @@ const positions: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         properties: {
           role: { type: 'string', minLength: 2 },
           shiftPattern: { type: 'string' },
-          requiredCount: { type: 'integer', minimum: 1 }
+          requiredCount: { type: 'integer', minimum: 1 },
+          // V3.4 Story 4.8: posto critico exige cobertura ao aprovar ferias
+          isCritical: { type: 'boolean' }
         }
       }
     }
@@ -101,6 +103,7 @@ const positions: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         role: data.role !== undefined ? data.role : undefined,
         shiftPattern: data.shiftPattern !== undefined ? data.shiftPattern : undefined,
         requiredCount: data.requiredCount !== undefined ? data.requiredCount : undefined,
+        isCritical: data.isCritical !== undefined ? data.isCritical : undefined,
       }
     })
 

@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { Shield, AlertTriangle, Users, Calendar, ChevronLeft, ChevronRight, UserCheck, FileSpreadsheet, Upload, ArrowLeft, Pencil, Trash2, X, Settings, Play } from 'lucide-react'
+import { Shield, AlertTriangle, Users, Calendar, ChevronLeft, ChevronRight, UserCheck, FileSpreadsheet, Upload, ArrowLeft, Pencil, Trash2, X, Settings, Play, Sparkles } from 'lucide-react'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { HttpClient } from '@/lib/api-client'
@@ -147,6 +147,33 @@ export default function CoveragePage() {
   const [editStatus, setEditStatus] = useState<'PLANNED' | 'ACTIVE' | 'COMPLETED'>('PLANNED')
   const [editCost, setEditCost] = useState<string>('')
   const [editSubmitting, setEditSubmitting] = useState(false)
+
+  // V3.4 Story 4.4: bulk coverage assign — gaps selecionados.
+  const [bulkSelectedVrIds, setBulkSelectedVrIds] = useState<Set<string>>(new Set())
+  const [bulkRunning, setBulkRunning] = useState(false)
+  const toggleBulkSelect = (vrId: string) => {
+    setBulkSelectedVrIds(prev => { const next = new Set(prev); if (next.has(vrId)) next.delete(vrId); else next.add(vrId); return next })
+  }
+  const runBulkAssign = async () => {
+    if (bulkSelectedVrIds.size === 0) { toast.error('Nenhum gap selecionado.'); return }
+    if (!confirm(`Atribuir cobertura automaticamente para ${bulkSelectedVrIds.size} gap(s)?\n\nO sistema escolhe o melhor ferista disponivel (cargo identico > familia > qualquer). Voce pode editar cada cobertura depois.`)) return
+    try {
+      setBulkRunning(true)
+      const res: any = await HttpClient.post('/coverages/bulk-assign', {
+        vacationRequestIds: Array.from(bulkSelectedVrIds),
+        preferType: 'AUTO',
+      })
+      const s = res?.data?.summary
+      const skipped = (res?.data?.results ?? []).filter((r: any) => r.status === 'skipped')
+      const reasonsCount = skipped.reduce((acc: Record<string, number>, r: any) => { acc[r.reason] = (acc[r.reason] || 0) + 1; return acc }, {})
+      const reasonsTxt = Object.entries(reasonsCount).map(([k, v]) => `${k}=${v}`).join(', ')
+      toast.success(`Aplicadas: ${s?.applied ?? 0} · Puladas: ${s?.skipped ?? 0}${reasonsTxt ? ` (${reasonsTxt})` : ''}`, { duration: 10000 })
+      setBulkSelectedVrIds(new Set())
+      fetchData()
+    } catch (err: any) {
+      toast.error(err?.body?.error?.message || 'Erro no bulk-assign.')
+    } finally { setBulkRunning(false) }
+  }
 
   // V3.4 FASE H3: gestao do cron de transicao de status
   const [cronOpen, setCronOpen] = useState(false)
@@ -1007,12 +1034,31 @@ export default function CoveragePage() {
 
               {/* Gaps List */}
               <div className="glass-card rounded-2xl border border-white/5 overflow-hidden">
-                <div className="p-6 border-b border-white/5 flex items-center justify-between">
+                <div className="p-6 border-b border-white/5 flex items-center justify-between flex-wrap gap-3">
                   <h3 className="font-bold text-lg text-white flex items-center gap-2">
                     <AlertTriangle className="w-5 h-5 text-amber-500" />
                     Gaps de Cobertura ({uncoveredGaps.length})
-                    <InfoTooltip text="Lista de ferias sem substituto atribuido. Clique em Atribuir Cobertura para designar um profissional." />
+                    <InfoTooltip text="Lista de ferias sem substituto atribuido. Marque um ou mais e clique em 'Atribuir em lote' para auto-match, ou abra individualmente para escolher." />
                   </h3>
+                  {uncoveredGaps.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setBulkSelectedVrIds(new Set(bulkSelectedVrIds.size === uncoveredGaps.length ? [] : uncoveredGaps.map(g => g.vacationRequestId)))}
+                        className="text-xs text-slate-300 hover:text-white px-2 py-1 rounded hover:bg-slate-800"
+                      >
+                        {bulkSelectedVrIds.size === uncoveredGaps.length ? 'Desmarcar todos' : 'Marcar todos'}
+                      </button>
+                      <button
+                        onClick={runBulkAssign}
+                        disabled={bulkSelectedVrIds.size === 0 || bulkRunning}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold rounded-lg shadow-lg shadow-indigo-500/20"
+                        title="Sistema escolhe automaticamente o melhor ferista disponivel para cada gap selecionado"
+                      >
+                        <Sparkles className="w-3 h-3" />
+                        {bulkRunning ? 'Atribuindo...' : `Atribuir em lote (${bulkSelectedVrIds.size})`}
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {uncoveredGaps.length === 0 ? (
@@ -1026,9 +1072,16 @@ export default function CoveragePage() {
                     {uncoveredGaps.map((gap) => (
                       <div
                         key={gap.vacationRequestId}
-                        className="p-6 hover:bg-white/[0.02] transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4"
+                        className={`p-6 hover:bg-white/[0.02] transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4 ${bulkSelectedVrIds.has(gap.vacationRequestId) ? 'bg-indigo-500/5' : ''}`}
                       >
                         <div className="flex items-start gap-4">
+                          <input
+                            type="checkbox"
+                            checked={bulkSelectedVrIds.has(gap.vacationRequestId)}
+                            onChange={() => toggleBulkSelect(gap.vacationRequestId)}
+                            className="accent-indigo-500 cursor-pointer mt-1"
+                            title="Marcar para atribuicao em lote"
+                          />
                           <div className="w-10 h-10 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center font-bold text-sm border border-white/5 shrink-0">
                             {gap.employeeName?.charAt(0) || '?'}
                           </div>

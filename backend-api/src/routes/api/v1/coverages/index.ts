@@ -140,6 +140,122 @@ const coverages: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     return reply.code(201).send(coverage)
   })
 
+  // V3.4 Story 4.4: atribuicao em lote com auto-match.
+  // Para cada VacationRequestId em entrada, busca o melhor candidato (FERISTA
+  // com cargo identico/familia/qualquer) e cria cobertura. Retorna summary.
+  fastify.post('/bulk-assign', {
+    onRequest: [fastify.requireAuth, fastify.requireAdmin],
+    schema: {
+      body: {
+        type: 'object',
+        required: ['vacationRequestIds'],
+        properties: {
+          vacationRequestIds: { type: 'array', items: { type: 'string', format: 'uuid' }, minItems: 1, maxItems: 200 },
+          preferType: { type: 'string', enum: ['FERISTA', 'INTERMITENTE', 'AUTO'], default: 'AUTO' },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const { tenantId } = request.user as any
+    const { vacationRequestIds, preferType = 'AUTO' } = request.body as { vacationRequestIds: string[]; preferType?: 'FERISTA' | 'INTERMITENTE' | 'AUTO' }
+
+    type Result =
+      | { vacationRequestId: string; status: 'applied'; coverageId: string; replacementEmployeeId: string; replacementName: string }
+      | { vacationRequestId: string; status: 'skipped'; reason: string }
+    const results: Result[] = []
+    const usedReplacementIds = new Set<string>() // evita escolher o mesmo ferista 2x no mesmo lote
+
+    for (const vrId of vacationRequestIds) {
+      const vacation = await fastify.prisma.vacationRequest.findFirst({
+        where: { id: vrId, tenantId },
+        include: {
+          employee: { include: { allocations: { where: { status: 'ACTIVE' }, include: { workplacePosition: true } } } },
+          coverages: { select: { id: true, status: true } },
+        },
+      })
+      if (!vacation) { results.push({ vacationRequestId: vrId, status: 'skipped', reason: 'not_found' }); continue }
+      const hasActive = vacation.coverages.some(c => c.status === 'PLANNED' || c.status === 'ACTIVE')
+      if (hasActive) { results.push({ vacationRequestId: vrId, status: 'skipped', reason: 'already_covered' }); continue }
+      const allocation = vacation.employee.allocations[0]
+      if (!allocation) { results.push({ vacationRequestId: vrId, status: 'skipped', reason: 'employee_not_allocated' }); continue }
+
+      const targetRole = (allocation.workplacePosition.role || '').toLowerCase().trim()
+
+      // Candidatos: FERISTA livres no periodo, ou INTERMITENTE se preferType permitir.
+      const candidates = await fastify.prisma.employee.findMany({
+        where: {
+          tenantId,
+          status: 'ATIVO',
+          id: { notIn: Array.from(usedReplacementIds) },
+          OR: [
+            ...(preferType !== 'INTERMITENTE' ? [{ isFerista: true } as const] : []),
+            ...(preferType !== 'FERISTA' ? [{ employeeType: 'INTERMITENTE', isFerista: false } as const] : []),
+          ],
+          coveragesAsReplacement: {
+            none: {
+              status: { in: ['PLANNED', 'ACTIVE'] },
+              startDate: { lte: vacation.endDate },
+              endDate: { gte: vacation.startDate },
+            },
+          },
+        },
+        select: { id: true, name: true, position: true, isFerista: true, employeeType: true, salary: true },
+      })
+
+      if (candidates.length === 0) {
+        results.push({ vacationRequestId: vrId, status: 'skipped', reason: 'no_candidates_available' })
+        continue
+      }
+
+      // Score: cargo identico=3, contem palavra-chave do cargo=2, qualquer=1.
+      // Preferencia FERISTA quando preferType=AUTO.
+      const scored = candidates.map(c => {
+        const cand = (c.position || '').toLowerCase().trim()
+        let score = 1
+        if (cand && targetRole && cand === targetRole) score = 3
+        else if (cand && targetRole && (cand.includes(targetRole.split(/\s/)[0]) || targetRole.includes(cand.split(/\s/)[0]))) score = 2
+        if (preferType === 'AUTO' && c.isFerista) score += 0.5
+        return { c, score }
+      }).sort((a, b) => b.score - a.score)
+
+      const chosen = scored[0].c
+      const days = Math.max(1, Math.ceil((vacation.endDate.getTime() - vacation.startDate.getTime()) / (24 * 60 * 60 * 1000)) + 1)
+      const estimatedCost = chosen.salary ? Number(chosen.salary) / 30 * days : null
+
+      try {
+        const created = await fastify.prisma.coverageAssignment.create({
+          data: {
+            vacationRequestId: vrId,
+            replacementEmployeeId: chosen.id,
+            workplacePositionId: allocation.workplacePosition.id,
+            startDate: vacation.startDate,
+            endDate: vacation.endDate,
+            type: chosen.isFerista ? 'FERISTA' : 'INTERMITENTE',
+            status: 'PLANNED',
+            cost: estimatedCost,
+            tenantId,
+          },
+        })
+        usedReplacementIds.add(chosen.id)
+        results.push({ vacationRequestId: vrId, status: 'applied', coverageId: created.id, replacementEmployeeId: chosen.id, replacementName: chosen.name })
+        coverageEventBus.emit(tenantId, { type: 'coverage.created', coverageId: created.id, vacationRequestId: vrId })
+      } catch (err: any) {
+        const sqlState = err?.meta?.code || err?.code
+        const msg = String(err?.message || '')
+        if (sqlState === '23P01' || msg.includes('coverage_assignments_no_overlap_active')) {
+          results.push({ vacationRequestId: vrId, status: 'skipped', reason: 'overlap_constraint' })
+        } else {
+          results.push({ vacationRequestId: vrId, status: 'skipped', reason: 'db_error' })
+          fastify.log.error({ err, vrId }, 'bulk-assign create failed')
+        }
+      }
+    }
+
+    const applied = results.filter(r => r.status === 'applied').length
+    const skipped = results.filter(r => r.status === 'skipped').length
+    return reply.send({ data: { summary: { total: results.length, applied, skipped }, results }, error: null })
+  })
+
   // Listar coberturas (com filtros)
   fastify.get('/', {
     onRequest: [fastify.requireAuth],
