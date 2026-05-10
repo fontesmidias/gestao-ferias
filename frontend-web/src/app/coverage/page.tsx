@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { Shield, AlertTriangle, Users, Calendar, ChevronLeft, ChevronRight, UserCheck, FileSpreadsheet, Upload, ArrowLeft, Pencil, Trash2, X, Settings, Play, Sparkles } from 'lucide-react'
+import { Shield, AlertTriangle, Users, Calendar, ChevronLeft, ChevronRight, UserCheck, FileSpreadsheet, Upload, ArrowLeft, Pencil, Trash2, X, Sparkles } from 'lucide-react'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { HttpClient } from '@/lib/api-client'
@@ -178,43 +178,21 @@ export default function CoveragePage() {
     } finally { setBulkRunning(false) }
   }
 
-  // V3.4 FASE H3: gestao do cron de transicao de status
-  const [cronOpen, setCronOpen] = useState(false)
-  const [cronCfg, setCronCfg] = useState<{ enabled: boolean; intervalHours: number; lastRunAt: string | null; lastResult: { toActive: number; toCompleted: number; durationMs: number } | null } | null>(null)
-  const [cronSaving, setCronSaving] = useState(false)
-  const [cronRunning, setCronRunning] = useState(false)
-  const fetchCronCfg = useCallback(async () => {
+  // V3.4: config de cron movida para /settings → Automacoes.
+
+  // V3.4 Story 4.20: colaboradores com status FERIAS no Employee mas sem
+  // VacationRequest ativa (sintoma classico de import Tirvu trazendo so o status).
+  interface OrphanFerista { id: string; name: string; registration: string | null; cpf: string; position: string | null; workplace: string | null }
+  const [orphanFeristas, setOrphanFeristas] = useState<OrphanFerista[]>([])
+  const [orphansLoaded, setOrphansLoaded] = useState(false)
+  const fetchOrphans = useCallback(async () => {
     try {
-      const res: any = await HttpClient.get('/admin/coverage-cron')
-      setCronCfg(res?.data ?? null)
-    } catch (err: any) {
-      if (err?.status === 403) return // operador comum nao precisa
-      toast.error('Erro ao carregar configuracao do cron.')
-    }
+      const res: any = await HttpClient.get('/vacations/orphan-on-vacation')
+      setOrphanFeristas(res?.data?.items ?? [])
+    } catch { setOrphanFeristas([]) }
+    finally { setOrphansLoaded(true) }
   }, [])
-  const saveCronCfg = async (patch: { enabled?: boolean; intervalHours?: number }) => {
-    try {
-      setCronSaving(true)
-      const res: any = await HttpClient.patch('/admin/coverage-cron', patch)
-      setCronCfg(res?.data ?? null)
-      toast.success('Configuracao salva.')
-    } catch (err: any) {
-      toast.error(err?.body?.error?.message || 'Erro ao salvar.')
-    } finally { setCronSaving(false) }
-  }
-  const runCronNow = async () => {
-    try {
-      setCronRunning(true)
-      const res: any = await HttpClient.post('/admin/coverage-cron/run', {})
-      const d = res?.data
-      toast.success(`Cron executado: ${d?.toActive ?? 0} -> ATIVA, ${d?.toCompleted ?? 0} -> CONCLUIDA (${d?.durationMs ?? 0}ms).`, { duration: 8000 })
-      await fetchCronCfg()
-      fetchData()
-    } catch (err: any) {
-      toast.error(err?.body?.error?.message || 'Erro ao executar.')
-    } finally { setCronRunning(false) }
-  }
-  useEffect(() => { fetchCronCfg() }, [fetchCronCfg])
+  useEffect(() => { fetchOrphans() }, [fetchOrphans])
 
   // ---------- Data fetching ----------
 
@@ -594,20 +572,6 @@ export default function CoveragePage() {
             >
               Por mês
             </button>
-            {cronCfg && (
-              <button
-                onClick={() => setCronOpen(o => !o)}
-                className={`px-3 py-1 text-xs font-bold rounded-lg transition-colors flex items-center gap-1 ${
-                  cronCfg.enabled
-                    ? 'text-emerald-300 hover:bg-slate-800'
-                    : 'text-amber-300 hover:bg-slate-800'
-                }`}
-                title={cronCfg.enabled ? `Cron ativo (${cronCfg.intervalHours}h)` : 'Cron desativado'}
-              >
-                <Settings className="w-3 h-3" />
-                Cron {cronCfg.enabled ? `(${cronCfg.intervalHours}h)` : '(off)'}
-              </button>
-            )}
             {viewMode === 'month' && (
               <>
                 <div className="w-px h-6 bg-slate-700 mx-1" />
@@ -635,63 +599,45 @@ export default function CoveragePage() {
           </div>
         </div>
 
-        {/* V3.4 FASE H3: painel de gestao do cron de transicao de status */}
-        {cronOpen && cronCfg && (
-          <div className="glass-card rounded-2xl border border-white/5 mb-6 p-4">
-            <div className="flex items-start justify-between gap-3 flex-wrap">
-              <div>
-                <h4 className="font-bold text-white text-sm flex items-center gap-2">
-                  <Settings className="w-4 h-4 text-primary" /> Cron de transição automática de status
-                  <InfoTooltip text="Move coberturas PLANEJADAS para ATIVAS quando a data de início chega, e ATIVAS para CONCLUÍDAS quando a data de fim passa. Configuração persistida no banco." />
+        {/* V3.4 Story 4.20: alerta de colaboradores FERIAS sem registro */}
+        {orphansLoaded && orphanFeristas.length > 0 && (
+          <div className="glass-card rounded-2xl border border-amber-500/40 bg-amber-500/5 mb-6 p-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <h4 className="font-bold text-amber-200 text-sm">
+                  {orphanFeristas.length} colaborador(es) com status "Férias" mas sem registro de período
                 </h4>
-                <p className="text-xs text-slate-400 mt-1">
-                  {cronCfg.lastRunAt
-                    ? <>Última execução: <span className="text-slate-300 font-mono">{format(parseISO(cronCfg.lastRunAt), 'dd/MM/yyyy HH:mm')}</span> · {cronCfg.lastResult?.toActive ?? 0} → ATIVA, {cronCfg.lastResult?.toCompleted ?? 0} → CONCLUÍDA ({cronCfg.lastResult?.durationMs ?? 0}ms)</>
-                    : <>Nunca executado.</>}
+                <p className="text-xs text-amber-100/80 mt-1">
+                  Estes colaboradores foram importados com status de férias, mas não há registro de início e fim no sistema —
+                  então não aparecem como gap nem permitem cobertura. <strong>Registre o período de cada um</strong> usando o botão
+                  "Programar Férias" em "Programação de Férias", informando início e fim observados.
                 </p>
-              </div>
-              <button onClick={() => setCronOpen(false)} className="p-1 text-slate-400 hover:text-white"><X className="w-4 h-4" /></button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
-              <div className="flex items-center gap-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={cronCfg.enabled}
-                    disabled={cronSaving}
-                    onChange={e => saveCronCfg({ enabled: e.target.checked })}
-                    className="accent-primary"
-                  />
-                  <span className="text-sm text-slate-300">Cron ativo</span>
-                </label>
-              </div>
-              <div className="flex items-center gap-2">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Intervalo (h)</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={168}
-                  value={cronCfg.intervalHours}
-                  disabled={cronSaving || !cronCfg.enabled}
-                  onChange={e => setCronCfg(c => c ? { ...c, intervalHours: Number(e.target.value) } : c)}
-                  onBlur={e => {
-                    const v = Number(e.target.value)
-                    if (Number.isFinite(v) && v >= 1 && v <= 168) saveCronCfg({ intervalHours: v })
-                  }}
-                  className="w-24 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary/50 disabled:opacity-50"
-                />
-                <span className="text-xs text-slate-500">(min 1, max 168 = 1 semana)</span>
-              </div>
-              <div className="flex justify-end">
-                <button
-                  onClick={runCronNow}
-                  disabled={cronRunning}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary/90 text-white text-xs font-bold rounded-lg shadow-lg shadow-primary/20 disabled:opacity-50"
-                  title="Executar transição agora (não aguarda o próximo tick)"
-                >
-                  <Play className="w-3 h-3" />
-                  {cronRunning ? 'Executando...' : 'Rodar agora'}
-                </button>
+                <details className="mt-3">
+                  <summary className="text-xs text-amber-300 cursor-pointer hover:text-amber-200 font-bold">Ver lista ({orphanFeristas.length})</summary>
+                  <div className="mt-2 max-h-64 overflow-y-auto bg-slate-950/40 rounded-lg border border-white/5">
+                    <table className="w-full text-xs">
+                      <thead className="text-[10px] uppercase tracking-wider text-slate-500 bg-slate-900/40 sticky top-0">
+                        <tr>
+                          <th className="text-left px-3 py-1.5">Nome</th>
+                          <th className="text-left px-3 py-1.5">Matr.</th>
+                          <th className="text-left px-3 py-1.5">Cargo</th>
+                          <th className="text-left px-3 py-1.5">Posto</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {orphanFeristas.map(o => (
+                          <tr key={o.id} className="hover:bg-white/[0.02]">
+                            <td className="px-3 py-1.5 text-white font-medium">{o.name}</td>
+                            <td className="px-3 py-1.5 text-slate-400 font-mono">{o.registration || '—'}</td>
+                            <td className="px-3 py-1.5 text-slate-400">{o.position || '—'}</td>
+                            <td className="px-3 py-1.5 text-slate-400">{o.workplace || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
               </div>
             </div>
           </div>

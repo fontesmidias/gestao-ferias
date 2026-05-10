@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect } from 'react'
 import { HttpClient } from '@/lib/api-client'
-import { Settings, Save, Server, Building2, KeyRound, BrainCircuit, ExternalLink, MessageSquare, Wifi, WifiOff, FileSignature, UserCog, Users, UserPlus, X, Trash2 } from 'lucide-react'
+import { Settings, Save, Server, Building2, KeyRound, BrainCircuit, ExternalLink, MessageSquare, Wifi, WifiOff, FileSignature, UserCog, Users, UserPlus, X, Trash2, Zap, Play } from 'lucide-react'
+import { format, parseISO } from 'date-fns'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { toast } from 'sonner'
@@ -48,6 +49,11 @@ export default function SettingsPage() {
   // Profile self-service
   const [profileForm, setProfileForm] = useState({ name: '', email: '', currentPassword: '', newPassword: '' })
   const [savingProfile, setSavingProfile] = useState(false)
+
+  // V3.4 Story 4.18: Automacoes — config do cron de coberturas
+  const [cronCfg, setCronCfg] = useState<{ enabled: boolean; intervalHours: number; lastRunAt: string | null; lastResult: { toActive: number; toCompleted: number; durationMs: number } | null } | null>(null)
+  const [cronSaving, setCronSaving] = useState(false)
+  const [cronRunning, setCronRunning] = useState(false)
 
   // Team management (ADMIN)
   const [teamMembers, setTeamMembers] = useState<any[]>([])
@@ -117,10 +123,42 @@ export default function SettingsPage() {
       setProfileForm({ name: user.name || '', email: user.email || '', currentPassword: '', newPassword: '' })
       if (user.tenantId) {
         fetchSettings()
-        if (user.role === 'ADMIN' || user.role === 'SUPERADMIN') fetchTeam()
+        if (user.role === 'ADMIN' || user.role === 'SUPERADMIN') {
+          fetchTeam()
+          fetchCronCfg()
+        }
       }
     }
   }, [user])
+
+  // V3.4 Story 4.18: handlers do cron de coberturas
+  const fetchCronCfg = async () => {
+    try {
+      const res: any = await HttpClient.get('/admin/coverage-cron')
+      setCronCfg(res?.data ?? null)
+    } catch { /* operador comum nao acessa */ }
+  }
+  const saveCronCfg = async (patch: { enabled?: boolean; intervalHours?: number }) => {
+    try {
+      setCronSaving(true)
+      const res: any = await HttpClient.patch('/admin/coverage-cron', patch)
+      setCronCfg(res?.data ?? null)
+      toast.success('Configuracao salva.')
+    } catch (err: any) {
+      toast.error(err?.body?.error?.message || 'Erro ao salvar.')
+    } finally { setCronSaving(false) }
+  }
+  const runCronNow = async () => {
+    try {
+      setCronRunning(true)
+      const res: any = await HttpClient.post('/admin/coverage-cron/run', {})
+      const d = res?.data
+      toast.success(`Atualizacao concluida: ${d?.toActive ?? 0} coberturas iniciadas, ${d?.toCompleted ?? 0} encerradas.`, { duration: 8000 })
+      await fetchCronCfg()
+    } catch (err: any) {
+      toast.error(err?.body?.error?.message || 'Erro ao executar.')
+    } finally { setCronRunning(false) }
+  }
 
   const fetchSettings = async () => {
     try {
@@ -381,10 +419,94 @@ export default function SettingsPage() {
             </div>
           )}
 
+          {/* ─── Automações (ADMIN only) ─── V3.4 Story 4.18 ─ */}
+          {isAdmin && hasTenant && cronCfg && (
+            <div className="glass-card p-8 rounded-2xl border border-white/5">
+              <div className="flex items-center gap-3 mb-6 border-b border-white/5 pb-4">
+                <div className="p-2 bg-emerald-500/20 rounded-lg">
+                  <Zap className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">Automações</h3>
+                  <p className="text-sm text-slate-400">Tarefas que o sistema executa sozinho, em segundo plano.</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="bg-slate-900/50 border border-white/5 rounded-xl p-5">
+                  <div className="flex items-start justify-between gap-4 flex-wrap">
+                    <div className="flex-1 min-w-[280px]">
+                      <h4 className="font-bold text-white text-sm mb-1">Atualização automática das coberturas</h4>
+                      <p className="text-xs text-slate-400 leading-relaxed">
+                        De tempos em tempos, o sistema verifica as coberturas cadastradas e atualiza o status delas automaticamente:
+                      </p>
+                      <ul className="text-xs text-slate-400 list-disc list-inside mt-2 space-y-0.5">
+                        <li>Coberturas <strong className="text-sky-300">Planejadas</strong> viram <strong className="text-emerald-300">Ativas</strong> quando a data de início chega.</li>
+                        <li>Coberturas <strong className="text-emerald-300">Ativas</strong> viram <strong className="text-slate-300">Concluídas</strong> quando a data de fim passa.</li>
+                      </ul>
+                      <p className="text-xs text-slate-500 mt-3">
+                        {cronCfg.lastRunAt
+                          ? <>Última atualização: <strong className="text-slate-300">{format(parseISO(cronCfg.lastRunAt), 'dd/MM/yyyy HH:mm')}</strong>{cronCfg.lastResult ? <> · {cronCfg.lastResult.toActive} cobertura(s) iniciada(s), {cronCfg.lastResult.toCompleted} encerrada(s)</> : null}</>
+                          : <>Ainda não executado.</>}
+                      </p>
+                    </div>
+                    <button
+                      onClick={runCronNow}
+                      disabled={cronRunning}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-primary hover:bg-primary/90 text-white text-xs font-bold rounded-lg shadow-lg shadow-primary/20 disabled:opacity-50"
+                      title="Verificar e atualizar agora, sem esperar o próximo horário"
+                    >
+                      <Play className="w-3.5 h-3.5" />
+                      {cronRunning ? 'Atualizando...' : 'Atualizar agora'}
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5 pt-4 border-t border-white/5">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={cronCfg.enabled}
+                        disabled={cronSaving}
+                        onChange={e => saveCronCfg({ enabled: e.target.checked })}
+                        className="w-4 h-4 accent-primary"
+                      />
+                      <div>
+                        <p className="text-sm text-slate-200 font-medium">Ligado</p>
+                        <p className="text-[11px] text-slate-500">Desligando, as coberturas só serão atualizadas com o botão acima.</p>
+                      </div>
+                    </label>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-1">
+                        Verificar a cada <InfoTooltip text="Quantas horas o sistema espera entre uma verificação e outra. 6 horas é suficiente para a maioria dos casos." />
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min={1}
+                          max={168}
+                          value={cronCfg.intervalHours}
+                          disabled={cronSaving || !cronCfg.enabled}
+                          onChange={e => setCronCfg(c => c ? { ...c, intervalHours: Number(e.target.value) } : c)}
+                          onBlur={e => {
+                            const v = Number(e.target.value)
+                            if (Number.isFinite(v) && v >= 1 && v <= 168) saveCronCfg({ intervalHours: v })
+                          }}
+                          className="w-24 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary/50 disabled:opacity-50"
+                        />
+                        <span className="text-sm text-slate-400">hora(s)</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-1">Mínimo 1 hora, máximo 168 horas (1 semana).</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ─── Configuracoes do Tenant (ADMIN only) ──────── */}
           {isAdmin && hasTenant && (
           <form onSubmit={handleSubmit} className="space-y-8">
-            
+
             {/* Configuração Unificada do Oráculo AI */}
             <div className="glass-card p-8 rounded-2xl border border-white/5 relative overflow-hidden">
               <div className="flex items-center gap-3 mb-6 border-b border-white/5 pb-4">

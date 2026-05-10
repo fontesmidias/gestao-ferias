@@ -275,6 +275,9 @@ model VacationRequest {
   dispatchNote      String?   @map("dispatch_note")
   originalStartDate DateTime? @map("original_start_date")
   originalEndDate   DateTime? @map("original_end_date")
+  // V3.4 Story 4.19: dispensa explicita de cobertura (auditada).
+  coverageWaived       Boolean   @default(false) @map("coverage_waived")
+  coverageWaiverReason String?   @map("coverage_waiver_reason")
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 

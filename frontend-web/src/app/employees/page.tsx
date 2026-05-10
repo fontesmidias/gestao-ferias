@@ -454,41 +454,6 @@ export default function EmployeesPage() {
                   <FileSpreadsheet className="w-5 h-5" />
                 </button>
                 <label
-                  className="flex items-center gap-1.5 px-3 py-2 border border-amber-500/40 bg-amber-500/10 text-amber-300 text-sm font-bold rounded-lg hover:bg-amber-500/20 transition-colors cursor-pointer"
-                  title="Re-upload da planilha Tirvu para preencher matrícula nos colaboradores ja cadastrados (match por CPF, idempotente)"
-                >
-                  <IdCard className="w-4 h-4" />
-                  <span className="hidden sm:inline">Backfill matrícula</span>
-                  <input type="file" accept=".xlsx,.xls" className="hidden" onChange={async (e) => {
-                    const file = e.target.files?.[0]
-                    if (!file) return
-                    if (!confirm('Backfill de matricula:\n\nEsta acao percorre TODOS os colaboradores casando por CPF com a planilha Tirvu e preenche o campo Matricula onde estiver vazio. Idempotente (rodar 2x = mesmo resultado).\n\nContinuar?')) {
-                      e.target.value = ''
-                      return
-                    }
-                    const formData = new FormData()
-                    formData.append('file', file)
-                    try {
-                      toast.loading('Backfill em andamento...', { id: 'backfill' })
-                      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/employees/registration/backfill`, {
-                        method: 'POST',
-                        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-                        body: formData
-                      })
-                      const data = await res.json()
-                      toast.dismiss('backfill')
-                      if (res.ok) {
-                        const s = data?.data?.summary ?? data?.summary ?? {}
-                        toast.success(`Backfill OK: ${s.updated ?? 0} atualizados, ${s.unchanged ?? 0} ja corretos, ${s.unmatched ?? 0} sem match.`, { duration: 10000 })
-                        reloadCurrentList()
-                      } else {
-                        toast.error(data?.error?.message || data?.message || 'Erro no backfill')
-                      }
-                    } catch { toast.dismiss('backfill'); toast.error('Erro ao enviar arquivo') }
-                    e.target.value = ''
-                  }} />
-                </label>
-                <label
                   className="p-2 border border-slate-700 bg-slate-800 text-sky-400 rounded-lg hover:bg-slate-700 hover:text-sky-300 transition-colors cursor-pointer"
                   title="Importar colaboradores via planilha (CSV/Excel)"
                 >

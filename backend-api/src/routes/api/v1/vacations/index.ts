@@ -350,6 +350,43 @@ const vacations: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     return reply.code(201).send({ data: created, error: null })
   })
 
+  // V3.4 Story 4.20: lista colaboradores com status FERIAS no Employee
+  // mas SEM VacationRequest ativa cobrindo hoje. Caso classico: importer
+  // Tirvu trouxe status='FERIAS' sem cadastrar a request com datas.
+  // RH usa para regularizar retroativamente.
+  fastify.get('/orphan-on-vacation', {
+    onRequest: [fastify.requireAuth, fastify.requireAdmin],
+  }, async (request, reply) => {
+    const { tenantId } = request.user as any
+    const today = new Date()
+    const orphans = await fastify.prisma.employee.findMany({
+      where: {
+        tenantId,
+        status: { in: ['FERIAS', 'FÉRIAS', 'Ferias', 'Férias', 'ferias', 'férias'] },
+        requests: {
+          none: {
+            status: { in: ['APPROVED', 'SIGNED', 'PENDING', 'COMPLETED'] },
+            startDate: { lte: today },
+            endDate: { gte: today },
+          },
+        },
+      },
+      select: {
+        id: true,
+        name: true,
+        registration: true,
+        cpf: true,
+        status: true,
+        hireDate: true,
+        position: true,
+        workplace: true,
+      },
+      orderBy: { name: 'asc' },
+      take: 500,
+    })
+    return reply.send({ data: { count: orphans.length, items: orphans }, error: null })
+  })
+
   fastify.get('/', {
     onRequest: [fastify.requireAuth]
   }, async (request) => {

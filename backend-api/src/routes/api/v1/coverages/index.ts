@@ -374,11 +374,14 @@ const coverages: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     const fromDate = parseISO(from)
     const toDate = parseISO(to)
 
-    // 1. Buscar férias aprovadas que se sobreponham ao período
+    // 1. Buscar férias aprovadas que se sobreponham ao período.
+    // V3.4 Story 4.19: ferias com coverageWaived=true sao IGNORADAS aqui
+    // (dispensa explicita de cobertura nao gera gap).
     const approvedVacations = await fastify.prisma.vacationRequest.findMany({
       where: {
         tenantId,
         status: { in: ['APPROVED', 'SIGNED'] },
+        coverageWaived: false,
         startDate: { lte: toDate },
         endDate: { gte: fromDate }
       },

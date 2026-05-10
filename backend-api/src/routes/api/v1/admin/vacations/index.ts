@@ -31,6 +31,9 @@ const programmedVacations: FastifyPluginAsync = async (fastify) => {
           dispatchNote: { type: 'string' },
           overrideBalance: { type: 'boolean', default: false },
           overrideOverlap: { type: 'boolean', default: false },
+          // V3.4 Story 4.19: dispensa explicita de cobertura
+          coverageWaived: { type: 'boolean', default: false },
+          coverageWaiverReason: { type: 'string', maxLength: 500 },
         },
       },
     },
@@ -50,6 +53,14 @@ const programmedVacations: FastifyPluginAsync = async (fastify) => {
       dispatchNote?: string
       overrideBalance?: boolean
       overrideOverlap?: boolean
+      coverageWaived?: boolean
+      coverageWaiverReason?: string
+    }
+    if (body.coverageWaived && !body.coverageWaiverReason?.trim()) {
+      return reply.code(422).send({
+        data: null,
+        error: { code: 'WAIVER_REASON_REQUIRED', message: 'Ao dispensar cobertura, informe o motivo.' },
+      })
     }
 
     const start = parseISO(body.startDate)
@@ -185,6 +196,8 @@ const programmedVacations: FastifyPluginAsync = async (fastify) => {
         days,
         status: 'APPROVED',
         dispatchNote: note,
+        coverageWaived: body.coverageWaived ?? false,
+        coverageWaiverReason: body.coverageWaived ? body.coverageWaiverReason?.trim() : null,
       },
     })
 

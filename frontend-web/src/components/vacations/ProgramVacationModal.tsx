@@ -82,6 +82,9 @@ export function ProgramVacationModal({ open, onClose, onCreated }: Props) {
   const [lastEdited, setLastEdited] = useState<'start' | 'end' | 'days' | null>(null)
   const [note, setNote] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  // V3.4 Story 4.19: dispensa de cobertura
+  const [coverageWaived, setCoverageWaived] = useState(false)
+  const [coverageWaiverReason, setCoverageWaiverReason] = useState('')
   const [overlapConfirm, setOverlapConfirm] = useState<Conflict[] | null>(null)
   const [cltConfirm, setCltConfirm] = useState<string[] | null>(null)
 
@@ -185,6 +188,8 @@ export function ProgramVacationModal({ open, onClose, onCreated }: Props) {
     setDays(null)
     setLastEdited(null)
     setNote('')
+    setCoverageWaived(false)
+    setCoverageWaiverReason('')
     setOverlapConfirm(null)
     setCltConfirm(null)
   }
@@ -235,6 +240,10 @@ export function ProgramVacationModal({ open, onClose, onCreated }: Props) {
       toast.error('Preencha colaborador, datas e dias.')
       return
     }
+    if (coverageWaived && !coverageWaiverReason.trim()) {
+      toast.error('Ao dispensar cobertura, informe o motivo.')
+      return
+    }
     setSubmitting(true)
     try {
       const res = await HttpClient.post('/admin/vacations/programmed', {
@@ -244,6 +253,8 @@ export function ProgramVacationModal({ open, onClose, onCreated }: Props) {
         dispatchNote: note.trim() || undefined,
         overrideOverlap: overrides?.overrideOverlap ?? false,
         overrideBalance: overrides?.overrideBalance ?? false,
+        coverageWaived,
+        coverageWaiverReason: coverageWaived ? coverageWaiverReason.trim() : undefined,
       })
       const meta = (res as any)?.meta
       if (meta?.cltWarnings?.length) {
@@ -522,6 +533,35 @@ export function ProgramVacationModal({ open, onClose, onCreated }: Props) {
             placeholder="Ex: Plano anual 2026 · Decisão da diretoria · etc."
             className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-primary/50"
           />
+        </div>
+
+        {/* V3.4 Story 4.19: dispensar cobertura */}
+        <div className="mb-4 bg-slate-950/40 border border-white/5 rounded-xl p-3">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={coverageWaived}
+              onChange={e => setCoverageWaived(e.target.checked)}
+              className="w-4 h-4 accent-primary"
+            />
+            <span className="text-sm text-slate-200 font-medium">Dispensar cobertura</span>
+          </label>
+          <p className="text-[11px] text-slate-500 mt-1 ml-6">
+            Marque quando este colaborador NÃO precisa de substituto durante o período (ex: posto inativo no período, redução temporária da operação, decisão administrativa).
+            Estas férias não aparecerão no Painel de Cobertura.
+          </p>
+          {coverageWaived && (
+            <div className="mt-3 ml-6">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Motivo da dispensa <span className="text-rose-400">*</span></label>
+              <textarea
+                value={coverageWaiverReason}
+                onChange={e => setCoverageWaiverReason(e.target.value)}
+                placeholder="Ex: Posto fechado durante o período · Cliente em manutenção · Outro motivo justificado"
+                rows={2}
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-primary/50"
+              />
+            </div>
+          )}
         </div>
 
         {/* Conflito de overlap */}
