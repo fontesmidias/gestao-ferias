@@ -181,7 +181,8 @@ const employees: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         id: true, name: true, hireDate: true, balanceOffset: true,
         requests: {
           where: { status: { in: ['APPROVED', 'PENDING', 'SIGNED', 'COMPLETED'] } },
-          select: { startDate: true, endDate: true, days: true, status: true },
+          select: { id: true, startDate: true, endDate: true, days: true, status: true, dispatchNote: true },
+          orderBy: { startDate: 'asc' },
         },
       },
     })
@@ -229,6 +230,7 @@ const employees: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         employeeId: employee.id,
         employeeName: employee.name,
         hireDate: employee.hireDate.toISOString().slice(0, 10),
+        balanceOffset: employee.balanceOffset,
         totalAvailable,
         periods: periods.map(p => ({
           startDate: p.startDate.toISOString().slice(0, 10),
@@ -236,6 +238,16 @@ const employees: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
           concessiveEndDate: p.concessiveEndDate.toISOString().slice(0, 10),
           daysOfRight: p.daysOfRight,
           status: p.status,
+        })),
+        // Transparencia: lista das solicitacoes que CONSOMEM saldo (status countable).
+        // CANCELLED e REJECTED ja foram filtradas no where da query.
+        consuming: employee.requests.map(r => ({
+          id: r.id,
+          startDate: r.startDate.toISOString().slice(0, 10),
+          endDate: r.endDate.toISOString().slice(0, 10),
+          days: r.days,
+          status: r.status,
+          dispatchNote: r.dispatchNote,
         })),
         suggestion,
       },

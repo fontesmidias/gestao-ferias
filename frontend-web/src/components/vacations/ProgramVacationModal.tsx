@@ -22,12 +22,23 @@ interface BalancePeriod {
   status: 'AQUISITIVO' | 'CONCESSIVO' | 'VENCIDO' | 'QUITADO'
 }
 
+interface ConsumingRequest {
+  id: string
+  startDate: string
+  endDate: string
+  days: number
+  status: string
+  dispatchNote: string | null
+}
+
 interface BalanceData {
   employeeId: string
   employeeName: string
   hireDate: string
+  balanceOffset?: number
   totalAvailable: number
   periods: BalancePeriod[]
+  consuming?: ConsumingRequest[]
   suggestion: {
     startDate: string
     endDate: string
@@ -358,6 +369,31 @@ export function ProgramVacationModal({ open, onClose, onCreated }: Props) {
                 )}
                 {balance.suggestion && (
                   <p className="text-[10px] text-slate-500 mt-1">{balance.suggestion.reason}</p>
+                )}
+                {/* Transparencia: mostra solicitacoes que estao consumindo o saldo */}
+                {balance.consuming && balance.consuming.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-white/5">
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                      Já consumindo saldo ({balance.consuming.reduce((s, c) => s + c.days, 0)} dias)
+                    </p>
+                    <div className="space-y-1">
+                      {balance.consuming.map(c => (
+                        <div key={c.id} className="flex items-center justify-between text-[11px]">
+                          <div className="flex items-center gap-2">
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">{c.status}</span>
+                            <span className="text-slate-400 font-mono">{c.startDate} → {c.endDate}</span>
+                          </div>
+                          <span className="text-slate-300 font-bold">{c.days}d</span>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-slate-600 mt-1.5">Apenas solicitações em PENDING/APPROVED/SIGNED/COMPLETED contam. Canceladas e reprovadas devolvem o saldo.</p>
+                  </div>
+                )}
+                {balance.balanceOffset != null && balance.balanceOffset !== 0 && (
+                  <p className="text-[10px] text-amber-400 mt-2">
+                    ⚠ Ajuste manual de saldo: <strong>{balance.balanceOffset > 0 ? '+' : ''}{balance.balanceOffset}</strong> dias (registrado em auditoria).
+                  </p>
                 )}
               </>
             ) : (
