@@ -434,6 +434,13 @@ const predict: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     reply.raw.setHeader('Cache-Control', 'no-cache, no-transform')
     reply.raw.setHeader('Connection', 'keep-alive')
     reply.raw.setHeader('X-Accel-Buffering', 'no')
+    // V3.4 fix: CORS manual em reply.raw (plugin global nao aplica)
+    const origin = request.headers.origin
+    if (origin) {
+      reply.raw.setHeader('Access-Control-Allow-Origin', origin)
+      reply.raw.setHeader('Access-Control-Allow-Credentials', 'true')
+      reply.raw.setHeader('Vary', 'Origin')
+    }
     reply.raw.flushHeaders?.()
 
     const send = (obj: unknown) => {
@@ -472,6 +479,11 @@ const predict: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     const STREAM_TIMEOUT_MS = 60_000
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), STREAM_TIMEOUT_MS)
+    // V3.4 fix: aborta a chamada LLM se o cliente desconectar (libera recursos).
+    request.raw.on('close', () => {
+      try { controller.abort() } catch { /* ignore */ }
+      clearTimeout(timer)
+    })
 
     // Stream OpenAI
     async function streamOpenAI(apiKey: string, model: string): Promise<boolean> {
