@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { parseISO, differenceInDays } from 'date-fns'
 import { VacationEngine } from '../../../../../modules/vacations/vacation-engine'
+import { parseTirvuOperational } from '../../../../../modules/imports/tirvu-operational-parser'
 
 /**
  * V3.4 MVP M4: Admin programa férias diretamente em nome do colaborador.
@@ -229,6 +230,226 @@ const programmedVacations: FastifyPluginAsync = async (fastify) => {
         cltWarnings: validation.isValid ? [] : validation.errors,
         overlapDetected: conflicting.length > 0,
       },
+    })
+  })
+
+  // ============================================================================
+  // V3.4 Story 4.21: Import Tirvu Gestao Operacional (movido de import-operational.ts
+  // porque fastify-autoload nao estava carregando o arquivo separado).
+  // ============================================================================
+
+  fastify.get('/import-operational/ping', { onRequest: [fastify.requireAuth] }, async () => ({ ok: true, route: 'import-operational' }))
+
+  fastify.post('/import-operational', {
+    onRequest: [fastify.requireAuth],
+  }, async (request, reply) => {
+    const user = request.user as { userId: string; tenantId: string; role: string }
+    if (!['ADMIN', 'SUPERADMIN'].includes(user.role)) {
+      return reply.code(403).send({ data: null, error: { code: 'FORBIDDEN', message: 'Apenas ADMIN/SUPERADMIN.' } })
+    }
+
+    const file = await request.file()
+    if (!file) return reply.code(400).send({ data: null, error: { code: 'NO_FILE', message: 'Envie a planilha do Tirvu (Gestao Operacional).' } })
+    const buffer = await file.toBuffer()
+
+    const q = request.query as { dryRun?: string }
+    const dryRun = q.dryRun === 'true'
+
+    let parsed
+    try {
+      parsed = parseTirvuOperational(buffer)
+    } catch (err: any) {
+      return reply.code(400).send({
+        data: null,
+        error: {
+          code: 'PARSE_FAILED',
+          message: `Nao consegui ler a planilha. Verifique se enviou o XLS "Gestao Operacional" do Tirvu (com colunas Status, Motivo, Colaborador, Matricula, Posto, Substituto, Vigencia). Detalhe tecnico: ${err?.message || 'erro desconhecido'}`,
+        },
+      })
+    }
+    if (parsed.records.length === 0) {
+      return reply.code(400).send({
+        data: null,
+        error: {
+          code: 'EMPTY_OR_WRONG_FILE',
+          message: 'A planilha foi lida mas nenhuma linha foi reconhecida. Voce enviou o arquivo certo? Esperado: "Gestao Operacional - YYYY-MM-DD a YYYY-MM-DD.xls" do Tirvu — NAO o "Trabalhadores" nem o "Plano de Ferias".',
+        },
+      })
+    }
+    if (parsed.vacationCount === 0) {
+      return reply.code(400).send({
+        data: null,
+        error: {
+          code: 'NO_VACATIONS_FOUND',
+          message: `Planilha lida (${parsed.records.length} linhas), mas nenhuma tem Motivo=FERIAS. Provavel que voce enviou um arquivo diferente — esperado: "Gestao Operacional" do Tirvu com pelo menos 1 colaborador em ferias no periodo.`,
+        },
+      })
+    }
+
+    type Result =
+      | { rowIndex: number; titular: string; status: 'created' | 'already_exists' | 'no_match' | 'no_dates' | 'coverage_created' | 'coverage_no_substituto_match' | 'coverage_no_allocation'; vacationRequestId?: string; coverageId?: string; reason?: string }
+    const results: Result[] = []
+    let createdCount = 0, alreadyExists = 0, noMatch = 0, noDates = 0
+    let coverageCreated = 0, coverageNoMatch = 0, coverageNoAlloc = 0
+
+    for (const rec of parsed.records) {
+      if (rec.motivo !== 'FERIAS') continue
+      if (!rec.titularMatricula) {
+        results.push({ rowIndex: rec.rowIndex, titular: rec.titularNome, status: 'no_match', reason: 'Matricula do titular ausente.' })
+        noMatch++; continue
+      }
+      if (!rec.inicioVigencia || !rec.fimVigencia) {
+        results.push({ rowIndex: rec.rowIndex, titular: rec.titularNome, status: 'no_dates', reason: 'Inicio/Fim de vigencia ausentes.' })
+        noDates++; continue
+      }
+
+      const titular = await fastify.prisma.employee.findFirst({
+        where: { tenantId: user.tenantId, registration: rec.titularMatricula },
+        include: { allocations: { where: { status: 'ACTIVE' }, include: { workplacePosition: true }, take: 1 } },
+      })
+      if (!titular) {
+        results.push({ rowIndex: rec.rowIndex, titular: rec.titularNome, status: 'no_match', reason: `Sem colaborador com matricula ${rec.titularMatricula}.` })
+        noMatch++; continue
+      }
+
+      const start = parseISO(rec.inicioVigencia)
+      const end = parseISO(rec.fimVigencia)
+      const days = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1)
+
+      const existing = await fastify.prisma.vacationRequest.findFirst({
+        where: {
+          tenantId: user.tenantId,
+          employeeId: titular.id,
+          startDate: start,
+          endDate: end,
+          status: { notIn: ['CANCELLED', 'REJECTED'] },
+        },
+      })
+      let vacationRequestId: string
+      if (existing) {
+        vacationRequestId = existing.id
+        alreadyExists++
+        results.push({ rowIndex: rec.rowIndex, titular: rec.titularNome, status: 'already_exists', vacationRequestId })
+      } else if (!dryRun) {
+        const dispatchNote = `Importada da Gestão Operacional Tirvu (ID ${rec.tirvuId ?? '?'}) · ${rec.posto ?? 'sem posto'}${rec.observacoes ? ' · ' + rec.observacoes : ''}`
+        const cr = await fastify.prisma.vacationRequest.create({
+          data: {
+            tenantId: user.tenantId,
+            employeeId: titular.id,
+            startDate: start,
+            endDate: end,
+            days,
+            status: 'APPROVED',
+            dispatchNote: dispatchNote.slice(0, 500),
+            coverageWaived: rec.semCobertura,
+            coverageWaiverReason: rec.semCobertura ? (rec.observacoes || 'Importado SEM COBERTURA da planilha Tirvu') : null,
+          },
+        })
+        vacationRequestId = cr.id
+        createdCount++
+        results.push({ rowIndex: rec.rowIndex, titular: rec.titularNome, status: 'created', vacationRequestId })
+      } else {
+        createdCount++
+        results.push({ rowIndex: rec.rowIndex, titular: rec.titularNome, status: 'created' })
+        continue
+      }
+
+      if (!rec.semCobertura && rec.substitutoMatricula) {
+        const sub = await fastify.prisma.employee.findFirst({
+          where: { tenantId: user.tenantId, registration: rec.substitutoMatricula },
+        })
+        if (!sub) {
+          results.push({ rowIndex: rec.rowIndex, titular: rec.titularNome, status: 'coverage_no_substituto_match', reason: `Substituto ${rec.substitutoNome} matr ${rec.substitutoMatricula} nao encontrado.` })
+          coverageNoMatch++; continue
+        }
+        const alloc = titular.allocations[0]
+        if (!alloc) {
+          results.push({ rowIndex: rec.rowIndex, titular: rec.titularNome, status: 'coverage_no_allocation', reason: 'Titular sem allocation ACTIVE — nao posso vincular cobertura.' })
+          coverageNoAlloc++; continue
+        }
+        const existingCov = await fastify.prisma.coverageAssignment.findFirst({
+          where: {
+            tenantId: user.tenantId,
+            vacationRequestId,
+            replacementEmployeeId: sub.id,
+            status: { in: ['PLANNED', 'ACTIVE'] },
+          },
+        })
+        if (existingCov) {
+          results.push({ rowIndex: rec.rowIndex, titular: rec.titularNome, status: 'coverage_created', coverageId: existingCov.id, reason: 'ja existente' })
+          continue
+        }
+        if (!dryRun) {
+          try {
+            const cov = await fastify.prisma.coverageAssignment.create({
+              data: {
+                tenantId: user.tenantId,
+                vacationRequestId,
+                replacementEmployeeId: sub.id,
+                workplacePositionId: alloc.workplacePosition.id,
+                startDate: start,
+                endDate: end,
+                type: sub.isFerista ? 'FERISTA' : 'INTERMITENTE',
+                status: 'ACTIVE',
+                cost: sub.salary ? (Number(sub.salary) / 30) * days : null,
+              },
+            })
+            coverageCreated++
+            results.push({ rowIndex: rec.rowIndex, titular: rec.titularNome, status: 'coverage_created', coverageId: cov.id })
+          } catch (err: any) {
+            const sqlState = err?.meta?.code || err?.code
+            if (sqlState === '23P01' || String(err?.message || '').includes('coverage_assignments_no_overlap_active')) {
+              results.push({ rowIndex: rec.rowIndex, titular: rec.titularNome, status: 'coverage_no_substituto_match', reason: 'Substituto ja em cobertura sobreposta.' })
+              coverageNoMatch++
+            } else {
+              throw err
+            }
+          }
+        } else {
+          coverageCreated++
+        }
+      }
+    }
+
+    await fastify.prisma.auditLog.create({
+      data: {
+        tenantId: user.tenantId,
+        userId: user.userId,
+        action: 'VACATION_BULK_IMPORT_OPERATIONAL',
+        resourceType: 'VACATION_REQUEST',
+        resourceId: '00000000-0000-0000-0000-000000000000',
+        newData: {
+          dryRun,
+          fileRows: parsed.records.length,
+          parsedVacations: parsed.vacationCount,
+          created: createdCount,
+          alreadyExists,
+          noMatch,
+          noDates,
+          coverageCreated,
+          coverageNoMatch,
+          coverageNoAlloc,
+        } as never,
+      },
+    }).catch(() => { /* nao deixa auditoria quebrar o import */ })
+
+    return reply.send({
+      data: {
+        summary: {
+          dryRun,
+          totalRows: parsed.records.length,
+          ferias: parsed.vacationCount,
+          created: createdCount,
+          alreadyExists,
+          noMatch,
+          noDates,
+          coverageCreated,
+          coverageNoMatch,
+          coverageNoAlloc,
+        },
+        results,
+      },
+      error: null,
     })
   })
 }
