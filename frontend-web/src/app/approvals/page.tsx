@@ -57,6 +57,13 @@ export default function ApprovalsPage() {
   // --- Programar Férias (V3.4 MVP M5) ---
   const [programOpen, setProgramOpen] = useState(false)
   const [importMenuOpen, setImportMenuOpen] = useState(false)
+  // V3.4 Story 4.21.1: preview do import Tirvu antes de aplicar
+  const [tirvuPreview, setTirvuPreview] = useState<{
+    file: File
+    summary: { totalRows: number; ferias: number; created: number; alreadyExists: number; noMatch: number; noDates: number; coverageCreated: number; coverageNoMatch: number; coverageNoAlloc: number }
+    results: Array<{ rowIndex: number; titular: string; status: string; reason?: string }>
+  } | null>(null)
+  const [tirvuApplying, setTirvuApplying] = useState(false)
 
   // --- Bulk Create State (Story 3.4) ---
   const [bulkMode, setBulkMode] = useState(false)
@@ -349,15 +356,12 @@ export default function ApprovalsPage() {
                             setImportMenuOpen(false)
                             const file = e.target.files?.[0]
                             if (!file) return
-                            if (!confirm(`Importar "${file.name}" como GESTÃO OPERACIONAL do Tirvu?\n\nO sistema vai:\n• Criar solicitação APROVADA para cada férias atual (match por matrícula)\n• Criar cobertura quando há substituto na linha\n• Marcar "Sem cobertura" quando observação indicar\n\nÉ idempotente (rodar 2x não duplica).\n\nVerifique se este é o arquivo certo!`)) {
-                              e.target.value = ''; return
-                            }
+                            // V3.4 Story 4.21.1: dry-run primeiro para mostrar preview
                             const formData = new FormData()
                             formData.append('file', file)
                             try {
-                              toast.loading('Importando Gestão Operacional...', { id: 'imp' })
-                              const url = `${process.env.NEXT_PUBLIC_API_URL}/admin/vacations/import-operational`
-                              console.log('[import-operational] POST', url, 'file:', file.name, file.size, 'bytes')
+                              toast.loading('Analisando planilha...', { id: 'imp-preview' })
+                              const url = `${process.env.NEXT_PUBLIC_API_URL}/admin/vacations/import-operational?dryRun=true`
                               const res = await fetch(url, {
                                 method: 'POST',
                                 headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
@@ -365,27 +369,17 @@ export default function ApprovalsPage() {
                               })
                               const text = await res.text()
                               let json: any = null
-                              try { json = JSON.parse(text) } catch { /* nao json */ }
-                              console.log('[import-operational] status', res.status, 'body:', text.slice(0, 500))
-                              toast.dismiss('imp')
-                              if (res.ok && json) {
-                                const s = json?.data?.summary
-                                if (!s || s.ferias === 0) {
-                                  toast.error('Nenhuma linha com "Motivo: FÉRIAS" foi reconhecida. Verifique se este é o arquivo "Gestão Operacional" do Tirvu — não os "Trabalhadores" nem o "Plano de Férias".', { duration: 14000 })
-                                } else {
-                                  toast.success(`✓ ${s.created} criadas · ${s.alreadyExists} já existiam · ${s.noMatch} sem match · ${s.coverageCreated} coberturas`, { duration: 12000 })
-                                }
-                                fetchRequests()
+                              try { json = JSON.parse(text) } catch { /* */ }
+                              toast.dismiss('imp-preview')
+                              if (res.ok && json?.data?.summary) {
+                                setTirvuPreview({ file, summary: json.data.summary, results: json.data.results || [] })
                               } else {
                                 const msg = json?.error?.message || json?.message || `HTTP ${res.status}: ${text.slice(0, 200)}`
                                 toast.error(msg, { duration: 14000 })
-                                console.error('[import-operational] failed:', msg)
                               }
                             } catch (err: any) {
-                              toast.dismiss('imp')
-                              const msg = err?.message || String(err)
-                              toast.error(`Erro de rede: ${msg}`, { duration: 12000 })
-                              console.error('[import-operational] network error:', err)
+                              toast.dismiss('imp-preview')
+                              toast.error(`Erro de rede: ${err?.message || err}`, { duration: 12000 })
                             }
                             e.target.value = ''
                           }} />
@@ -998,6 +992,136 @@ export default function ApprovalsPage() {
         onClose={() => setProgramOpen(false)}
         onCreated={fetchRequests}
       />
+
+      {/* V3.4 Story 4.21.1: Preview da importação Tirvu antes de aplicar */}
+      {tirvuPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => !tirvuApplying && setTirvuPreview(null)}>
+          <div className="glass-card bg-slate-900 border border-white/10 rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="p-5 border-b border-white/5 flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-bold text-white">Pré-visualização do Import</h3>
+                <p className="text-xs text-slate-400 mt-1">Arquivo: <span className="font-mono">{tirvuPreview.file.name}</span> ({(tirvuPreview.file.size / 1024).toFixed(0)} KB)</p>
+              </div>
+              <button onClick={() => !tirvuApplying && setTirvuPreview(null)} disabled={tirvuApplying} className="text-slate-400 hover:text-white p-1.5 hover:bg-white/10 rounded-md disabled:opacity-50">✕</button>
+            </div>
+
+            <div className="p-5 overflow-y-auto flex-1">
+              {/* KPIs do dry-run */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+                <div className="bg-slate-800/40 border border-white/5 rounded-lg p-3">
+                  <p className="text-[10px] uppercase text-slate-500 font-bold">Linhas lidas</p>
+                  <p className="text-2xl font-bold text-white">{tirvuPreview.summary.totalRows}</p>
+                </div>
+                <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-3">
+                  <p className="text-[10px] uppercase text-emerald-300 font-bold">A criar</p>
+                  <p className="text-2xl font-bold text-emerald-300">{tirvuPreview.summary.created}</p>
+                </div>
+                <div className="bg-slate-700/40 border border-slate-600/40 rounded-lg p-3">
+                  <p className="text-[10px] uppercase text-slate-400 font-bold">Já existem</p>
+                  <p className="text-2xl font-bold text-slate-300">{tirvuPreview.summary.alreadyExists}</p>
+                </div>
+                <div className="bg-sky-500/10 border border-sky-500/30 rounded-lg p-3">
+                  <p className="text-[10px] uppercase text-sky-300 font-bold">Coberturas a criar</p>
+                  <p className="text-2xl font-bold text-sky-300">{tirvuPreview.summary.coverageCreated}</p>
+                </div>
+              </div>
+
+              {/* Problemas (se houver) */}
+              {(tirvuPreview.summary.noMatch + tirvuPreview.summary.noDates + tirvuPreview.summary.coverageNoMatch + tirvuPreview.summary.coverageNoAlloc) > 0 && (
+                <div className="mb-5 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
+                  <p className="text-xs font-bold text-amber-200 mb-1">Atenção — algumas linhas terão problemas:</p>
+                  <ul className="text-[11px] text-amber-100/90 space-y-0.5 list-disc list-inside">
+                    {tirvuPreview.summary.noMatch > 0 && <li><strong>{tirvuPreview.summary.noMatch}</strong> sem match de matrícula (colaborador não cadastrado)</li>}
+                    {tirvuPreview.summary.noDates > 0 && <li><strong>{tirvuPreview.summary.noDates}</strong> com datas inválidas/ausentes</li>}
+                    {tirvuPreview.summary.coverageNoMatch > 0 && <li><strong>{tirvuPreview.summary.coverageNoMatch}</strong> cobertura(s) com substituto sem cadastro</li>}
+                    {tirvuPreview.summary.coverageNoAlloc > 0 && <li><strong>{tirvuPreview.summary.coverageNoAlloc}</strong> cobertura(s) sem alocação ativa do titular</li>}
+                  </ul>
+                </div>
+              )}
+
+              {/* Tabela de resultados */}
+              <div className="rounded-lg border border-white/5 overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-800/60 text-[10px] uppercase tracking-wider text-slate-400">
+                    <tr>
+                      <th className="text-left px-3 py-2">Linha</th>
+                      <th className="text-left px-3 py-2">Titular</th>
+                      <th className="text-left px-3 py-2">Resultado</th>
+                      <th className="text-left px-3 py-2">Motivo</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {tirvuPreview.results.slice(0, 100).map((r, i) => {
+                      const isOk = r.status === 'created' || r.status === 'coverage_created'
+                      const isExists = r.status === 'already_exists'
+                      return (
+                        <tr key={i} className="hover:bg-white/[0.02]">
+                          <td className="px-3 py-1.5 font-mono text-slate-500">{r.rowIndex}</td>
+                          <td className="px-3 py-1.5 text-slate-300">{r.titular}</td>
+                          <td className="px-3 py-1.5">
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${
+                              isOk ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' :
+                              isExists ? 'bg-slate-700/40 text-slate-400 border-slate-600/50' :
+                              'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                            }`}>{r.status.replace(/_/g, ' ')}</span>
+                          </td>
+                          <td className="px-3 py-1.5 text-slate-400">{r.reason || '—'}</td>
+                        </tr>
+                      )
+                    })}
+                    {tirvuPreview.results.length > 100 && (
+                      <tr><td colSpan={4} className="px-3 py-2 text-center text-slate-500 text-[11px]">... e mais {tirvuPreview.results.length - 100} linhas</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="p-5 border-t border-white/5 flex justify-end gap-3">
+              <button
+                onClick={() => setTirvuPreview(null)}
+                disabled={tirvuApplying}
+                className="px-4 py-2 text-sm border border-slate-700 text-slate-300 rounded-lg hover:bg-slate-700/50 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={async () => {
+                  const file = tirvuPreview.file
+                  const formData = new FormData()
+                  formData.append('file', file)
+                  setTirvuApplying(true)
+                  try {
+                    toast.loading('Aplicando importação...', { id: 'imp-apply' })
+                    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/vacations/import-operational`, {
+                      method: 'POST',
+                      headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+                      body: formData,
+                    })
+                    const json = await res.json()
+                    toast.dismiss('imp-apply')
+                    if (res.ok) {
+                      const s = json?.data?.summary
+                      toast.success(`✓ Aplicado: ${s.created} criadas · ${s.alreadyExists} já existiam · ${s.coverageCreated} coberturas`, { duration: 12000 })
+                      setTirvuPreview(null)
+                      fetchRequests()
+                    } else {
+                      toast.error(json?.error?.message || 'Erro ao aplicar', { duration: 12000 })
+                    }
+                  } catch (err: any) {
+                    toast.dismiss('imp-apply')
+                    toast.error(`Erro: ${err?.message || err}`, { duration: 12000 })
+                  } finally { setTirvuApplying(false) }
+                }}
+                disabled={tirvuApplying || tirvuPreview.summary.created === 0}
+                className="px-5 py-2 text-sm font-bold bg-primary hover:bg-primary/90 text-white rounded-lg shadow-lg shadow-primary/20 disabled:opacity-50"
+              >
+                {tirvuApplying ? 'Aplicando...' : `Confirmar e aplicar (${tirvuPreview.summary.created} criar + ${tirvuPreview.summary.coverageCreated} cobertura)`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
