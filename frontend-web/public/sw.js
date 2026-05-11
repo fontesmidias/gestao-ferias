@@ -9,7 +9,7 @@
  * já serão consumidos aqui sem mudança no frontend.
  */
 
-const CACHE_NAME = 'gestao-ferias-v2'
+const CACHE_NAME = 'gestao-ferias-v3'
 const STATIC_ASSETS = [
   '/employee/dashboard',
   '/manifest.json',
@@ -36,28 +36,42 @@ self.addEventListener('activate', (event) => {
 // Fetch: network-first for API, cache-first for static
 self.addEventListener('fetch', (event) => {
   const { request } = event
-  const url = new URL(request.url)
 
-  // API calls: network-first with cache fallback
+  // V3.4 fix: nunca intercepta cross-origin (CORS preflight + backend api domain).
+  // Antes o SW tentava cachear responses opacas e crashava com
+  // "Failed to convert value to 'Response'".
+  let url
+  try { url = new URL(request.url) } catch { return }
+  if (url.origin !== self.location.origin) return
+
+  // Nao intercepta nada que nao seja GET (mutacoes nao devem ser cacheadas).
+  if (request.method !== 'GET') return
+
+  // API calls (mesma origem): network-first com cache fallback como Response valida.
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          // Cache successful GET responses for offline use
-          if (request.method === 'GET' && response.ok) {
+          if (response.ok) {
             const clone = response.clone()
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone))
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone)).catch(() => {})
           }
           return response
         })
-        .catch(() => caches.match(request))
+        .catch(async () => {
+          const cached = await caches.match(request)
+          return cached || new Response(JSON.stringify({ error: 'offline' }), { status: 503, headers: { 'Content-Type': 'application/json' } })
+        }),
     )
     return
   }
 
-  // Static assets: cache-first
+  // Static assets: cache-first com fallback
   event.respondWith(
-    caches.match(request).then((cached) => cached || fetch(request))
+    caches.match(request).then(async (cached) => {
+      if (cached) return cached
+      try { return await fetch(request) } catch { return new Response('', { status: 504 }) }
+    }),
   )
 })
 
