@@ -152,6 +152,31 @@ export default function CoveragePage() {
   const [workplaceFilter, setWorkplaceFilter] = useState<string>('')
   const [onlyWithGap, setOnlyWithGap] = useState<boolean>(false)
 
+  // V3.4 Story 4.15: drag-and-drop reagendar ferias na timeline
+  const [rescheduling, setRescheduling] = useState(false)
+  const [draggingVrId, setDraggingVrId] = useState<string | null>(null)
+  const rescheduleVacation = async (vrId: string, employeeName: string, oldStart: Date, newStart: Date, days: number) => {
+    const newEnd = new Date(newStart.getTime() + (days - 1) * 86400000)
+    if (Math.abs(newStart.getTime() - oldStart.getTime()) < 86400000) return // mesmo dia, ignora
+    const oldStartStr = format(oldStart, 'dd/MM/yyyy')
+    const newStartStr = format(newStart, 'dd/MM/yyyy')
+    const newEndStr = format(newEnd, 'dd/MM/yyyy')
+    if (!confirm(`Reagendar férias de ${employeeName}?\n\nDe: ${oldStartStr}\nPara: ${newStartStr} → ${newEndStr} (${days}d)\n\nO sistema vai revalidar CLT (saldo, fração, sobreposição) e bloqueia se houver violação.`)) return
+    try {
+      setRescheduling(true)
+      await HttpClient.patch(`/vacations/${vrId}`, {
+        startDate: format(newStart, 'yyyy-MM-dd'),
+        endDate: format(newEnd, 'yyyy-MM-dd'),
+      })
+      toast.success(`Reagendada para ${newStartStr} → ${newEndStr}.`)
+      fetchData()
+    } catch (err: any) {
+      const errBody = err?.body?.error || err?.error
+      const msg = errBody?.message || err?.message || 'Erro ao reagendar.'
+      toast.error(msg, { duration: 10000 })
+    } finally { setRescheduling(false) }
+  }
+
   // V3.4 Story 4.3: encadeamento automatico
   const [chainRunning, setChainRunning] = useState(false)
   const autoChain = async (vrId: string) => {
@@ -945,7 +970,7 @@ export default function CoveragePage() {
                     <h3 className="font-bold text-sm text-white uppercase tracking-wider flex items-center gap-2">
                       <Calendar className="w-4 h-4 text-primary" />
                       Timeline de Cobertura
-                      <InfoTooltip text="Para cada posto: linha de cima mostra férias (vermelho=gap, verde=tem cobertura). Linha de baixo mostra coberturas atribuídas coloridas por status (azul=planejada, verde=ativa, cinza=concluída). Clique numa férias para atribuir/editar cobertura." />
+                      <InfoTooltip text="Para cada posto: linha de cima mostra férias (vermelho=gap, verde=tem cobertura). Linha de baixo mostra coberturas atribuídas coloridas por status (azul=planejada, verde=ativa, cinza=concluída). Clique numa férias para atribuir/editar cobertura. ARRASTE uma barra de férias para reagendar (CLT é revalidado)." />
                     </h3>
                     <div className="flex items-center gap-3 flex-wrap">
                       <label className="flex items-center gap-2 cursor-pointer">
@@ -1036,8 +1061,26 @@ export default function CoveragePage() {
                               <div key={name} className="flex items-start mb-2 group">
                                 <div className="w-44 shrink-0 text-xs text-slate-300 font-bold truncate pr-2 pt-1" title={name}>{name}</div>
                                 <div className="flex-1 space-y-0.5">
-                                  {/* Track 1: férias */}
-                                  <div className="flex h-5 bg-slate-800/30 rounded overflow-hidden relative">
+                                  {/* Track 1: férias — Story 4.15: drag-and-drop reagenda */}
+                                  <div
+                                    className="flex h-5 bg-slate-800/30 rounded overflow-hidden relative"
+                                    onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
+                                    onDrop={(e) => {
+                                      e.preventDefault()
+                                      const vrId = e.dataTransfer.getData('vacation-id')
+                                      if (!vrId) return
+                                      const days = Number(e.dataTransfer.getData('vacation-days')) || 1
+                                      const oldStartStr = e.dataTransfer.getData('vacation-start')
+                                      const empName = e.dataTransfer.getData('vacation-employee') || 'colaborador'
+                                      const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect()
+                                      const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
+                                      const dayOffset = Math.round(pct * (totalDays - 1))
+                                      const newStart = new Date(rangeStart.getTime() + dayOffset * 86400000)
+                                      const oldStart = oldStartStr ? parseISO(oldStartStr) : newStart
+                                      setDraggingVrId(null)
+                                      rescheduleVacation(vrId, empName, oldStart, newStart, days)
+                                    }}
+                                  >
                                     {wpGaps.map(g => {
                                       const start = parseISO(g.vacationStart)
                                       const end = parseISO(g.vacationEnd)
@@ -1045,13 +1088,29 @@ export default function CoveragePage() {
                                       const v = vacationVisual(g)
                                       const left = pctOf(start)
                                       const right = pctOf(end)
+                                      const today = new Date()
+                                      // Concluida (start no passado) nao pode ser reagendada
+                                      const canDrag = end >= today
+                                      const isDragging = draggingVrId === g.vacationRequestId
                                       return (
                                         <button
                                           key={g.vacationRequestId}
-                                          onClick={() => openAssignModal(g)}
-                                          className={`absolute top-0.5 bottom-0.5 rounded-sm cursor-pointer transition-all hover:brightness-125 hover:ring-1 hover:ring-white/30 ${v.bg}`}
+                                          onClick={() => { if (!isDragging) openAssignModal(g) }}
+                                          draggable={canDrag && !rescheduling}
+                                          onDragStart={(e) => {
+                                            e.dataTransfer.effectAllowed = 'move'
+                                            e.dataTransfer.setData('vacation-id', g.vacationRequestId)
+                                            e.dataTransfer.setData('vacation-days', String(g.days))
+                                            e.dataTransfer.setData('vacation-start', g.vacationStart)
+                                            e.dataTransfer.setData('vacation-employee', g.employeeName)
+                                            setDraggingVrId(g.vacationRequestId)
+                                          }}
+                                          onDragEnd={() => setDraggingVrId(null)}
+                                          className={`absolute top-0.5 bottom-0.5 rounded-sm transition-all hover:brightness-125 hover:ring-1 hover:ring-white/30 ${v.bg} ${canDrag ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'} ${isDragging ? 'opacity-50 ring-2 ring-white/60' : ''}`}
                                           style={{ left: `${left}%`, width: `${Math.max(1, right - left)}%` }}
-                                          title={`${g.employeeName} · ${format(start, 'dd/MM')} → ${format(end, 'dd/MM')} (${g.days}d) · ${v.label}`}
+                                          title={canDrag
+                                            ? `${g.employeeName} · ${format(start, 'dd/MM')} → ${format(end, 'dd/MM')} (${g.days}d) · ${v.label}\nClique para atribuir cobertura · Arraste para reagendar`
+                                            : `${g.employeeName} · ${format(start, 'dd/MM')} → ${format(end, 'dd/MM')} (${g.days}d) · ${v.label}`}
                                         />
                                       )
                                     })}
