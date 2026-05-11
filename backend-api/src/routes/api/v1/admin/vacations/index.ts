@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { parseISO, differenceInDays } from 'date-fns'
 import { VacationEngine } from '../../../../../modules/vacations/vacation-engine'
 import { parseTirvuOperational } from '../../../../../modules/imports/tirvu-operational-parser'
+import { parseDexionForecast } from '../../../../../modules/imports/dexion-forecast-parser'
 
 /**
  * V3.4 MVP M4: Admin programa férias diretamente em nome do colaborador.
@@ -466,6 +467,103 @@ const programmedVacations: FastifyPluginAsync = async (fastify) => {
           coverageNoAlloc,
         },
         results,
+      },
+      error: null,
+    })
+  })
+
+  // ============================================================================
+  // V3.4 Story 4.22: Analise da Previsao de Ferias Dexion vs sistema.
+  // Read-only: parseia o XLS, casa por matricula, lista divergencias.
+  // ============================================================================
+
+  fastify.post('/analyze-dexion-forecast', {
+    onRequest: [fastify.requireAuth],
+  }, async (request, reply) => {
+    const user = request.user as { tenantId: string; role: string }
+    if (!['ADMIN', 'SUPERADMIN'].includes(user.role)) {
+      return reply.code(403).send({ data: null, error: { code: 'FORBIDDEN', message: 'Apenas ADMIN/SUPERADMIN.' } })
+    }
+
+    const file = await request.file()
+    if (!file) return reply.code(400).send({ data: null, error: { code: 'NO_FILE', message: 'Envie o XLS "Relacao de Previsao de Ferias" do Dexion.' } })
+    const buffer = await file.toBuffer()
+
+    let parsed
+    try {
+      parsed = parseDexionForecast(buffer)
+    } catch (err: any) {
+      return reply.code(400).send({ data: null, error: { code: 'PARSE_FAILED', message: `Nao consegui ler. Verifique se enviou "Relacao de Previsao de Ferias" do Dexion. Detalhe: ${err?.message || 'erro'}` } })
+    }
+    if (parsed.records.length === 0) {
+      return reply.code(400).send({ data: null, error: { code: 'EMPTY_OR_WRONG_FILE', message: 'Planilha lida mas sem colaboradores. Arquivo errado? Esperado: Dexion - Relacao de Previsao de Ferias.' } })
+    }
+
+    // Indexa colaboradores do sistema por matricula
+    const employees = await fastify.prisma.employee.findMany({
+      where: { tenantId: user.tenantId, registration: { not: null } },
+      select: { id: true, name: true, registration: true, hireDate: true, balanceOffset: true },
+    })
+    const byMat = new Map<string, typeof employees[number]>()
+    for (const e of employees) {
+      if (e.registration) byMat.set(e.registration, e)
+    }
+
+    type DivergenceItem = {
+      matricula: string
+      nome: string
+      cargo: string | null
+      vencidosCount: number
+      periodos: Array<{ aquisitivoStart: string; aquisitivoEnd: string; gozoAte: string; dias: number; vencido: boolean }>
+      ultimaFerias: string | null
+      employeeId: string | null
+      hireDate: string | null
+    }
+
+    const matched: DivergenceItem[] = []
+    const unmatched: { matricula: string; nome: string }[] = []
+    let vencidosTotal = 0
+    let employeesComVencido = 0
+
+    for (const rec of parsed.records) {
+      const sysEmployee = byMat.get(rec.matricula)
+      if (!sysEmployee) {
+        unmatched.push({ matricula: rec.matricula, nome: rec.nome })
+        continue
+      }
+      const vencidos = rec.periodos.filter(p => p.vencido)
+      if (vencidos.length > 0) {
+        employeesComVencido++
+        vencidosTotal += vencidos.length
+      }
+      matched.push({
+        matricula: rec.matricula,
+        nome: rec.nome,
+        cargo: rec.cargo,
+        vencidosCount: vencidos.length,
+        periodos: rec.periodos,
+        ultimaFerias: rec.ultimaFerias,
+        employeeId: sysEmployee.id,
+        hireDate: sysEmployee.hireDate.toISOString().slice(0, 10),
+      })
+    }
+
+    // Ordena por mais vencidos primeiro (acao prioritaria)
+    matched.sort((a, b) => b.vencidosCount - a.vencidosCount)
+
+    return reply.send({
+      data: {
+        summary: {
+          dexionEmployees: parsed.totalEmployees,
+          dexionPeriodos: parsed.totalPeriods,
+          dexionVencidos: parsed.vencidosCount,
+          matchedEmployees: matched.length,
+          unmatchedEmployees: unmatched.length,
+          employeesComVencido,
+          vencidosTotal,
+        },
+        matched: matched.slice(0, 500), // cap UI
+        unmatched: unmatched.slice(0, 100),
       },
       error: null,
     })

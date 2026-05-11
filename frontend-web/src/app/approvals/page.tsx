@@ -64,6 +64,12 @@ export default function ApprovalsPage() {
     results: Array<{ rowIndex: number; titular: string; status: string; reason?: string }>
   } | null>(null)
   const [tirvuApplying, setTirvuApplying] = useState(false)
+  // V3.4 Story 4.22: análise Dexion Previsão de Férias
+  const [dexionReport, setDexionReport] = useState<{
+    summary: { dexionEmployees: number; dexionPeriodos: number; dexionVencidos: number; matchedEmployees: number; unmatchedEmployees: number; employeesComVencido: number; vencidosTotal: number }
+    matched: Array<{ matricula: string; nome: string; cargo: string | null; vencidosCount: number; periodos: Array<{ aquisitivoStart: string; aquisitivoEnd: string; gozoAte: string; dias: number; vencido: boolean }>; ultimaFerias: string | null; employeeId: string | null }>
+    unmatched: Array<{ matricula: string; nome: string }>
+  } | null>(null)
 
   // --- Bulk Create State (Story 3.4) ---
   const [bulkMode, setBulkMode] = useState(false)
@@ -425,7 +431,41 @@ export default function ApprovalsPage() {
                           }} />
                         </label>
 
-                        {/* Opção 3: Modelo padrao do sistema */}
+                        {/* Opção 3: Dexion Previsão (análise read-only) */}
+                        <label className="block px-4 py-3 hover:bg-amber-500/10 cursor-pointer border-b border-white/5">
+                          <div className="flex items-start gap-2">
+                            <Upload className="w-4 h-4 text-amber-300 shrink-0 mt-0.5" />
+                            <div>
+                              <p className="font-bold text-sm text-white">Dexion — Previsão de Férias <span className="text-[10px] font-normal text-amber-300/80">(análise)</span></p>
+                              <p className="text-[11px] text-slate-400 mt-0.5">XLS "Relação de Previsão de Férias" do Dexion. <strong>Não altera nada</strong> — mostra divergências: períodos vencidos, colaboradores sem registro de gozo, etc.</p>
+                            </div>
+                          </div>
+                          <input type="file" accept=".xls,.xlsx" className="hidden" onChange={async (e) => {
+                            setImportMenuOpen(false)
+                            const file = e.target.files?.[0]
+                            if (!file) return
+                            const formData = new FormData()
+                            formData.append('file', file)
+                            try {
+                              toast.loading('Analisando Dexion...', { id: 'imp-dex' })
+                              const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/vacations/analyze-dexion-forecast`, {
+                                method: 'POST',
+                                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+                                body: formData,
+                              })
+                              const json = await res.json()
+                              toast.dismiss('imp-dex')
+                              if (res.ok && json?.data) {
+                                setDexionReport(json.data)
+                              } else {
+                                toast.error(json?.error?.message || 'Erro ao analisar', { duration: 12000 })
+                              }
+                            } catch (err: any) { toast.dismiss('imp-dex'); toast.error(`Erro: ${err?.message || err}`) }
+                            e.target.value = ''
+                          }} />
+                        </label>
+
+                        {/* Opção 4: Modelo padrao do sistema */}
                         <label className="block px-4 py-3 hover:bg-sky-500/10 cursor-pointer">
                           <div className="flex items-start gap-2">
                             <Upload className="w-4 h-4 text-sky-300 shrink-0 mt-0.5" />
@@ -994,6 +1034,93 @@ export default function ApprovalsPage() {
       />
 
       {/* V3.4 Story 4.21.1: Preview da importação Tirvu antes de aplicar */}
+      {/* V3.4 Story 4.22: Relatorio Dexion */}
+      {dexionReport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setDexionReport(null)}>
+          <div className="glass-card bg-slate-900 border border-white/10 rounded-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="p-5 border-b border-white/5 flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-bold text-white">Análise — Previsão de Férias (Dexion)</h3>
+                <p className="text-xs text-slate-400 mt-1">Cross-reference do Dexion com o sistema. Read-only — nada foi alterado.</p>
+              </div>
+              <button onClick={() => setDexionReport(null)} className="text-slate-400 hover:text-white p-1.5 hover:bg-white/10 rounded-md">✕</button>
+            </div>
+
+            <div className="p-5 overflow-y-auto flex-1">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+                <div className="bg-slate-800/40 border border-white/5 rounded-lg p-3">
+                  <p className="text-[10px] uppercase text-slate-500 font-bold">Dexion: colaboradores</p>
+                  <p className="text-2xl font-bold text-white">{dexionReport.summary.dexionEmployees}</p>
+                </div>
+                <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-3">
+                  <p className="text-[10px] uppercase text-emerald-300 font-bold">Casados (matricula)</p>
+                  <p className="text-2xl font-bold text-emerald-300">{dexionReport.summary.matchedEmployees}</p>
+                </div>
+                <div className="bg-rose-500/10 border border-rose-500/30 rounded-lg p-3">
+                  <p className="text-[10px] uppercase text-rose-300 font-bold">Períodos VENCIDOS</p>
+                  <p className="text-2xl font-bold text-rose-300">{dexionReport.summary.vencidosTotal}</p>
+                </div>
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
+                  <p className="text-[10px] uppercase text-amber-300 font-bold">Colab. com vencido</p>
+                  <p className="text-2xl font-bold text-amber-300">{dexionReport.summary.employeesComVencido}</p>
+                </div>
+              </div>
+
+              {dexionReport.unmatched.length > 0 && (
+                <div className="mb-4 bg-amber-500/5 border border-amber-500/20 rounded-lg p-3">
+                  <p className="text-xs font-bold text-amber-200 mb-1">{dexionReport.unmatched.length} colaboradores no Dexion sem cadastro no sistema:</p>
+                  <p className="text-[10px] text-amber-100/70 font-mono">{dexionReport.unmatched.slice(0, 10).map(u => `${u.matricula}/${u.nome}`).join(' · ')}{dexionReport.unmatched.length > 10 ? ` ... +${dexionReport.unmatched.length - 10}` : ''}</p>
+                </div>
+              )}
+
+              <h4 className="font-bold text-white text-sm mb-2 flex items-center gap-2">Colaboradores com períodos VENCIDOS (Dexion)</h4>
+              <div className="rounded-lg border border-white/5 overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-800/60 text-[10px] uppercase tracking-wider text-slate-400 sticky top-0">
+                    <tr>
+                      <th className="text-left px-3 py-2">Matr.</th>
+                      <th className="text-left px-3 py-2">Nome</th>
+                      <th className="text-left px-3 py-2">Cargo</th>
+                      <th className="text-center px-3 py-2">Venc.</th>
+                      <th className="text-left px-3 py-2">Últ. férias</th>
+                      <th className="text-left px-3 py-2">Períodos aquisitivos</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {dexionReport.matched.filter(m => m.vencidosCount > 0).slice(0, 200).map(m => (
+                      <tr key={m.matricula} className="hover:bg-white/[0.02]">
+                        <td className="px-3 py-1.5 font-mono text-sky-400">{m.matricula}</td>
+                        <td className="px-3 py-1.5 text-white">{m.nome}</td>
+                        <td className="px-3 py-1.5 text-slate-400">{m.cargo || '—'}</td>
+                        <td className="px-3 py-1.5 text-center"><span className="font-bold text-rose-300 bg-rose-500/15 border border-rose-500/30 px-1.5 py-0.5 rounded-full text-[10px]">{m.vencidosCount}</span></td>
+                        <td className="px-3 py-1.5 text-slate-400 font-mono">{m.ultimaFerias || '—'}</td>
+                        <td className="px-3 py-1.5 text-slate-400 text-[10px]">
+                          {m.periodos.map((p, i) => (
+                            <span key={i} className={`inline-block mr-1.5 px-1.5 py-0.5 rounded ${p.vencido ? 'bg-rose-500/10 text-rose-300' : 'bg-slate-700/40 text-slate-400'}`}>
+                              {p.aquisitivoStart.slice(2, 7)}/{p.aquisitivoEnd.slice(2, 7)} · {p.dias}d{p.vencido && ' V'}
+                            </span>
+                          ))}
+                        </td>
+                      </tr>
+                    ))}
+                    {dexionReport.matched.filter(m => m.vencidosCount > 0).length === 0 && (
+                      <tr><td colSpan={6} className="px-3 py-6 text-center text-emerald-300 text-sm">✓ Nenhum período vencido detectado.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-2">
+                Períodos com "V" estão vencidos no Dexion. Para regularizar individualmente, use o botão <strong>"✓ Já gozado"</strong> no modal Programar Férias de cada colaborador.
+              </p>
+            </div>
+
+            <div className="p-4 border-t border-white/5 flex justify-end">
+              <button onClick={() => setDexionReport(null)} className="px-4 py-2 text-sm border border-slate-700 text-slate-300 rounded-lg hover:bg-slate-700/50">Fechar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {tirvuPreview && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => !tirvuApplying && setTirvuPreview(null)}>
           <div className="glass-card bg-slate-900 border border-white/10 rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
@@ -1087,6 +1214,7 @@ export default function ApprovalsPage() {
               </button>
               <button
                 onClick={async () => {
+                  if (!tirvuPreview) return
                   const file = tirvuPreview.file
                   const formData = new FormData()
                   formData.append('file', file)
