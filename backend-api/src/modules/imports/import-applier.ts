@@ -13,6 +13,7 @@ import type {
 } from './types'
 import { ensureWorkplaceFromImport } from './workplace-resolver'
 import { ensureBranchFromImport } from '../branches/branch-resolver'
+import { ensureDepartmentFromImport, ensureShiftFromImport, ensureUnionFromImport } from '../lookups/lookup-resolvers'
 import type { WorkplaceAllocationService } from '../workplaces/workplace-allocation.service'
 
 export interface ApplyOptions {
@@ -125,9 +126,12 @@ async function applyCreate(
   }
   const { data, hasBankData } = patchWithBankData(item.row, item.patch, ctx.tenantId)
 
-  // V3.5 Story 5.1: resolve/cria Branch a partir do nome string e popula branchId.
-  // String legada (branch) permanece para compat durante 1 release.
+  // V3.5 Stories 5.1-5.4: resolve/cria Branch/Department/Shift/Union e popula FKs.
+  // Strings legadas permanecem para compat durante 1 release.
   const branchId = await ensureBranchFromImport(tx, ctx.tenantId, (item.patch.branch as string | null) ?? null)
+  const departmentId = await ensureDepartmentFromImport(tx, ctx.tenantId, (item.patch.department as string | null) ?? null)
+  const shiftId = await ensureShiftFromImport(tx, ctx.tenantId, (item.patch.shift as string | null) ?? null)
+  const unionId = await ensureUnionFromImport(tx, ctx.tenantId, (item.patch.unionName as string | null) ?? null)
 
   const hireDate = (item.patch.hireDate as Date) ?? new Date()
   const employee = await tx.employee.create({
@@ -138,6 +142,9 @@ async function applyCreate(
       hireDate,
       name: (item.patch.name as string) ?? cpfDigits,
       branchId,
+      departmentId,
+      shiftId,
+      unionId,
     },
   })
 
@@ -223,10 +230,26 @@ async function applyUpdate(
     diffOnlyData.bankDataTag = (data as Record<string, unknown>).bankDataTag
   }
 
-  // V3.5 Story 5.1: se branch mudou OU employee ainda nao tem branchId, resolve.
-  if ('branch' in item.diff || !(item.employee as { branchId?: string | null }).branchId) {
-    const branchId = await ensureBranchFromImport(tx, ctx.tenantId, (item.patch.branch as string | null) ?? null)
-    if (branchId) diffOnlyData.branchId = branchId
+  // V3.5 Stories 5.1-5.4: se string mudou OU FK ainda nao populada, resolve.
+  const emp = item.employee as {
+    branchId?: string | null; departmentId?: string | null;
+    shiftId?: string | null; unionId?: string | null
+  }
+  if ('branch' in item.diff || !emp.branchId) {
+    const id = await ensureBranchFromImport(tx, ctx.tenantId, (item.patch.branch as string | null) ?? null)
+    if (id) diffOnlyData.branchId = id
+  }
+  if ('department' in item.diff || !emp.departmentId) {
+    const id = await ensureDepartmentFromImport(tx, ctx.tenantId, (item.patch.department as string | null) ?? null)
+    if (id) diffOnlyData.departmentId = id
+  }
+  if ('shift' in item.diff || !emp.shiftId) {
+    const id = await ensureShiftFromImport(tx, ctx.tenantId, (item.patch.shift as string | null) ?? null)
+    if (id) diffOnlyData.shiftId = id
+  }
+  if ('unionName' in item.diff || !emp.unionId) {
+    const id = await ensureUnionFromImport(tx, ctx.tenantId, (item.patch.unionName as string | null) ?? null)
+    if (id) diffOnlyData.unionId = id
   }
 
   await tx.employee.update({

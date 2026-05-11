@@ -69,6 +69,9 @@ model Tenant {
   reconcileJobs                ReconcileJob[]
   workplaceReconcileQueueItems WorkplaceReconcileQueue[]
   branches                     Branch[]
+  departments                  Department[]
+  shifts                       Shift[]
+  unions                       Union[]
 
   @@map("tenants")
 }
@@ -192,13 +195,15 @@ model Employee {
   employeeType String    @default("EFETIVO") @map("employee_type") // EFETIVO, INTERMITENTE
   isFerista    Boolean   @default(false) @map("is_ferista")
 
-  status      String  @default("ATIVO") // ATIVO, FERIAS, AFASTADO, INATIVO
-  branch      String? // V3.5: texto legado, sera deprecado quando branchId estiver populado
-  branchId    String? @map("branch_id") @db.Uuid
-  department  String? // Contrato / CC
-  workplace   String? // Posto de Serviço (texto legado, será deprecado)
-  workplaceId String? @map("workplace_id") @db.Uuid
-  shift       String? // Jornada / Escala
+  status        String  @default("ATIVO") // ATIVO, FERIAS, AFASTADO, INATIVO
+  branch        String? // V3.5: texto legado, sera deprecado quando branchId estiver populado
+  branchId      String? @map("branch_id") @db.Uuid
+  department    String? // V3.5: texto legado, sera deprecado quando departmentId estiver populado
+  departmentId  String? @map("department_id") @db.Uuid
+  workplace     String? // Posto de Serviço (texto legado, será deprecado)
+  workplaceId   String? @map("workplace_id") @db.Uuid
+  shift         String? // V3.5: texto legado, sera deprecado quando shiftId estiver populado
+  shiftId       String? @map("shift_id") @db.Uuid
 
   phone         String?
   salary        Decimal? @default(0) @db.Decimal(10, 2)
@@ -222,7 +227,8 @@ model Employee {
   bankDataTag Bytes? @map("bank_data_tag")
 
   // ============ NOVO: misc ============
-  unionName       String?   @map("union_name")
+  unionName       String?   @map("union_name") // V3.5: legado, sera deprecado quando unionId populado
+  unionId         String?   @map("union_id") @db.Uuid
   geofencingFlags Json?     @map("geofencing_flags")
   inactivePending Boolean   @default(false) @map("inactive_pending")
   terminationDate DateTime? @map("termination_date")
@@ -234,6 +240,9 @@ model Employee {
   tenant                       Tenant                    @relation(fields: [tenantId], references: [id])
   workplaceRef                 Workplace?                @relation(fields: [workplaceId], references: [id])
   branchRef                    Branch?                   @relation(fields: [branchId], references: [id])
+  departmentRef                Department?               @relation(fields: [departmentId], references: [id])
+  shiftRef                     Shift?                    @relation(fields: [shiftId], references: [id])
+  unionRef                     Union?                    @relation(fields: [unionId], references: [id])
   requests                     VacationRequest[]
   allocations                  WorkplaceAllocation[]
   coveragesAsReplacement       CoverageAssignment[]      @relation("CoverageReplacement")
@@ -261,11 +270,70 @@ model Branch {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  tenant    Tenant     @relation(fields: [tenantId], references: [id])
-  employees Employee[]
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+  employees   Employee[]
+  departments Department[]
 
   @@unique([tenantId, name], name: "branch_tenant_name_unique", map: "branches_tenant_name_unique_idx")
   @@map("branches")
+}
+
+/// V3.5 Story 5.2: Departamento (CC/contrato). Substitui Employee.department string.
+model Department {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  name       String
+  branchId   String?  @map("branch_id") @db.Uuid
+  active     Boolean  @default(true)
+  importedBy String?  @map("imported_by")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+  branch    Branch?    @relation(fields: [branchId], references: [id])
+  employees Employee[]
+
+  @@unique([tenantId, name], name: "department_tenant_name_unique", map: "departments_tenant_name_unique_idx")
+  @@map("departments")
+}
+
+/// V3.5 Story 5.3: Escala/Jornada. Substitui Employee.shift string.
+model Shift {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  name        String
+  pattern     String?  // 12x36, 8H, 6x1 etc — informativo
+  startTime   String?  @map("start_time") // HH:MM
+  endTime     String?  @map("end_time")
+  active      Boolean  @default(true)
+  importedBy  String?  @map("imported_by")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+  employees Employee[]
+
+  @@unique([tenantId, name], name: "shift_tenant_name_unique", map: "shifts_tenant_name_unique_idx")
+  @@map("shifts")
+}
+
+/// V3.5 Story 5.4: Sindicato. Substitui Employee.unionName string.
+model Union {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  name       String
+  cnpj       String?
+  category   String?  // ex: SINDISERVICOS
+  active     Boolean  @default(true)
+  importedBy String?  @map("imported_by")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+  employees Employee[]
+
+  @@unique([tenantId, name], name: "union_tenant_name_unique", map: "unions_tenant_name_unique_idx")
+  @@map("unions")
 }
 
 model AuditLog {

@@ -79,6 +79,7 @@ export function Sidebar() {
     {
       label: t('sidebar.section.system'),
       items: [
+        { href: '/branches', label: 'Filiais', icon: Building2, matchPath: '/branches' },
         { href: '/settings/holidays', label: t('sidebar.holidays'), icon: CalendarDays, matchPath: '/settings/holidays' },
         { href: '/settings', label: t('sidebar.settings'), icon: Settings, matchPath: '/settings' },
       ],

@@ -101,6 +101,7 @@ export type EmployeePatch = Partial<
     | 'position'
     | 'status'
     | 'branch'
+    | 'department'
     | 'workplace'
     | 'shift'
     | 'phone'
