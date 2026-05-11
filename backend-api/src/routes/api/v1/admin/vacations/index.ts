@@ -570,6 +570,123 @@ const programmedVacations: FastifyPluginAsync = async (fastify) => {
   })
 
   // ============================================================================
+  // V3.4 Story 4.24: bulk-mark periodos aquisitivos como gozados retroativamente.
+  // Util pos-analise Dexion: operador marca varios vencidos de uma vez.
+  // ============================================================================
+
+  fastify.post('/bulk-mark-period-taken', {
+    onRequest: [fastify.requireAuth, fastify.requireAdmin],
+    schema: {
+      body: {
+        type: 'object',
+        required: ['items'],
+        properties: {
+          items: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 500,
+            items: {
+              type: 'object',
+              required: ['employeeId', 'periodStartDate', 'days'],
+              properties: {
+                employeeId: { type: 'string', format: 'uuid' },
+                periodStartDate: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+                days: { type: 'integer', minimum: 1, maximum: 31 },
+                actualStartDate: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+                actualEndDate: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+              },
+            },
+          },
+          note: { type: 'string', maxLength: 500 },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const { tenantId, userId } = request.user as { tenantId: string; userId: string }
+    const body = request.body as {
+      items: Array<{ employeeId: string; periodStartDate: string; days: number; actualStartDate?: string; actualEndDate?: string }>
+      note?: string
+    }
+
+    type Result =
+      | { employeeId: string; status: 'created' | 'already_exists' | 'out_of_period' | 'employee_not_found' | 'error'; vacationRequestId?: string; reason?: string }
+    const results: Result[] = []
+    let createdCount = 0
+    let alreadyExists = 0
+    let skipped = 0
+    const defaultNote = (body.note?.trim()) || 'Marcado em lote como JA GOZADO (retroativo, pos-analise Dexion).'
+
+    for (const item of body.items) {
+      try {
+        const employee = await fastify.prisma.employee.findFirst({ where: { id: item.employeeId, tenantId } })
+        if (!employee) {
+          results.push({ employeeId: item.employeeId, status: 'employee_not_found' })
+          skipped++; continue
+        }
+        const periodStart = parseISO(item.periodStartDate)
+        const start = item.actualStartDate ? parseISO(item.actualStartDate) : periodStart
+        const end = item.actualEndDate ? parseISO(item.actualEndDate) : new Date(start.getTime() + (item.days - 1) * 86400000)
+        const days = item.actualStartDate && item.actualEndDate
+          ? differenceInDays(end, start) + 1
+          : item.days
+
+        const periodEnd = new Date(periodStart.getTime())
+        periodEnd.setFullYear(periodEnd.getFullYear() + 1)
+        if (start < periodStart || start >= periodEnd) {
+          results.push({ employeeId: item.employeeId, status: 'out_of_period', reason: `start ${start.toISOString().slice(0, 10)} fora do periodo ${item.periodStartDate}` })
+          skipped++; continue
+        }
+
+        // Idempotencia: se ja tem VR COMPLETED com mesmo startDate, skipa
+        const existing = await fastify.prisma.vacationRequest.findFirst({
+          where: {
+            tenantId,
+            employeeId: item.employeeId,
+            startDate: start,
+            status: { in: ['COMPLETED', 'SIGNED', 'APPROVED'] },
+          },
+        })
+        if (existing) {
+          results.push({ employeeId: item.employeeId, status: 'already_exists', vacationRequestId: existing.id })
+          alreadyExists++; continue
+        }
+
+        const created = await fastify.prisma.vacationRequest.create({
+          data: {
+            tenantId,
+            employeeId: item.employeeId,
+            startDate: start,
+            endDate: end,
+            days,
+            status: 'COMPLETED',
+            dispatchNote: defaultNote.slice(0, 500),
+          },
+        })
+        results.push({ employeeId: item.employeeId, status: 'created', vacationRequestId: created.id })
+        createdCount++
+      } catch (err: any) {
+        results.push({ employeeId: item.employeeId, status: 'error', reason: err?.message || 'erro' })
+        skipped++
+      }
+    }
+
+    await fastify.prisma.auditLog.create({
+      data: {
+        tenantId, userId,
+        action: 'VACATION_BULK_MARK_PERIOD_TAKEN',
+        resourceType: 'VACATION_REQUEST',
+        resourceId: '00000000-0000-0000-0000-000000000000',
+        newData: { total: body.items.length, created: createdCount, alreadyExists, skipped } as never,
+      },
+    }).catch(() => {})
+
+    return reply.send({
+      data: { summary: { total: body.items.length, created: createdCount, alreadyExists, skipped }, results },
+      error: null,
+    })
+  })
+
+  // ============================================================================
   // V3.4 Story 4.22: Analise da Previsao de Ferias Dexion vs sistema.
   // Read-only: parseia o XLS, casa por matricula, lista divergencias.
   // ============================================================================

@@ -70,6 +70,9 @@ export default function ApprovalsPage() {
     matched: Array<{ matricula: string; nome: string; cargo: string | null; vencidosCount: number; periodos: Array<{ aquisitivoStart: string; aquisitivoEnd: string; gozoAte: string; dias: number; vencido: boolean }>; ultimaFerias: string | null; employeeId: string | null }>
     unmatched: Array<{ matricula: string; nome: string }>
   } | null>(null)
+  // V3.4 Story 4.24: seleção + bulk-mark vencidos como gozados
+  const [dexionSelected, setDexionSelected] = useState<Set<string>>(new Set())
+  const [dexionBulkRunning, setDexionBulkRunning] = useState(false)
 
   // --- Bulk Create State (Story 3.4) ---
   const [bulkMode, setBulkMode] = useState(false)
@@ -1036,14 +1039,14 @@ export default function ApprovalsPage() {
       {/* V3.4 Story 4.21.1: Preview da importação Tirvu antes de aplicar */}
       {/* V3.4 Story 4.22: Relatorio Dexion */}
       {dexionReport && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setDexionReport(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => { setDexionReport(null); setDexionSelected(new Set()) }}>
           <div className="glass-card bg-slate-900 border border-white/10 rounded-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="p-5 border-b border-white/5 flex items-center justify-between">
               <div>
                 <h3 className="text-xl font-bold text-white">Análise — Previsão de Férias (Dexion)</h3>
                 <p className="text-xs text-slate-400 mt-1">Cross-reference do Dexion com o sistema. Read-only — nada foi alterado.</p>
               </div>
-              <button onClick={() => setDexionReport(null)} className="text-slate-400 hover:text-white p-1.5 hover:bg-white/10 rounded-md">✕</button>
+              <button onClick={() => { setDexionReport(null); setDexionSelected(new Set()) }} className="text-slate-400 hover:text-white p-1.5 hover:bg-white/10 rounded-md">✕</button>
             </div>
 
             <div className="p-5 overflow-y-auto flex-1">
@@ -1073,11 +1076,84 @@ export default function ApprovalsPage() {
                 </div>
               )}
 
-              <h4 className="font-bold text-white text-sm mb-2 flex items-center gap-2">Colaboradores com períodos VENCIDOS (Dexion)</h4>
+              {/* V3.4 Story 4.24: bulk-mark */}
+              {(() => {
+                const vencidosRows = dexionReport.matched.filter(m => m.vencidosCount > 0 && m.employeeId)
+                const allSelected = vencidosRows.length > 0 && vencidosRows.every(r => dexionSelected.has(r.employeeId!))
+                const selectedCount = dexionSelected.size
+                const selectedVencidosCount = vencidosRows.filter(r => dexionSelected.has(r.employeeId!)).reduce((s, r) => s + r.vencidosCount, 0)
+                return (
+                  <div className="flex items-center justify-between mb-3 flex-wrap gap-3">
+                    <h4 className="font-bold text-white text-sm flex items-center gap-2">Colaboradores com períodos VENCIDOS (Dexion)</h4>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          if (allSelected) setDexionSelected(new Set())
+                          else setDexionSelected(new Set(vencidosRows.map(r => r.employeeId!)))
+                        }}
+                        className="text-xs text-slate-300 hover:text-white px-2 py-1 rounded hover:bg-slate-800"
+                      >
+                        {allSelected ? 'Desmarcar todos' : `Selecionar todos com vencido (${vencidosRows.length})`}
+                      </button>
+                      <button
+                        disabled={selectedCount === 0 || dexionBulkRunning}
+                        onClick={async () => {
+                          const reason = prompt(
+                            `Marcar TODOS os ${selectedVencidosCount} período(s) vencido(s) dos ${selectedCount} colaborador(es) selecionado(s) como JÁ GOZADOS.\n\n` +
+                            `Esta ação cria solicitações COMPLETED retroativas e é auditada. Útil para "limpar" o histórico quando você sabe que essas férias realmente foram gozadas (Dexion já sabe, sistema não).\n\n` +
+                            `Observação opcional para o registro de auditoria:`,
+                            'Importado em lote da Previsão Dexion',
+                          )
+                          if (reason === null) return
+                          // Monta items
+                          const items: Array<{ employeeId: string; periodStartDate: string; days: number }> = []
+                          for (const row of vencidosRows) {
+                            if (!dexionSelected.has(row.employeeId!)) continue
+                            for (const p of row.periodos) {
+                              if (p.vencido) {
+                                items.push({ employeeId: row.employeeId!, periodStartDate: p.aquisitivoStart, days: p.dias })
+                              }
+                            }
+                          }
+                          if (items.length === 0) { toast.error('Nenhum período vencido nos selecionados.'); return }
+                          try {
+                            setDexionBulkRunning(true)
+                            toast.loading('Aplicando em lote...', { id: 'bulk-mark' })
+                            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/vacations/bulk-mark-period-taken`, {
+                              method: 'POST',
+                              headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}`, 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ items, note: reason.trim() || undefined }),
+                            })
+                            const json = await res.json()
+                            toast.dismiss('bulk-mark')
+                            if (res.ok) {
+                              const s = json?.data?.summary
+                              toast.success(`✓ ${s.created} criadas · ${s.alreadyExists} já existiam · ${s.skipped} puladas`, { duration: 10000 })
+                              setDexionSelected(new Set())
+                              setDexionReport(null)
+                              fetchRequests()
+                            } else {
+                              toast.error(json?.error?.message || 'Erro ao aplicar.', { duration: 12000 })
+                            }
+                          } catch (err: any) {
+                            toast.dismiss('bulk-mark')
+                            toast.error(`Erro: ${err?.message || err}`)
+                          } finally { setDexionBulkRunning(false) }
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg disabled:opacity-40 disabled:cursor-not-allowed"
+                        title="Cria solicitações COMPLETED retroativas para todos os períodos vencidos dos selecionados"
+                      >
+                        ✓ {dexionBulkRunning ? 'Aplicando...' : `Marcar ${selectedVencidosCount} vencido(s) como gozado(s)`}
+                      </button>
+                    </div>
+                  </div>
+                )
+              })()}
               <div className="rounded-lg border border-white/5 overflow-hidden">
                 <table className="w-full text-xs">
                   <thead className="bg-slate-800/60 text-[10px] uppercase tracking-wider text-slate-400 sticky top-0">
                     <tr>
+                      <th className="text-left px-3 py-2 w-8"></th>
                       <th className="text-left px-3 py-2">Matr.</th>
                       <th className="text-left px-3 py-2">Nome</th>
                       <th className="text-left px-3 py-2">Cargo</th>
@@ -1087,8 +1163,27 @@ export default function ApprovalsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
-                    {dexionReport.matched.filter(m => m.vencidosCount > 0).slice(0, 200).map(m => (
-                      <tr key={m.matricula} className="hover:bg-white/[0.02]">
+                    {dexionReport.matched.filter(m => m.vencidosCount > 0).slice(0, 200).map(m => {
+                      const checked = m.employeeId ? dexionSelected.has(m.employeeId) : false
+                      return (
+                      <tr key={m.matricula} className={`hover:bg-white/[0.02] ${checked ? 'bg-emerald-500/5' : ''}`}>
+                        <td className="px-3 py-1.5">
+                          <input
+                            type="checkbox"
+                            disabled={!m.employeeId}
+                            checked={checked}
+                            onChange={() => {
+                              if (!m.employeeId) return
+                              setDexionSelected(prev => {
+                                const next = new Set(prev)
+                                if (next.has(m.employeeId!)) next.delete(m.employeeId!)
+                                else next.add(m.employeeId!)
+                                return next
+                              })
+                            }}
+                            className="accent-emerald-500 cursor-pointer"
+                          />
+                        </td>
                         <td className="px-3 py-1.5 font-mono text-sky-400">{m.matricula}</td>
                         <td className="px-3 py-1.5 text-white">{m.nome}</td>
                         <td className="px-3 py-1.5 text-slate-400">{m.cargo || '—'}</td>
@@ -1102,9 +1197,10 @@ export default function ApprovalsPage() {
                           ))}
                         </td>
                       </tr>
-                    ))}
+                      )
+                    })}
                     {dexionReport.matched.filter(m => m.vencidosCount > 0).length === 0 && (
-                      <tr><td colSpan={6} className="px-3 py-6 text-center text-emerald-300 text-sm">✓ Nenhum período vencido detectado.</td></tr>
+                      <tr><td colSpan={7} className="px-3 py-6 text-center text-emerald-300 text-sm">✓ Nenhum período vencido detectado.</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -1115,7 +1211,7 @@ export default function ApprovalsPage() {
             </div>
 
             <div className="p-4 border-t border-white/5 flex justify-end">
-              <button onClick={() => setDexionReport(null)} className="px-4 py-2 text-sm border border-slate-700 text-slate-300 rounded-lg hover:bg-slate-700/50">Fechar</button>
+              <button onClick={() => { setDexionReport(null); setDexionSelected(new Set()) }} className="px-4 py-2 text-sm border border-slate-700 text-slate-300 rounded-lg hover:bg-slate-700/50">Fechar</button>
             </div>
           </div>
         </div>
