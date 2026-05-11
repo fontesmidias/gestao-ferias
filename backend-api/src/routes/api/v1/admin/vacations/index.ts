@@ -294,6 +294,7 @@ const programmedVacations: FastifyPluginAsync = async (fastify) => {
 
     for (const rec of parsed.records) {
       if (rec.motivo !== 'FERIAS') continue
+      try {
       if (!rec.titularMatricula) {
         results.push({ rowIndex: rec.rowIndex, titular: rec.titularNome, status: 'no_match', reason: 'Matricula do titular ausente.' })
         noMatch++; continue
@@ -312,9 +313,19 @@ const programmedVacations: FastifyPluginAsync = async (fastify) => {
         noMatch++; continue
       }
 
-      const start = parseISO(rec.inicioVigencia)
-      const end = parseISO(rec.fimVigencia)
+      let start = parseISO(rec.inicioVigencia)
+      let end = parseISO(rec.fimVigencia)
+      // V3.4 fix: Tirvu exporta colunas com Inicio/Fim invertidas em alguns rows
+      // (Data OS no lugar de Fim Vigencia). Detecta e auto-corrige.
+      if (end < start) {
+        const tmp = start; start = end; end = tmp
+      }
       const days = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1)
+      // Sanity: se diferenca > 365 dias, provavelmente nao e ferias real — skip
+      if (days > 365) {
+        results.push({ rowIndex: rec.rowIndex, titular: rec.titularNome, status: 'no_dates', reason: `Periodo absurdo (${days}d). Verificar planilha origem.` })
+        noDates++; continue
+      }
 
       const existing = await fastify.prisma.vacationRequest.findFirst({
         where: {
@@ -408,6 +419,13 @@ const programmedVacations: FastifyPluginAsync = async (fastify) => {
         } else {
           coverageCreated++
         }
+      }
+      } catch (err: any) {
+        // Linha quebrou — registra e segue. Evita 500 no batch inteiro.
+        const msg = err?.message || err?.code || 'erro desconhecido'
+        results.push({ rowIndex: rec.rowIndex, titular: rec.titularNome, status: 'no_dates', reason: `Erro ao processar linha: ${msg.slice(0, 200)}` })
+        noDates++
+        fastify.log.warn({ err: msg, rowIndex: rec.rowIndex }, 'import-operational: linha falhou')
       }
     }
 
