@@ -150,6 +150,7 @@ export default function CoveragePage() {
 
   // V3.4 Story 4.16: filtro por posto/workplace e "so com gap"
   const [workplaceFilter, setWorkplaceFilter] = useState<string>('')
+  const [onlyWithGap, setOnlyWithGap] = useState<boolean>(false)
 
   // V3.4 Story 4.3: encadeamento automatico
   const [chainRunning, setChainRunning] = useState(false)
@@ -808,75 +809,157 @@ export default function CoveragePage() {
                 </div>
               )}
 
-              {/* Gantt Timeline (Story 2.4) */}
+              {/* V3.4 Story 4.14: Timeline rica — férias + coberturas sobrepostas, coloridas por status */}
               {(gaps?.gaps?.length ?? 0) > 0 && (
                 <div className="glass-card rounded-2xl border border-white/5 overflow-hidden mb-8">
-                  <div className="p-4 border-b border-white/5">
+                  <div className="p-4 border-b border-white/5 flex items-center justify-between flex-wrap gap-3">
                     <h3 className="font-bold text-sm text-white uppercase tracking-wider flex items-center gap-2">
                       <Calendar className="w-4 h-4 text-primary" />
                       Timeline de Cobertura
-                      <InfoTooltip text="Visualização do mês com barras coloridas: vermelho = gap sem cobertura, verde = coberto. Clique em um gap para atribuir cobertura." />
+                      <InfoTooltip text="Para cada posto: linha de cima mostra férias (vermelho=gap, verde=tem cobertura). Linha de baixo mostra coberturas atribuídas coloridas por status (azul=planejada, verde=ativa, cinza=concluída). Clique numa férias para atribuir/editar cobertura." />
                     </h3>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={onlyWithGap}
+                          onChange={e => setOnlyWithGap(e.target.checked)}
+                          className="w-4 h-4 accent-rose-500"
+                        />
+                        <span className="text-xs text-slate-300 font-bold">Só postos com gap descoberto</span>
+                      </label>
+                    </div>
                   </div>
                   <div className="p-4 overflow-x-auto">
                     {(() => {
-                      const monthStart = startOfMonth(selectedMonth)
-                      const monthEnd = endOfMonth(selectedMonth)
-                      const daysInMonth = monthEnd.getDate()
-                      const allGaps = gaps?.gaps ?? []
-                      // Group by workplace
+                      const ref = viewMode === 'month' ? selectedMonth : new Date()
+                      const rangeStart = viewMode === 'month' ? startOfMonth(ref) : new Date()
+                      const rangeEnd = viewMode === 'month' ? endOfMonth(ref) : addDays(new Date(), 90)
+                      const totalDays = Math.max(1, Math.round((rangeEnd.getTime() - rangeStart.getTime()) / 86400000) + 1)
+
+                      // Posicao percentual de uma data dentro do range exibido
+                      const pctOf = (d: Date): number => {
+                        const days = (d.getTime() - rangeStart.getTime()) / 86400000
+                        return Math.max(0, Math.min(100, (days / totalDays) * 100))
+                      }
+
+                      // Indexa coberturas por workplace.name
+                      const coveragesByWp = new Map<string, Coverage[]>()
+                      for (const c of coverages) {
+                        const wp = c.workplacePosition?.workplace?.name || 'Sem Posto'
+                        if (!coveragesByWp.has(wp)) coveragesByWp.set(wp, [])
+                        coveragesByWp.get(wp)!.push(c)
+                      }
+
+                      // Group férias by workplace (todos, nao so uncovered)
                       const byWorkplace = new Map<string, Gap[]>()
-                      allGaps.forEach(g => {
+                      ;(gaps?.gaps ?? []).forEach(g => {
                         const key = g.workplace?.name || 'Sem Posto'
+                        if (workplaceFilter && key !== workplaceFilter) return
                         if (!byWorkplace.has(key)) byWorkplace.set(key, [])
                         byWorkplace.get(key)!.push(g)
                       })
 
+                      let workplaces = Array.from(byWorkplace.entries())
+                      if (onlyWithGap) {
+                        workplaces = workplaces.filter(([, ws]) => ws.some(g => !g.hasCoverage))
+                      }
+
+                      // Status colors para CoverageAssignment
+                      const covColor = (s: string) =>
+                        s === 'ACTIVE' ? 'bg-emerald-500/70' :
+                        s === 'PLANNED' ? 'bg-sky-500/60' :
+                        'bg-slate-500/40' // COMPLETED ou outro
+
+                      // Status of vacation: APPROVED|SIGNED em andamento HOJE = ACTIVE-ish; planejado = futuro
+                      const vacationVisual = (g: Gap): { bg: string; label: string } => {
+                        const start = parseISO(g.vacationStart)
+                        const end = parseISO(g.vacationEnd)
+                        const today = new Date()
+                        const inCurso = start <= today && today <= end
+                        const futuro = start > today
+                        if (!g.hasCoverage) {
+                          return { bg: 'bg-rose-500/70', label: inCurso ? 'GAP (em curso)' : 'GAP' }
+                        }
+                        if (inCurso) return { bg: 'bg-emerald-500/70', label: 'Em andamento (coberto)' }
+                        if (futuro) return { bg: 'bg-indigo-500/60', label: 'Programada (coberta)' }
+                        return { bg: 'bg-slate-500/50', label: 'Concluída' }
+                      }
+
                       return (
                         <div className="min-w-[700px]">
-                          {/* Day headers */}
+                          {/* Day/range labels */}
                           <div className="flex items-center mb-2">
-                            <div className="w-36 shrink-0 text-xs text-slate-500 font-bold">Posto</div>
-                            <div className="flex-1 flex">
-                              {Array.from({ length: daysInMonth }, (_, i) => (
-                                <div key={i} className="flex-1 text-center text-[9px] text-slate-600 font-mono">
-                                  {i + 1}
-                                </div>
-                              ))}
+                            <div className="w-44 shrink-0 text-xs text-slate-500 font-bold">Posto</div>
+                            <div className="flex-1 flex justify-between text-[10px] text-slate-500 font-mono px-1">
+                              <span>{format(rangeStart, 'dd/MM')}</span>
+                              <span>{format(rangeEnd, 'dd/MM')}</span>
                             </div>
                           </div>
-                          {/* Workplace rows */}
-                          {Array.from(byWorkplace.entries()).map(([name, wpGaps]) => (
-                            <div key={name} className="flex items-center mb-1">
-                              <div className="w-36 shrink-0 text-xs text-slate-300 font-bold truncate pr-2" title={name}>{name}</div>
-                              <div className="flex-1 flex h-7 bg-slate-800/30 rounded overflow-hidden relative">
-                                {/* Green background (covered) */}
-                                <div className="absolute inset-0 bg-emerald-500/10 rounded" />
-                                {/* Gap bars (red) */}
-                                {wpGaps.map(g => {
-                                  const gStart = Math.max(1, parseISO(g.vacationStart).getDate())
-                                  const gEnd = Math.min(daysInMonth, parseISO(g.vacationEnd).getDate())
-                                  const left = ((gStart - 1) / daysInMonth) * 100
-                                  const width = ((gEnd - gStart + 1) / daysInMonth) * 100
-                                  return (
-                                    <button
-                                      key={g.vacationRequestId}
-                                      onClick={() => openAssignModal(g)}
-                                      className={`absolute top-0.5 bottom-0.5 rounded-sm cursor-pointer transition-colors hover:brightness-125 ${
-                                        g.hasCoverage ? 'bg-emerald-500/60' : 'bg-red-500/70'
-                                      }`}
-                                      style={{ left: `${left}%`, width: `${width}%` }}
-                                      title={`${g.employeeName}: ${format(parseISO(g.vacationStart), 'dd/MM')} - ${format(parseISO(g.vacationEnd), 'dd/MM')} (${g.days}d)${g.hasCoverage ? ' ✓ Coberto' : ' ⚠ Gap'}`}
-                                    />
-                                  )
-                                })}
+                          {workplaces.length === 0 ? (
+                            <p className="text-sm text-slate-500 text-center py-6">Nenhum posto no filtro atual.</p>
+                          ) : workplaces.map(([name, wpGaps]) => {
+                            const wpCoverages = (coveragesByWp.get(name) || []).filter(c => {
+                              const cStart = parseISO(c.startDate); const cEnd = parseISO(c.endDate)
+                              return cEnd >= rangeStart && cStart <= rangeEnd
+                            })
+                            return (
+                              <div key={name} className="flex items-start mb-2 group">
+                                <div className="w-44 shrink-0 text-xs text-slate-300 font-bold truncate pr-2 pt-1" title={name}>{name}</div>
+                                <div className="flex-1 space-y-0.5">
+                                  {/* Track 1: férias */}
+                                  <div className="flex h-5 bg-slate-800/30 rounded overflow-hidden relative">
+                                    {wpGaps.map(g => {
+                                      const start = parseISO(g.vacationStart)
+                                      const end = parseISO(g.vacationEnd)
+                                      if (end < rangeStart || start > rangeEnd) return null
+                                      const v = vacationVisual(g)
+                                      const left = pctOf(start)
+                                      const right = pctOf(end)
+                                      return (
+                                        <button
+                                          key={g.vacationRequestId}
+                                          onClick={() => openAssignModal(g)}
+                                          className={`absolute top-0.5 bottom-0.5 rounded-sm cursor-pointer transition-all hover:brightness-125 hover:ring-1 hover:ring-white/30 ${v.bg}`}
+                                          style={{ left: `${left}%`, width: `${Math.max(1, right - left)}%` }}
+                                          title={`${g.employeeName} · ${format(start, 'dd/MM')} → ${format(end, 'dd/MM')} (${g.days}d) · ${v.label}`}
+                                        />
+                                      )
+                                    })}
+                                  </div>
+                                  {/* Track 2: coberturas atribuidas */}
+                                  {wpCoverages.length > 0 && (
+                                    <div className="flex h-2.5 bg-slate-800/20 rounded overflow-hidden relative">
+                                      {wpCoverages.map(c => {
+                                        const cs = parseISO(c.startDate); const ce = parseISO(c.endDate)
+                                        const left = pctOf(cs); const right = pctOf(ce)
+                                        return (
+                                          <button
+                                            key={c.id}
+                                            onClick={() => openEditCoverage(c)}
+                                            className={`absolute top-0 bottom-0 rounded-sm cursor-pointer hover:brightness-125 ${covColor(c.status)}`}
+                                            style={{ left: `${left}%`, width: `${Math.max(1, right - left)}%` }}
+                                            title={`${c.replacementEmployee?.name ?? 'substituto'} cobrindo ${c.vacationRequest?.employee?.name ?? '?'} · ${format(cs, 'dd/MM')} → ${format(ce, 'dd/MM')} · ${c.status}`}
+                                          />
+                                        )
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                          ))}
+                            )
+                          })}
                           {/* Legend */}
-                          <div className="flex items-center gap-4 mt-3 text-[10px] text-slate-500">
-                            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-red-500/70 inline-block" /> Gap (sem cobertura)</span>
-                            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-emerald-500/60 inline-block" /> Coberto</span>
+                          <div className="flex items-center gap-x-4 gap-y-1 mt-3 text-[10px] text-slate-500 flex-wrap">
+                            <span className="font-bold text-slate-400 uppercase tracking-wider">Férias:</span>
+                            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-rose-500/70 inline-block" /> Gap</span>
+                            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-emerald-500/70 inline-block" /> Em andamento</span>
+                            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-indigo-500/60 inline-block" /> Programada</span>
+                            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-slate-500/50 inline-block" /> Concluída</span>
+                            <span className="font-bold text-slate-400 uppercase tracking-wider ml-3">Cobertura:</span>
+                            <span className="flex items-center gap-1"><span className="w-3 h-2 rounded-sm bg-sky-500/60 inline-block" /> Planejada</span>
+                            <span className="flex items-center gap-1"><span className="w-3 h-2 rounded-sm bg-emerald-500/70 inline-block" /> Ativa</span>
+                            <span className="flex items-center gap-1"><span className="w-3 h-2 rounded-sm bg-slate-500/40 inline-block" /> Concluída</span>
                           </div>
                         </div>
                       )
