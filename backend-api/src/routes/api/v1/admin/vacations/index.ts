@@ -473,6 +473,103 @@ const programmedVacations: FastifyPluginAsync = async (fastify) => {
   })
 
   // ============================================================================
+  // V3.4 Story 4.23: Pendências do import Tirvu — VacationRequests importadas
+  // que não receberam cobertura e não foram dispensadas. Operador resolve
+  // caso a caso (atribuir substituto manualmente OU dispensar com motivo).
+  // ============================================================================
+
+  fastify.get('/coverage-orphans-tirvu', {
+    onRequest: [fastify.requireAuth, fastify.requireAdmin],
+  }, async (request, reply) => {
+    const { tenantId } = request.user as { tenantId: string }
+    // VacationRequests originadas do import Tirvu (dispatchNote inicia com marca),
+    // status APPROVED/SIGNED, sem coverage PLANNED/ACTIVE associada, e nao dispensadas.
+    const orphans = await fastify.prisma.vacationRequest.findMany({
+      where: {
+        tenantId,
+        status: { in: ['APPROVED', 'SIGNED'] },
+        coverageWaived: false,
+        dispatchNote: { startsWith: 'Importada da Gestão Operacional Tirvu' },
+        coverages: { none: { status: { in: ['PLANNED', 'ACTIVE'] } } },
+        endDate: { gte: new Date() }, // só ativas/futuras
+      },
+      include: {
+        employee: {
+          select: {
+            id: true, name: true, registration: true, position: true,
+            allocations: {
+              where: { status: 'ACTIVE' },
+              include: { workplacePosition: { include: { workplace: { select: { name: true } } } } },
+              take: 1,
+            },
+          },
+        },
+      },
+      orderBy: { startDate: 'asc' },
+    })
+
+    return reply.send({
+      data: {
+        count: orphans.length,
+        items: orphans.map(o => ({
+          id: o.id,
+          startDate: o.startDate.toISOString().slice(0, 10),
+          endDate: o.endDate.toISOString().slice(0, 10),
+          days: o.days,
+          dispatchNote: o.dispatchNote,
+          employee: {
+            id: o.employee.id,
+            name: o.employee.name,
+            registration: o.employee.registration,
+            position: o.employee.position,
+          },
+          allocation: o.employee.allocations[0] ? {
+            workplaceName: o.employee.allocations[0].workplacePosition.workplace.name,
+            role: o.employee.allocations[0].workplacePosition.role,
+            positionId: o.employee.allocations[0].workplacePosition.id,
+          } : null,
+          problem: !o.employee.allocations[0] ? 'no_allocation' : 'no_substituto',
+        })),
+      },
+      error: null,
+    })
+  })
+
+  // PATCH para dispensar cobertura de uma VR ja existente (com motivo).
+  fastify.patch('/:id/waive-coverage', {
+    onRequest: [fastify.requireAuth, fastify.requireAdmin],
+    schema: {
+      params: { type: 'object', properties: { id: { type: 'string', format: 'uuid' } } },
+      body: {
+        type: 'object',
+        required: ['reason'],
+        properties: { reason: { type: 'string', minLength: 3, maxLength: 500 } },
+      },
+    },
+  }, async (request, reply) => {
+    const { tenantId, userId } = request.user as { tenantId: string; userId: string }
+    const { id } = request.params as { id: string }
+    const { reason } = request.body as { reason: string }
+    const existing = await fastify.prisma.vacationRequest.findFirst({ where: { id, tenantId } })
+    if (!existing) return reply.code(404).send({ data: null, error: { code: 'NOT_FOUND', message: 'Solicitacao nao encontrada.' } })
+    const updated = await fastify.prisma.vacationRequest.update({
+      where: { id: existing.id },
+      data: { coverageWaived: true, coverageWaiverReason: reason.trim() },
+    })
+    await fastify.prisma.auditLog.create({
+      data: {
+        tenantId, userId,
+        action: 'VACATION_COVERAGE_WAIVED',
+        resourceType: 'VACATION_REQUEST',
+        resourceId: existing.id,
+        previousData: { coverageWaived: existing.coverageWaived, coverageWaiverReason: existing.coverageWaiverReason } as never,
+        newData: { coverageWaived: true, coverageWaiverReason: reason.trim() } as never,
+      },
+    }).catch(() => {})
+    return reply.send({ data: updated, error: null })
+  })
+
+  // ============================================================================
   // V3.4 Story 4.22: Analise da Previsao de Ferias Dexion vs sistema.
   // Read-only: parseia o XLS, casa por matricula, lista divergencias.
   // ============================================================================

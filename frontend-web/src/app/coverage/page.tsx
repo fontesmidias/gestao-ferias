@@ -204,6 +204,39 @@ export default function CoveragePage() {
 
   // V3.4: config de cron movida para /settings → Automacoes.
 
+  // V3.4 Story 4.23: pendencias do import Tirvu (VR sem cobertura)
+  interface TirvuOrphan {
+    id: string; startDate: string; endDate: string; days: number; dispatchNote: string | null
+    employee: { id: string; name: string; registration: string | null; position: string | null }
+    allocation: { workplaceName: string; role: string; positionId: string } | null
+    problem: 'no_allocation' | 'no_substituto'
+  }
+  const [tirvuOrphans, setTirvuOrphans] = useState<TirvuOrphan[]>([])
+  const [showTirvuOrphans, setShowTirvuOrphans] = useState(true)
+  const fetchTirvuOrphans = useCallback(async () => {
+    try {
+      const res: any = await HttpClient.get('/admin/vacations/coverage-orphans-tirvu')
+      setTirvuOrphans(res?.data?.items ?? [])
+    } catch { setTirvuOrphans([]) }
+  }, [])
+  useEffect(() => { fetchTirvuOrphans() }, [fetchTirvuOrphans])
+
+  const waiveTirvuOrphan = async (vrId: string, name: string) => {
+    const reason = prompt(`Dispensar cobertura para ${name}?\n\nInforme o motivo (obrigatorio, sera auditado):`)
+    if (!reason || reason.trim().length < 3) {
+      if (reason !== null) toast.error('Motivo precisa ter pelo menos 3 caracteres.')
+      return
+    }
+    try {
+      await HttpClient.patch(`/admin/vacations/${vrId}/waive-coverage`, { reason: reason.trim() })
+      toast.success('Cobertura dispensada.')
+      fetchTirvuOrphans()
+      fetchData()
+    } catch (err: any) {
+      toast.error(err?.body?.error?.message || 'Erro ao dispensar.')
+    }
+  }
+
   // V3.4 Story 4.20: colaboradores com status FERIAS no Employee mas sem
   // VacationRequest ativa (sintoma classico de import Tirvu trazendo so o status).
   interface OrphanFerista { id: string; name: string; registration: string | null; cpf: string; position: string | null; workplace: string | null }
@@ -396,6 +429,7 @@ export default function CoveragePage() {
       toast.success('Cobertura atribuida com sucesso!')
       closeSheet()
       fetchData()
+      fetchTirvuOrphans()
     } catch (err: any) {
       // V3.4 C3: trata bloqueio anti-overlap (409 COVERAGE_OVERLAP) com mensagem
       // contextualizada apontando o conflito.
@@ -624,6 +658,101 @@ export default function CoveragePage() {
         </div>
 
         {/* V3.4 Story 4.20: alerta de colaboradores FERIAS sem registro */}
+        {/* V3.4 Story 4.23: Pendencias do import Tirvu */}
+        {tirvuOrphans.length > 0 && (
+          <div className="glass-card rounded-2xl border border-cyan-500/40 bg-cyan-500/5 mb-6 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowTirvuOrphans(s => !s)}
+              className="w-full p-4 border-b border-cyan-500/20 flex items-start gap-3 hover:bg-cyan-500/5 transition-colors text-left"
+            >
+              <AlertTriangle className="w-5 h-5 text-cyan-300 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <h4 className="font-bold text-cyan-100 text-sm">
+                  {tirvuOrphans.length} férias importada(s) do Tirvu pendente(s) de cobertura
+                </h4>
+                <p className="text-xs text-cyan-100/70 mt-1">
+                  O importer não conseguiu vincular cobertura automaticamente (titular sem posto OU substituto sem cadastro). Resolva caso a caso: atribua um substituto manualmente OU dispense a cobertura com motivo justificado.
+                </p>
+              </div>
+              <span className="text-xs text-cyan-300 mt-1">{showTirvuOrphans ? 'Recolher' : 'Expandir'}</span>
+            </button>
+            {showTirvuOrphans && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-900/50 text-[10px] uppercase tracking-wider text-slate-400">
+                    <tr>
+                      <th className="text-left px-4 py-2">Colaborador</th>
+                      <th className="text-left px-4 py-2">Matr.</th>
+                      <th className="text-left px-4 py-2">Posto / Cargo</th>
+                      <th className="text-left px-4 py-2">Período</th>
+                      <th className="text-left px-4 py-2">Problema</th>
+                      <th className="text-right px-4 py-2">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {tirvuOrphans.map(o => (
+                      <tr key={o.id} className="hover:bg-white/[0.02]">
+                        <td className="px-4 py-1.5 text-white font-bold">{o.employee.name}</td>
+                        <td className="px-4 py-1.5 text-sky-400 font-mono">{o.employee.registration || '—'}</td>
+                        <td className="px-4 py-1.5 text-slate-400">
+                          {o.allocation ? `${o.allocation.workplaceName} / ${o.allocation.role}` : <span className="text-rose-300">Sem posto ativo</span>}
+                        </td>
+                        <td className="px-4 py-1.5 text-slate-300 font-mono">{o.startDate.slice(5)} → {o.endDate.slice(5)} ({o.days}d)</td>
+                        <td className="px-4 py-1.5">
+                          {o.problem === 'no_allocation' ? (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-rose-500/15 text-rose-300 border border-rose-500/30">Sem alocação</span>
+                          ) : (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30">Substituto não cadastrado</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-1.5 text-right whitespace-nowrap">
+                          {o.allocation && (
+                            <button
+                              onClick={() => {
+                                const gap: Gap = {
+                                  vacationRequestId: o.id,
+                                  employeeName: o.employee.name,
+                                  vacationStart: o.startDate,
+                                  vacationEnd: o.endDate,
+                                  days: o.days,
+                                  workplace: o.allocation ? {
+                                    id: '',
+                                    name: o.allocation.workplaceName,
+                                    positionId: o.allocation.positionId,
+                                    role: o.allocation.role,
+                                  } : null,
+                                  hasCoverage: false,
+                                }
+                                openAssignModal(gap)
+                              }}
+                              className="text-[11px] text-emerald-300 hover:text-emerald-200 px-2 py-1 rounded hover:bg-emerald-500/10 inline-flex items-center gap-1 mr-1"
+                            >
+                              <UserCheck className="w-3 h-3" /> Atribuir
+                            </button>
+                          )}
+                          <button
+                            onClick={() => waiveTirvuOrphan(o.id, o.employee.name)}
+                            className="text-[11px] text-slate-300 hover:text-white px-2 py-1 rounded hover:bg-slate-800 inline-flex items-center gap-1"
+                            title="Dispensar cobertura — usar quando o posto realmente não precisa de substituto durante o período"
+                          >
+                            <Shield className="w-3 h-3" /> Dispensar
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p className="text-[10px] text-slate-500 p-3">
+                  <strong className="text-slate-400">Sem alocação:</strong> colaborador não tem posto ATIVO. Aloque em <code>/workplaces</code> antes de atribuir cobertura.
+                  &nbsp;·&nbsp;
+                  <strong className="text-slate-400">Substituto não cadastrado:</strong> o Tirvu indicou um substituto cuja matrícula não existe no sistema. Atribua manualmente outro.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
         {orphansLoaded && orphanFeristas.length > 0 && (
           <div className="glass-card rounded-2xl border border-amber-500/40 bg-amber-500/5 mb-6 p-4">
             <div className="flex items-start gap-3">
