@@ -32,7 +32,36 @@ const route: FastifyPluginAsync = async (fastify) => {
     const q = request.query as { dryRun?: string }
     const dryRun = q.dryRun === 'true'
 
-    const parsed = parseTirvuOperational(buffer)
+    let parsed
+    try {
+      parsed = parseTirvuOperational(buffer)
+    } catch (err: any) {
+      return reply.code(400).send({
+        data: null,
+        error: {
+          code: 'PARSE_FAILED',
+          message: `Nao consegui ler a planilha. Verifique se enviou o XLS "Gestao Operacional" do Tirvu (com colunas Status, Motivo, Colaborador, Matricula, Posto, Substituto, Vigencia). Detalhe tecnico: ${err?.message || 'erro desconhecido'}`,
+        },
+      })
+    }
+    if (parsed.records.length === 0) {
+      return reply.code(400).send({
+        data: null,
+        error: {
+          code: 'EMPTY_OR_WRONG_FILE',
+          message: 'A planilha foi lida mas nenhuma linha foi reconhecida. Voce enviou o arquivo certo? Esperado: "Gestao Operacional - YYYY-MM-DD a YYYY-MM-DD.xls" do Tirvu — NAO o "Trabalhadores" nem o "Plano de Ferias".',
+        },
+      })
+    }
+    if (parsed.vacationCount === 0) {
+      return reply.code(400).send({
+        data: null,
+        error: {
+          code: 'NO_VACATIONS_FOUND',
+          message: `Planilha lida (${parsed.records.length} linhas), mas nenhuma tem Motivo=FERIAS. Provavel que voce enviou um arquivo diferente — esperado: "Gestao Operacional" do Tirvu com pelo menos 1 colaborador em ferias no periodo.`,
+        },
+      })
+    }
 
     type Result =
       | { rowIndex: number; titular: string; status: 'created' | 'already_exists' | 'no_match' | 'no_dates' | 'coverage_created' | 'coverage_no_substituto_match' | 'coverage_no_allocation'; vacationRequestId?: string; coverageId?: string; reason?: string }

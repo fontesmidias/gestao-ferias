@@ -56,6 +56,7 @@ export default function ApprovalsPage() {
 
   // --- Programar Férias (V3.4 MVP M5) ---
   const [programOpen, setProgramOpen] = useState(false)
+  const [importMenuOpen, setImportMenuOpen] = useState(false)
 
   // --- Bulk Create State (Story 3.4) ---
   const [bulkMode, setBulkMode] = useState(false)
@@ -312,146 +313,173 @@ export default function ApprovalsPage() {
           <div className="glass-card rounded-2xl overflow-hidden border border-white/5 pb-20">
             <div className="p-6 border-b border-white/5 flex flex-col md:flex-row items-center justify-between gap-4">
               <h3 className="font-bold text-lg">Solicitações Registradas ({filtered.length})</h3>
-              <div className="flex items-center gap-2">
+              {/* V3.4 — Toolbar reorganizada: CTA primaria + dropdown unico de imports + secundarias */}
+              <div className="flex items-center gap-2 flex-wrap">
                 <button
                   onClick={() => setProgramOpen(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary/90 text-white text-xs font-bold rounded-lg shadow-lg shadow-primary/20 transition-colors"
-                  title="Cadastrar férias diretamente em nome do colaborador (admin)"
+                  className="flex items-center gap-1.5 px-3 py-1.5 h-9 bg-primary hover:bg-primary/90 text-white text-xs font-bold rounded-lg shadow-lg shadow-primary/20 transition-colors"
+                  title="Cadastrar férias diretamente em nome do colaborador. Você passa pelo modal e o sistema valida CLT, saldo e sobreposições."
                 >
-                  <CalendarPlus className="w-3.5 h-3.5" /> Programar Férias
+                  <CalendarPlus className="w-3.5 h-3.5" /> Programar férias
                 </button>
-                <label
-                  className="flex items-center gap-1.5 px-3 py-1.5 border border-cyan-500/40 text-cyan-300 rounded-lg hover:bg-cyan-500/10 text-xs font-bold cursor-pointer transition-colors"
-                  title="Importar férias ATUAIS e suas coberturas a partir do XLS 'Gestao Operacional' do Tirvu. Idempotente."
-                >
-                  <Upload className="w-3.5 h-3.5" /> Importar Tirvu Operacional
-                  <input type="file" accept=".xls,.xlsx" className="hidden" onChange={async (e) => {
-                    const file = e.target.files?.[0]
-                    if (!file) return
-                    if (!confirm('Importar Gestão Operacional do Tirvu:\n\nCria VacationRequest APPROVED para cada férias atual + CoverageAssignment quando há substituto. Match por matrícula (titular e substituto). Idempotente (rodar 2x = mesmo resultado).\n\nContinuar?')) {
-                      e.target.value = ''; return
-                    }
-                    const formData = new FormData()
-                    formData.append('file', file)
-                    try {
-                      toast.loading('Importando...', { id: 'imp-op' })
-                      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/vacations/import-operational`, {
-                        method: 'POST',
-                        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-                        body: formData,
-                      })
-                      const json = await res.json()
-                      toast.dismiss('imp-op')
-                      if (res.ok) {
-                        const s = json?.data?.summary
-                        toast.success(
-                          `Férias: ${s?.created ?? 0} criadas, ${s?.alreadyExists ?? 0} já existiam, ${s?.noMatch ?? 0} sem match · Coberturas: ${s?.coverageCreated ?? 0} criadas, ${s?.coverageNoMatch ?? 0} sem match`,
-                          { duration: 12000 },
-                        )
-                        fetchRequests()
-                      } else {
-                        toast.error(json?.error?.message || 'Erro ao importar')
-                      }
-                    } catch { toast.dismiss('imp-op'); toast.error('Erro de rede ao importar') }
-                    e.target.value = ''
-                  }} />
-                </label>
-                <label
-                  className="flex items-center gap-1.5 px-3 py-1.5 border border-emerald-500/40 text-emerald-400 rounded-lg hover:bg-emerald-500/10 text-xs font-bold cursor-pointer transition-colors"
-                  title="Importar plano de férias em massa (admin) — cria já APROVADO e detecta sobreposições/duplicatas"
-                >
-                  <Upload className="w-3.5 h-3.5" /> Importar Plano (Admin)
-                  <input type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={async (e) => {
-                    const file = e.target.files?.[0]
-                    if (!file) return
-                    const formData = new FormData()
-                    formData.append('file', file)
-                    try {
-                      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/vacations/plan/import`, {
-                        method: 'POST',
-                        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-                        body: formData,
-                      })
-                      const json = await res.json()
-                      if (res.ok) {
-                        const s = json?.data?.summary
-                        toast.success(
-                          `Plano: ${s?.created ?? 0} criadas · ${s?.skipped_idempotent ?? 0} duplicatas · ${s?.skipped_overlap ?? 0} sobreposições · ${s?.errors ?? 0} erros`,
-                          { duration: 8000 }
-                        )
-                        if (s?.errors > 0) {
-                          const firstErrors = (json?.data?.results || [])
-                            .filter((r: any) => r.outcome === 'error')
-                            .slice(0, 3)
-                            .map((r: any) => `Linha ${r.rowIndex}: ${r.message}`)
-                            .join('\n')
-                          if (firstErrors) toast.error(firstErrors, { duration: 12000 })
-                        }
-                        fetchRequests()
-                      } else {
-                        toast.error(json?.error?.message || 'Erro ao importar plano')
-                      }
-                    } catch { toast.error('Erro de rede ao importar') }
-                    e.target.value = ''
-                  }} />
-                </label>
+
+                {/* Dropdown unico de imports */}
+                <div className="relative">
+                  <button
+                    onClick={() => setImportMenuOpen(o => !o)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 h-9 border rounded-lg text-xs font-bold transition-colors ${importMenuOpen ? 'border-sky-500/60 bg-sky-500/10 text-sky-200' : 'border-slate-700 text-slate-300 hover:border-slate-600 hover:bg-slate-800'}`}
+                    title="Importar dados de planilhas (Tirvu, Plano, ou modelo do sistema)"
+                  >
+                    <Upload className="w-3.5 h-3.5" /> Importar ▾
+                  </button>
+                  {importMenuOpen && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setImportMenuOpen(false)} />
+                      <div className="absolute left-0 mt-1 z-50 w-[360px] bg-slate-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden">
+                        {/* Opção 1: Tirvu Operacional */}
+                        <label className="block px-4 py-3 hover:bg-cyan-500/10 cursor-pointer border-b border-white/5">
+                          <div className="flex items-start gap-2">
+                            <Upload className="w-4 h-4 text-cyan-300 shrink-0 mt-0.5" />
+                            <div>
+                              <p className="font-bold text-sm text-white">Tirvu — Gestão Operacional</p>
+                              <p className="text-[11px] text-slate-400 mt-0.5">XLS exportado do Tirvu com as férias ATUAIS e suas coberturas. Cria solicitação APROVADA + cobertura por substituto.</p>
+                            </div>
+                          </div>
+                          <input type="file" accept=".xls,.xlsx" className="hidden" onChange={async (e) => {
+                            setImportMenuOpen(false)
+                            const file = e.target.files?.[0]
+                            if (!file) return
+                            if (!confirm(`Importar "${file.name}" como GESTÃO OPERACIONAL do Tirvu?\n\nO sistema vai:\n• Criar solicitação APROVADA para cada férias atual (match por matrícula)\n• Criar cobertura quando há substituto na linha\n• Marcar "Sem cobertura" quando observação indicar\n\nÉ idempotente (rodar 2x não duplica).\n\nVerifique se este é o arquivo certo!`)) {
+                              e.target.value = ''; return
+                            }
+                            const formData = new FormData()
+                            formData.append('file', file)
+                            try {
+                              toast.loading('Importando Gestão Operacional...', { id: 'imp' })
+                              const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/vacations/import-operational`, {
+                                method: 'POST',
+                                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+                                body: formData,
+                              })
+                              const json = await res.json()
+                              toast.dismiss('imp')
+                              if (res.ok) {
+                                const s = json?.data?.summary
+                                if (!s || s.ferias === 0) {
+                                  toast.error('Nenhuma linha com "Motivo: FÉRIAS" foi reconhecida. Verifique se este é o arquivo "Gestão Operacional" do Tirvu — não os "Trabalhadores" nem o "Plano de Férias".', { duration: 14000 })
+                                } else {
+                                  toast.success(`✓ ${s.created} criadas · ${s.alreadyExists} já existiam · ${s.noMatch} sem match · ${s.coverageCreated} coberturas`, { duration: 12000 })
+                                }
+                                fetchRequests()
+                              } else {
+                                toast.error((json?.error?.message || 'Erro ao importar') + ' — confirme se enviou o XLS de Gestão Operacional.', { duration: 12000 })
+                              }
+                            } catch { toast.dismiss('imp'); toast.error('Erro de rede ao importar') }
+                            e.target.value = ''
+                          }} />
+                        </label>
+
+                        {/* Opção 2: Plano de Férias */}
+                        <label className="block px-4 py-3 hover:bg-emerald-500/10 cursor-pointer border-b border-white/5">
+                          <div className="flex items-start gap-2">
+                            <Upload className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                            <div>
+                              <p className="font-bold text-sm text-white">Plano anual de férias</p>
+                              <p className="text-[11px] text-slate-400 mt-0.5">Planilha com matrícula + datas planejadas. Cria as solicitações já APROVADAS, detecta duplicatas e sobreposições.</p>
+                            </div>
+                          </div>
+                          <input type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={async (e) => {
+                            setImportMenuOpen(false)
+                            const file = e.target.files?.[0]
+                            if (!file) return
+                            const formData = new FormData()
+                            formData.append('file', file)
+                            try {
+                              toast.loading('Importando plano de férias...', { id: 'imp' })
+                              const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/vacations/plan/import`, {
+                                method: 'POST',
+                                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+                                body: formData,
+                              })
+                              const json = await res.json()
+                              toast.dismiss('imp')
+                              if (res.ok) {
+                                const s = json?.data?.summary
+                                toast.success(`✓ Plano: ${s?.created ?? 0} criadas · ${s?.skipped_idempotent ?? 0} duplicatas · ${s?.skipped_overlap ?? 0} sobreposições · ${s?.errors ?? 0} erros`, { duration: 10000 })
+                                if (s?.errors > 0) {
+                                  const firstErrors = (json?.data?.results || []).filter((r: any) => r.outcome === 'error').slice(0, 3).map((r: any) => `Linha ${r.rowIndex}: ${r.message}`).join('\n')
+                                  if (firstErrors) toast.error(firstErrors, { duration: 14000 })
+                                }
+                                fetchRequests()
+                              } else {
+                                toast.error(json?.error?.message || 'Erro ao importar plano')
+                              }
+                            } catch { toast.dismiss('imp'); toast.error('Erro de rede ao importar') }
+                            e.target.value = ''
+                          }} />
+                        </label>
+
+                        {/* Opção 3: Modelo padrao do sistema */}
+                        <label className="block px-4 py-3 hover:bg-sky-500/10 cursor-pointer">
+                          <div className="flex items-start gap-2">
+                            <Upload className="w-4 h-4 text-sky-300 shrink-0 mt-0.5" />
+                            <div>
+                              <p className="font-bold text-sm text-white">Lote — modelo do sistema</p>
+                              <p className="text-[11px] text-slate-400 mt-0.5">Use o modelo XLSX que o próprio sistema fornece (botão "Modelo" abaixo). Preenche e sobe.</p>
+                            </div>
+                          </div>
+                          <input type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={async (e) => {
+                            setImportMenuOpen(false)
+                            const file = e.target.files?.[0]
+                            if (!file) return
+                            const formData = new FormData()
+                            formData.append('file', file)
+                            try {
+                              toast.loading('Importando...', { id: 'imp' })
+                              const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/vacations/import`, { method: 'POST', headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }, body: formData })
+                              const data = await res.json()
+                              toast.dismiss('imp')
+                              if (res.ok) { toast.success(data.message || 'Importação concluída.'); fetchRequests() }
+                              else { toast.error(data.message || 'Erro na importação') }
+                            } catch { toast.dismiss('imp'); toast.error('Erro ao importar') }
+                            e.target.value = ''
+                          }} />
+                        </label>
+                      </div>
+                    </>
+                  )}
+                </div>
+
                 <button
                   onClick={() => { setBulkMode(prev => !prev); setBulkRows(Array.from({ length: 5 }, emptyRow)) }}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-bold cursor-pointer transition-colors ${
-                    bulkMode
-                      ? 'border-amber-500/50 text-amber-400 bg-amber-500/10'
-                      : 'border-slate-700 text-amber-400 hover:bg-slate-800'
+                  className={`flex items-center gap-1.5 px-3 py-1.5 h-9 border rounded-lg text-xs font-bold transition-colors ${
+                    bulkMode ? 'border-amber-500/60 text-amber-300 bg-amber-500/10' : 'border-slate-700 text-slate-300 hover:border-slate-600 hover:bg-slate-800'
                   }`}
-                  title="Abrir tabela para cadastro de férias em massa"
+                  title="Tabela inline para programar várias férias de uma vez (sem upload de planilha)"
                 >
-                  <Table2 className="w-3.5 h-3.5" /> Cadastro em Massa
+                  <Table2 className="w-3.5 h-3.5" /> Cadastro em massa
                 </button>
+
                 <button
                   onClick={async () => {
                     try {
-                      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/vacations/import/template`, {
-                        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-                      })
+                      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/vacations/import/template`, { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } })
                       if (!res.ok) throw new Error('Erro ao baixar template')
                       const blob = await res.blob()
                       const url = window.URL.createObjectURL(blob)
                       const a = document.createElement('a')
-                      a.href = url
-                      a.download = 'modelo-ferias.xlsx'
-                      document.body.appendChild(a)
-                      a.click()
-                      document.body.removeChild(a)
+                      a.href = url; a.download = 'modelo-ferias.xlsx'
+                      document.body.appendChild(a); a.click(); document.body.removeChild(a)
                       window.URL.revokeObjectURL(url)
                     } catch (err) {
-                      alert('Erro ao baixar template: ' + (err instanceof Error ? err.message : 'Erro desconhecido'))
+                      alert('Erro ao baixar modelo: ' + (err instanceof Error ? err.message : 'desconhecido'))
                     }
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-700 text-emerald-400 rounded-lg hover:bg-slate-800 text-xs font-bold cursor-pointer"
-                  title="Baixar modelo de planilha para programação de férias em massa"
+                  className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 h-9 w-9 border border-slate-700 text-slate-300 rounded-lg hover:border-slate-600 hover:bg-slate-800 cursor-pointer"
+                  title="Baixar modelo de planilha (XLSX) — preenche e sobe via 'Importar → Lote'"
                 >
-                  <FileSpreadsheet className="w-3.5 h-3.5" /> Modelo
+                  <FileSpreadsheet className="w-3.5 h-3.5" />
                 </button>
-                <label className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-700 text-sky-400 rounded-lg hover:bg-slate-800 text-xs font-bold cursor-pointer"
-                  title="Importar programação de férias via planilha">
-                  <Upload className="w-3.5 h-3.5" /> Importar Férias
-                  <input type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={async (e) => {
-                    const file = e.target.files?.[0]
-                    if (!file) return
-                    const formData = new FormData()
-                    formData.append('file', file)
-                    try {
-                      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/vacations/import`, {
-                        method: 'POST',
-                        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-                        body: formData
-                      })
-                      const data = await res.json()
-                      if (res.ok) { toast.success(data.message); fetchRequests() }
-                      else { toast.error(data.message || 'Erro na importação') }
-                    } catch { toast.error('Erro ao importar') }
-                    e.target.value = ''
-                  }} />
-                </label>
               </div>
               <div className="flex items-center gap-3 w-full md:w-auto">
                 <div className="relative flex-1 md:w-72">
