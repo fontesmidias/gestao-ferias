@@ -356,14 +356,19 @@ export default function ApprovalsPage() {
                             formData.append('file', file)
                             try {
                               toast.loading('Importando Gestão Operacional...', { id: 'imp' })
-                              const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/vacations/import-operational`, {
+                              const url = `${process.env.NEXT_PUBLIC_API_URL}/admin/vacations/import-operational`
+                              console.log('[import-operational] POST', url, 'file:', file.name, file.size, 'bytes')
+                              const res = await fetch(url, {
                                 method: 'POST',
                                 headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
                                 body: formData,
                               })
-                              const json = await res.json()
+                              const text = await res.text()
+                              let json: any = null
+                              try { json = JSON.parse(text) } catch { /* nao json */ }
+                              console.log('[import-operational] status', res.status, 'body:', text.slice(0, 500))
                               toast.dismiss('imp')
-                              if (res.ok) {
+                              if (res.ok && json) {
                                 const s = json?.data?.summary
                                 if (!s || s.ferias === 0) {
                                   toast.error('Nenhuma linha com "Motivo: FÉRIAS" foi reconhecida. Verifique se este é o arquivo "Gestão Operacional" do Tirvu — não os "Trabalhadores" nem o "Plano de Férias".', { duration: 14000 })
@@ -372,9 +377,16 @@ export default function ApprovalsPage() {
                                 }
                                 fetchRequests()
                               } else {
-                                toast.error((json?.error?.message || 'Erro ao importar') + ' — confirme se enviou o XLS de Gestão Operacional.', { duration: 12000 })
+                                const msg = json?.error?.message || json?.message || `HTTP ${res.status}: ${text.slice(0, 200)}`
+                                toast.error(msg, { duration: 14000 })
+                                console.error('[import-operational] failed:', msg)
                               }
-                            } catch { toast.dismiss('imp'); toast.error('Erro de rede ao importar') }
+                            } catch (err: any) {
+                              toast.dismiss('imp')
+                              const msg = err?.message || String(err)
+                              toast.error(`Erro de rede: ${msg}`, { duration: 12000 })
+                              console.error('[import-operational] network error:', err)
+                            }
                             e.target.value = ''
                           }} />
                         </label>
