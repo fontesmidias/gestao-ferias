@@ -17,6 +17,12 @@ import { parseISO } from 'date-fns'
  * POST multipart com campo 'file' (.xls/.xlsx) + query ?dryRun=true para preview.
  */
 const route: FastifyPluginAsync = async (fastify) => {
+  // V3.4 debug: confirma carregamento durante boot
+  fastify.log.info('[import-operational] plugin loaded')
+
+  // Endpoint sentinela para verificar registro sem precisar de multipart
+  fastify.get('/import-operational/ping', { onRequest: [fastify.requireAuth] }, async () => ({ ok: true, route: 'import-operational' }))
+
   fastify.post('/import-operational', {
     onRequest: [fastify.requireAuth],
   }, async (request, reply) => {
