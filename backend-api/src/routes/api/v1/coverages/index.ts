@@ -653,6 +653,13 @@ const coverages: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     reply.raw.setHeader('Cache-Control', 'no-cache, no-transform')
     reply.raw.setHeader('Connection', 'keep-alive')
     reply.raw.setHeader('X-Accel-Buffering', 'no')
+    // V3.4 fix: CORS manual no raw response (plugin global nao aplica em reply.raw)
+    const origin = request.headers.origin
+    if (origin) {
+      reply.raw.setHeader('Access-Control-Allow-Origin', origin)
+      reply.raw.setHeader('Access-Control-Allow-Credentials', 'true')
+      reply.raw.setHeader('Vary', 'Origin')
+    }
     reply.raw.flushHeaders?.()
 
     // Hello inicial — útil para o frontend confirmar conexão.
