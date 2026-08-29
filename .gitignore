@@ -64,3 +64,11 @@ Thumbs.db
 
 # Test coverage
 coverage/
+
+# LGPD: dados reais nunca versionados (incidente 2026-08-29)
+# base_antiga/ e as fixtures do Tirvu continham CPF, RG, endereco e filiacao
+# de pessoas reais. Fixtures devem ser SINTETICAS, nunca copia de producao.
+base_antiga/
+backend-api/test/fixtures/imports/*.xlsx
+backend-api/test/fixtures/imports/*.xls
+!backend-api/test/fixtures/imports/*-sintetico.xlsx
